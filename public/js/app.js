@@ -915,7 +915,7 @@ function setMode(mode) {
   const reading = mode === 'read';
   $('editor').hidden = reading;
   $('reading').hidden = !reading;
-  if (reading) $('reading').innerHTML = render($('editor').value);
+  if (reading) $('reading').innerHTML = render($('editor').value, { frontmatter: true });
   const btn = $('mode-btn');
   btn.innerHTML = icon(reading ? 'edit' : 'read');
   btn.setAttribute('aria-label', reading ? 'Cambiar a edición (Ctrl+E)' : 'Cambiar a lectura (Ctrl+E)');

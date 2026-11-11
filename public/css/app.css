@@ -246,9 +246,88 @@ button { cursor: pointer; }
 .markdown blockquote { margin: 0.8em 0; padding: 2px 16px; border-left: 3px solid var(--accent); color: var(--text-muted); }
 .markdown ul, .markdown ol { padding-left: 1.5em; margin: 0.5em 0; }
 .markdown li.task { list-style: none; margin-left: -1.3em; }
-.markdown li.task input { margin: 0 6px 0 0; vertical-align: -1px; }
-.markdown li.task.done { color: var(--text-muted); text-decoration: line-through; }
+.markdown li.task input { margin: 0 8px 0 0; vertical-align: -1px; }
+.markdown li.task.done > .task-text { color: var(--text-muted); text-decoration: line-through; }
 .markdown mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 3px; }
+/* Etiquetas */
+.markdown .tag {
+  display: inline-block;
+  padding: 0 0.5em;
+  border-radius: 999px;
+  background: var(--active);
+  color: var(--accent);
+  font-size: 0.88em;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* Propiedades (frontmatter) */
+.markdown .properties {
+  margin: 0 0 1.4em;
+  padding: 0 0 0.8em;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+.markdown .property { display: grid; grid-template-columns: minmax(90px, 160px) minmax(0, 1fr); gap: 12px; align-items: baseline; margin: 0; }
+.markdown .property dt { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.markdown .property dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; min-width: 0; }
+.markdown .pill { padding: 0 0.5em; border-radius: 6px; background: var(--code-bg); }
+.markdown .empty-value { color: var(--text-faint); font-style: italic; }
+
+/* Tablas */
+.markdown .table-wrap { overflow-x: auto; margin: 0.9em 0; }
+.markdown table { border-collapse: collapse; font-size: 0.94em; min-width: 50%; }
+.markdown th, .markdown td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+.markdown th { background: var(--bg-secondary); font-weight: 600; }
+.markdown tbody tr:nth-child(even) td { background: var(--hover); }
+.markdown .align-center { text-align: center; }
+.markdown .align-right { text-align: right; }
+
+/* Callouts */
+.markdown .callout {
+  --callout: 120, 130, 140;
+  margin: 1em 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border-left: 3px solid rgb(var(--callout));
+  background: rgba(var(--callout), 0.1);
+}
+.markdown .callout-title { display: flex; align-items: center; gap: 8px; font-weight: 600; color: rgb(var(--callout)); }
+.markdown summary.callout-title { cursor: pointer; list-style: none; }
+.markdown summary.callout-title::-webkit-details-marker { display: none; }
+.markdown summary.callout-title::after { content: "›"; margin-left: auto; transition: transform 0.12s; }
+.markdown details.callout[open] > summary.callout-title::after { transform: rotate(90deg); }
+.markdown .callout-icon::before { display: inline-block; width: 1.1em; text-align: center; }
+.markdown .callout-content { margin-top: 6px; }
+.markdown .callout-content > :first-child { margin-top: 0; }
+.markdown .callout-content > :last-child { margin-bottom: 0; }
+.markdown .callout[data-callout="note"] { --callout: 100, 150, 220; }
+.markdown .callout[data-callout="note"] .callout-icon::before { content: "✎"; }
+.markdown .callout[data-callout="abstract"] { --callout: 40, 180, 190; }
+.markdown .callout[data-callout="abstract"] .callout-icon::before { content: "≡"; }
+.markdown .callout[data-callout="info"] { --callout: 90, 160, 235; }
+.markdown .callout[data-callout="info"] .callout-icon::before { content: "i"; font-weight: 700; }
+.markdown .callout[data-callout="tip"] { --callout: 30, 190, 170; }
+.markdown .callout[data-callout="tip"] .callout-icon::before { content: "✦"; }
+.markdown .callout[data-callout="success"] { --callout: 70, 190, 110; }
+.markdown .callout[data-callout="success"] .callout-icon::before { content: "✓"; }
+.markdown .callout[data-callout="question"] { --callout: 230, 170, 60; }
+.markdown .callout[data-callout="question"] .callout-icon::before { content: "?"; font-weight: 700; }
+.markdown .callout[data-callout="warning"] { --callout: 235, 150, 60; }
+.markdown .callout[data-callout="warning"] .callout-icon::before { content: "!"; font-weight: 700; }
+.markdown .callout[data-callout="danger"] { --callout: 235, 90, 90; }
+.markdown .callout[data-callout="danger"] .callout-icon::before { content: "✕"; }
+.markdown .callout[data-callout="example"] { --callout: 160, 120, 230; }
+.markdown .callout[data-callout="example"] .callout-icon::before { content: "▸"; }
+.markdown .callout[data-callout="quote"] { --callout: 150, 155, 165; }
+.markdown .callout[data-callout="quote"] .callout-icon::before { content: "”"; font-weight: 700; }
+@media (prefers-color-scheme: light) {
+  .markdown .callout { background: rgba(var(--callout), 0.09); }
+  .markdown .callout-title { filter: brightness(0.72); }
+}
+
 .markdown hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
 
 /* ---------- Esquema ---------- */

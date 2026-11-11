@@ -25,6 +25,16 @@ const WELCOME = `Tu cuaderno personal, cifrado de extremo a extremo.
 - **Negrita**, *cursiva*, ~~tachado~~ y ==resaltado==
 - \`código en línea\` y bloques de código
 
+| Formato | Cómo se escribe |
+| --- | --- |
+| Tabla | \`| a | b |\` y debajo \`|---|---|\` |
+| Callout | \`> [!tip] Título\` |
+| Etiqueta | #idea |
+
+> [!tip] Callouts
+> Usa [!note], [!info], [!warning], [!danger], [!example]… y añade - para plegarlos.
+
+> [!info] Privado de verdad
 > En el repo solo hay ficheros ilegibles. Sin tu frase de paso, nadie puede leer esto.
 `;
 

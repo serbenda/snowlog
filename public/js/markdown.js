@@ -1,9 +1,12 @@
 // Renderizador de Markdown pequeño y seguro.
 // Todo el texto se escapa ANTES de aplicar formato, así que ningún HTML de una nota
 // llega a ejecutarse. Los enlaces solo admiten http(s), mailto y anclas.
+//
+// Soporta lo que se usa a diario en una bóveda de Obsidian: frontmatter (propiedades),
+// tablas, callouts (> [!info]), tareas, etiquetas #tag y enlaces [[nota]].
 
 export function escapeHtml(s) {
-  return s
+  return String(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -15,6 +18,8 @@ function safeUrl(url) {
   const u = url.trim();
   return /^(https?:\/\/|mailto:|#)/i.test(u) ? u : null;
 }
+
+const TAG_RE = /(^|[\s(])#([\p{L}_][\p{L}\p{N}_/-]*)/gu;
 
 export function inline(raw) {
   const slots = [];
@@ -35,6 +40,9 @@ export function inline(raw) {
     return ok ? keep(`<a class="external-link" href="${ok}" target="_blank" rel="noopener noreferrer">${text}</a>`) : text;
   });
 
+  // #etiqueta (no confunde &#39; ni los # de los encabezados, que llevan espacio)
+  s = s.replace(TAG_RE, (_, pre, tag) => `${pre}${keep(`<span class="tag" data-tag="${tag}">#${tag}</span>`)}`);
+
   s = s
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/__(.+?)__/g, '<strong>$1</strong>')
@@ -46,11 +54,166 @@ export function inline(raw) {
   return s.replace(/\u0000(\d+)\u0000/g, (_, i) => slots[Number(i)]);
 }
 
+// ---------------------------------------------------------------------------
+// Frontmatter (propiedades): un YAML sencillo entre dos líneas "---" al principio.
+// Se entiende lo que usa Obsidian: clave: valor, listas con "- " y listas [a, b].
+
+function yamlScalar(v) {
+  const t = v.trim();
+  if (/^(['"]).*\1$/.test(t)) return t.slice(1, -1);
+  if (t === 'true' || t === 'false') return t === 'true';
+  if (t === '' || t === 'null' || t === '~') return null;
+  return t;
+}
+
+export function parseFrontmatter(md) {
+  const text = md.replace(/\r\n?/g, '\n');
+  const m = text.match(/^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
+  if (!m) return { data: null, body: text, lines: 0 };
+  const data = {};
+  let key = null;
+  for (const line of m[1].split('\n')) {
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    const item = line.match(/^\s+-\s*(.*)$/) || line.match(/^-\s+(.*)$/);
+    if (item && key) {
+      if (!Array.isArray(data[key])) data[key] = data[key] == null ? [] : [data[key]];
+      const v = yamlScalar(item[1]);
+      if (v != null) data[key].push(v);
+      continue;
+    }
+    const kv = line.match(/^([^:\s][^:]*):(?:\s+(.*)|\s*)$/);
+    if (!kv) continue;
+    key = kv[1].trim();
+    const raw = (kv[2] || '').trim();
+    if (/^\[.*\]$/.test(raw)) {
+      data[key] = raw.slice(1, -1).split(',').map(yamlScalar).filter((v) => v != null);
+    } else {
+      data[key] = yamlScalar(raw);
+    }
+  }
+  return { data, body: text.slice(m[0].length), lines: m[0].split('\n').length - (m[0].endsWith('\n') ? 1 : 0) };
+}
+
+function renderProperties(data) {
+  const tagChip = (t) => {
+    const name = escapeHtml(String(t).replace(/^#/, ''));
+    return `<span class="tag" data-tag="${name}">#${name}</span>`;
+  };
+  const rows = Object.entries(data).map(([k, v]) => {
+    let value;
+    const isTags = /^tags?$/i.test(k);
+    if (isTags && typeof v === 'string') v = v.split(/[\s,]+/).filter(Boolean);
+    if (Array.isArray(v)) {
+      value = v.length
+        ? v.map((x) => (isTags ? tagChip(x) : `<span class="pill">${inline(String(x))}</span>`)).join(' ')
+        : '<span class="empty-value">vacío</span>';
+    } else if (typeof v === 'boolean') {
+      value = `<input type="checkbox" disabled${v ? ' checked' : ''} aria-label="${v ? 'sí' : 'no'}">`;
+    } else if (v == null) {
+      value = '<span class="empty-value">vacío</span>';
+    } else {
+      value = inline(String(v));
+    }
+    return `<div class="property"><dt>${escapeHtml(k)}</dt><dd>${value}</dd></div>`;
+  });
+  return `<dl class="properties" aria-label="Propiedades">${rows.join('')}</dl>`;
+}
+
+// ---------------------------------------------------------------------------
+// Tablas
+
+const SEP_RE = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
+
+function splitRow(line) {
+  let s = line.trim();
+  if (s.startsWith('|')) s = s.slice(1);
+  if (s.endsWith('|') && !s.endsWith('\\|')) s = s.slice(0, -1);
+  const cells = [];
+  let cur = '';
+  let code = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\' && s[i + 1] === '|') { cur += '|'; i += 1; continue; }
+    if (ch === '`') code = !code;
+    if (ch === '|' && !code) { cells.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+const isTableStart = (lines, i) => i + 1 < lines.length
+  && lines[i].includes('|')
+  && SEP_RE.test(lines[i + 1])
+  && lines[i + 1].includes('-')
+  && (lines[i + 1].includes('|') || lines[i].trim().startsWith('|'));
+
+function renderTable(lines, start) {
+  const head = splitRow(lines[start]);
+  const aligns = splitRow(lines[start + 1]).map((c) => {
+    const l = c.startsWith(':');
+    const r = c.endsWith(':');
+    return l && r ? 'center' : r ? 'right' : l ? 'left' : '';
+  });
+  let i = start + 2;
+  const rows = [];
+  while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+    rows.push(splitRow(lines[i]));
+    i += 1;
+  }
+  const cell = (tag, text, c) => `<${tag}${aligns[c] ? ` class="align-${aligns[c]}"` : ''}>${inline(text || '')}</${tag}>`;
+  const html = '<div class="table-wrap"><table>'
+    + `<thead><tr>${head.map((t, c) => cell('th', t, c)).join('')}</tr></thead>`
+    + `<tbody>${rows.map((r) => `<tr>${head.map((_, c) => cell('td', r[c], c)).join('')}</tr>`).join('')}</tbody>`
+    + '</table></div>';
+  return { html, next: i };
+}
+
+// ---------------------------------------------------------------------------
+// Callouts: > [!tipo]+/- Título opcional
+
+const CALLOUT_KIND = {
+  note: 'note',
+  abstract: 'abstract', summary: 'abstract', tldr: 'abstract',
+  info: 'info', todo: 'info',
+  tip: 'tip', hint: 'tip', important: 'tip',
+  success: 'success', check: 'success', done: 'success',
+  question: 'question', help: 'question', faq: 'question',
+  warning: 'warning', caution: 'warning', attention: 'warning',
+  failure: 'danger', fail: 'danger', missing: 'danger', danger: 'danger', error: 'danger', bug: 'danger',
+  example: 'example',
+  quote: 'quote', cite: 'quote',
+};
+
+function renderQuote(quoteLines) {
+  const head = quoteLines[0].match(/^\[!([\w-]+)\]([+-]?)\s*(.*)$/);
+  if (!head) return `<blockquote>${render(quoteLines.join('\n'))}</blockquote>`;
+  const type = head[1].toLowerCase();
+  const kind = CALLOUT_KIND[type] || 'note';
+  const title = head[3].trim() || type.charAt(0).toUpperCase() + type.slice(1);
+  const body = quoteLines.slice(1).join('\n');
+  const content = body.trim() ? `<div class="callout-content">${render(body)}</div>` : '';
+  const titleHtml = `<span class="callout-icon" aria-hidden="true"></span><span>${inline(title)}</span>`;
+  if (head[2]) {
+    return `<details class="callout" data-callout="${kind}"${head[2] === '+' ? ' open' : ''}>`
+      + `<summary class="callout-title">${titleHtml}</summary>${content}</details>`;
+  }
+  return `<div class="callout" data-callout="${kind}"><div class="callout-title">${titleHtml}</div>${content}</div>`;
+}
+
+// ---------------------------------------------------------------------------
+
 const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 
-export function render(md) {
-  const lines = md.replace(/\r\n?/g, '\n').split('\n');
+export function render(md, { frontmatter = false } = {}) {
+  let text = md.replace(/\r\n?/g, '\n');
   const out = [];
+  if (frontmatter) {
+    const fm = parseFrontmatter(text);
+    if (fm.data && Object.keys(fm.data).length) out.push(renderProperties(fm.data));
+    text = fm.body;
+  }
+  const lines = text.split('\n');
   let i = 0;
 
   while (i < lines.length) {
@@ -95,15 +258,22 @@ export function render(md) {
         quote.push(lines[i].replace(/^\s*>\s?/, ''));
         i += 1;
       }
-      out.push(`<blockquote>${render(quote.join('\n'))}</blockquote>`);
+      out.push(renderQuote(quote));
+      continue;
+    }
+
+    if (isTableStart(lines, i)) {
+      const t = renderTable(lines, i);
+      out.push(t.html);
+      i = t.next;
       continue;
     }
 
     if (LIST_RE.test(line)) {
       const items = [];
       while (i < lines.length && LIST_RE.test(lines[i])) {
-        const [, indent, marker, text] = lines[i].match(LIST_RE);
-        items.push({ depth: Math.floor(indent.replace(/\t/g, '    ').length / 2), ordered: /\d/.test(marker), text });
+        const [, indent, marker, itemText] = lines[i].match(LIST_RE);
+        items.push({ depth: Math.floor(indent.replace(/\t/g, '    ').length / 2), ordered: /\d/.test(marker), text: itemText });
         i += 1;
       }
       out.push(renderList(items));
@@ -118,6 +288,7 @@ export function render(md) {
       && !/^\s*(```|~~~)/.test(lines[i])
       && !/^\s*>/.test(lines[i])
       && !LIST_RE.test(lines[i])
+      && !isTableStart(lines, i)
     ) {
       para.push(inline(lines[i]));
       i += 1;
@@ -140,10 +311,10 @@ function renderList(items) {
     } else {
       html += '</li>';
     }
-    const task = item.text.match(/^\[([ xX])\]\s+(.*)$/);
+    const task = item.text.match(/^\[([ xX])\]\s*(.*)$/);
     if (task) {
       const done = task[1] !== ' ';
-      html += `<li class="task${done ? ' done' : ''}"><input type="checkbox" disabled${done ? ' checked' : ''}> ${inline(task[2])}`;
+      html += `<li class="task${done ? ' done' : ''}"><input type="checkbox" disabled${done ? ' checked' : ''}><span class="task-text">${inline(task[2])}</span>`;
     } else {
       html += `<li>${inline(item.text)}`;
     }
@@ -152,11 +323,14 @@ function renderList(items) {
   return html;
 }
 
-// Encabezados para el panel de esquema.
+// Encabezados para el panel de esquema (los números de línea son del texto completo).
 export function outline(md) {
+  const text = md.replace(/\r\n?/g, '\n');
+  const skip = parseFrontmatter(text).lines;
   const heads = [];
   let inCode = false;
-  md.split('\n').forEach((line, n) => {
+  text.split('\n').forEach((line, n) => {
+    if (n < skip) return;
     if (/^\s*(```|~~~)/.test(line)) inCode = !inCode;
     if (inCode) return;
     const h = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
@@ -166,6 +340,6 @@ export function outline(md) {
 }
 
 export function wordCount(md) {
-  const words = md.trim().match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu);
+  const words = parseFrontmatter(md).body.trim().match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu);
   return words ? words.length : 0;
 }
