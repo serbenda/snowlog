@@ -55,7 +55,11 @@ personal de momento, o crear la GitHub App y el Worker para el login con GitHub.
 ```bash
 npm test                                  # tests (Node 20+)
 python3 -m http.server 8000 -d public     # servir la web en local
+git config core.hooksPath .githooks       # una vez por clon: limpia atribuciones en los commits
 ```
+
+Contexto vivo del proyecto en [docs/CONTEXT.md](docs/CONTEXT.md), cambios en [CHANGELOG.md](CHANGELOG.md)
+y criterios de terminado en [docs/DEFINITION-OF-DONE.md](docs/DEFINITION-OF-DONE.md).
 
 Se trabaja en la rama `development` y se pasa a `main` con una PR. Al fusionar en `main`, GitHub Actions
 pasa los tests y publica `public/` en GitHub Pages.
