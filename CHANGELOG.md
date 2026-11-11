@@ -12,7 +12,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - Etiquetas `#tag` en el texto y en las tareas.
 - `CLAUDE.md`, `docs/CONTEXT.md`, `docs/DEFINITION-OF-DONE.md` y comandos en `.claude/commands/`.
 - Comprobación en CI de la autoría de los commits.
-- Client ID de la GitHub App `snowlog-serbenda` en la configuración de la web y del Worker.
+- Client ID de la GitHub App en la configuración de la web y del Worker.
 
 ### Cambiado
 - En las tareas hechas solo se tacha el texto, no la casilla ni el espacio.
