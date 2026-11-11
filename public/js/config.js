@@ -9,7 +9,7 @@ export const CONFIG = {
 
   // URL del Cloudflare Worker que intercambia el login, sin barra final.
   // Ejemplo: 'https://snowlog-auth.serbenda.workers.dev'
-  authWorker: '',
+  authWorker: 'https://snowlog-auth.serbenda.workers.dev',
 
   // Minutos sin actividad antes de bloquear y borrar la clave de memoria.
   lockAfterMinutes: 10,
