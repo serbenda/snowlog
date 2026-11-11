@@ -5,7 +5,7 @@ export const CONFIG = {
   notesRepo: { owner: 'serbenda', repo: 'snowlog-notes', branch: 'main' },
 
   // Client ID de la GitHub App (empieza por "Iv"). Vacío = solo login con token personal.
-  githubClientId: '',
+  githubClientId: 'Iv23li5tmgS4GIWdO2HH',
 
   // URL del Cloudflare Worker que intercambia el login, sin barra final.
   // Ejemplo: 'https://snowlog-auth.serbenda.workers.dev'

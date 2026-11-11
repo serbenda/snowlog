@@ -7,7 +7,7 @@ workers_dev = true
 # Origen de la web publicada en GitHub Pages, sin barra final.
 ALLOWED_ORIGIN = "https://bendi.dev"
 # Client ID de la GitHub App (no es secreto).
-GITHUB_CLIENT_ID = ""
+GITHUB_CLIENT_ID = "Iv23li5tmgS4GIWdO2HH"
 
 # El client secret NO va aquí. Guárdalo con:
 #   npx wrangler secret put GITHUB_CLIENT_SECRET
