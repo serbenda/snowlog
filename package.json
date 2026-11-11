@@ -1,0 +1,12 @@
+{
+  "name": "snowlog",
+  "private": true,
+  "type": "module",
+  "description": "Snowlog: cuaderno de notas personal al estilo Obsidian, cifrado de extremo a extremo, sobre GitHub y GitHub Pages.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

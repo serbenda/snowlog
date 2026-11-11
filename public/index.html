@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src https://api.github.com https://*.workers.dev; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#141518">
+<title>Snowlog</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<div id="lock" class="lock" hidden>
+  <div class="lock-card" id="lock-card"></div>
+</div>
+
+<div id="app" class="app" hidden>
+  <nav class="ribbon" aria-label="Acciones">
+    <button class="ribbon-btn" data-action="toggle-left" aria-label="Mostrar u ocultar archivos" title="Archivos"></button>
+    <button class="ribbon-btn" data-action="switcher" aria-label="Abrir nota (Ctrl+O)" title="Abrir nota (Ctrl+O)"></button>
+    <button class="ribbon-btn" data-action="new-note" aria-label="Nueva nota (Ctrl+N)" title="Nueva nota (Ctrl+N)"></button>
+    <span class="ribbon-spacer"></span>
+    <button class="ribbon-btn" data-action="lock" aria-label="Bloquear" title="Bloquear"></button>
+    <button class="ribbon-btn" data-action="logout" aria-label="Cerrar sesión en este dispositivo" title="Cerrar sesión"></button>
+  </nav>
+
+  <aside class="sidebar sidebar-left" id="left" aria-label="Archivos">
+    <div class="sidebar-header">
+      <span class="sidebar-title">Archivos</span>
+      <span class="sidebar-actions">
+        <button class="icon-btn" data-action="new-note" aria-label="Nueva nota" title="Nueva nota"></button>
+        <button class="icon-btn" data-action="new-folder" aria-label="Nueva carpeta" title="Nueva carpeta"></button>
+        <button class="icon-btn" data-action="collapse-all" aria-label="Plegar todo" title="Plegar todo"></button>
+      </span>
+    </div>
+    <div class="tree" id="tree" role="tree" tabindex="-1"></div>
+  </aside>
+
+  <main class="workspace">
+    <header class="view-header">
+      <button class="icon-btn mobile-only" data-action="toggle-left" aria-label="Archivos"></button>
+      <div class="breadcrumb" id="breadcrumb"></div>
+      <span class="view-actions">
+        <button class="icon-btn" id="mode-btn" data-action="toggle-mode" aria-label="Cambiar a lectura (Ctrl+E)" title="Lectura (Ctrl+E)"></button>
+        <button class="icon-btn" data-action="note-menu" aria-label="Más opciones" title="Más opciones"></button>
+        <button class="icon-btn" data-action="toggle-right" aria-label="Mostrar u ocultar el esquema" title="Esquema"></button>
+      </span>
+    </header>
+
+    <div class="view-content" id="view">
+      <div class="empty" id="empty">
+        <p class="empty-title">No hay ninguna nota abierta</p>
+        <button class="link-btn" data-action="new-note">Crear una nota (Ctrl+N)</button>
+        <button class="link-btn" data-action="switcher">Abrir una nota (Ctrl+O)</button>
+      </div>
+      <div class="note" id="note" hidden>
+        <input class="inline-title" id="title" aria-label="Título de la nota" spellcheck="false" autocomplete="off">
+        <textarea class="editor" id="editor" aria-label="Contenido de la nota" spellcheck="true"></textarea>
+        <article class="reading markdown" id="reading" hidden></article>
+      </div>
+    </div>
+
+    <footer class="status-bar" aria-live="polite">
+      <span id="st-sync"></span>
+      <span id="st-words"></span>
+      <span id="st-chars"></span>
+    </footer>
+  </main>
+
+  <aside class="sidebar sidebar-right" id="right" aria-label="Esquema">
+    <div class="sidebar-header"><span class="sidebar-title">Esquema</span></div>
+    <nav class="outline" id="outline"></nav>
+  </aside>
+
+  <div class="backdrop" id="backdrop" hidden></div>
+</div>
+
+<div class="menu" id="menu" role="menu" hidden></div>
+<div class="modal-root" id="modal-root"></div>
+<div class="notices" id="notices" aria-live="polite"></div>
+
+</body>
+</html>

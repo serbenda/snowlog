@@ -1,0 +1,41 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  autoria:
+    name: Autoría de los commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Solo el dueño firma y sin atribuciones de IA
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          bad_author=$(git log --format='%h %an <%ae>' "$BASE..$HEAD" | grep -vE '^[0-9a-f]+ Sergio Santiago Bendaña Quesada <(serbenda@gmail\.com|57532210\+serbenda@users\.noreply\.github\.com)>$' || true)
+          bad_trailer=$(git log --format='%h %B' "$BASE..$HEAD" | grep -iE 'co-authored-by:.*(claude|anthropic)|claude-session:|generated with \[?claude' || true)
+          if [ -n "$bad_author" ] || [ -n "$bad_trailer" ]; then
+            echo "Autor no permitido:"; echo "$bad_author"
+            echo "Atribución no permitida:"; echo "$bad_trailer"
+            exit 1
+          fi
+          echo "Autoría correcta."
