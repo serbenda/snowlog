@@ -6,8 +6,8 @@ Hay dos formas de entrar. Empieza por la A, que funciona en 5 minutos, y monta l
 
 1. En este repo: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 2. Fusiona la PR de `development` a `main`. El workflow *Publicar en GitHub Pages* despliega la carpeta `public/`.
-3. La web queda en `https://bendi.dev/snowlog/` si tu sitio `serbenda.github.io` usa el dominio `bendi.dev`,
-   o en `https://serbenda.github.io/snowlog/` si no. Usa esa URL en los pasos siguientes.
+3. La web queda en **https://snowlog.bendi.dev/** (dominio propio configurado en Settings → Pages →
+   Custom domain). Usa esa URL en los pasos siguientes.
 
 El repo de notas `serbenda/snowlog-notes` debe existir, ser **privado** y puede estar vacío.
 
@@ -32,7 +32,7 @@ En <https://github.com/settings/apps/new>:
 | --- | --- |
 | GitHub App name | `snowlog-serbenda` (debe ser único en GitHub) |
 | Homepage URL | la URL de tu Snowlog |
-| Callback URL | la URL de tu Snowlog, con la barra final (`https://bendi.dev/snowlog/`) |
+| Callback URL | la URL de tu Snowlog, con la barra final (`https://snowlog.bendi.dev/`) |
 | Expire user authorization tokens | marcado (tokens de 8 h que se renuevan solos) |
 | Webhook → Active | desmarcado |
 | Repository permissions → Contents | Read and write |
@@ -56,7 +56,7 @@ npx wrangler secret put GITHUB_CLIENT_SECRET   # pega el client secret
 npx wrangler deploy                            # te da la URL: https://snowlog-auth.<tu-subdominio>.workers.dev
 ```
 
-`ALLOWED_ORIGIN` es solo el origen, sin ruta: `https://bendi.dev` o `https://serbenda.github.io`.
+`ALLOWED_ORIGIN` es solo el origen, sin ruta ni barra final: `https://snowlog.bendi.dev`.
 
 ### 3. Configurar la web
 

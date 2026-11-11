@@ -6,9 +6,11 @@
 
 - **Fase 1 (núcleo seguro): hecha.** Login, bóveda cifrada, notas y carpetas, interfaz tipo Obsidian.
 - **Fase 1b (lectura): hecha.** Frontmatter como propiedades, tablas, callouts y etiquetas.
-- Todo está en `development` y en la PR #1 hacia `main`, pendiente de fusionar.
-- GitHub Pages aún no está activado (Settings → Pages → Source: GitHub Actions).
-- El login con GitHub (App + Worker) no está desplegado: de momento se entra con token personal.
+- Publicado en https://snowlog.bendi.dev/ con GitHub Pages (origen: GitHub Actions) desde `main`.
+- Login con GitHub configurado: GitHub App (Client ID `Iv23li5tmgS4GIWdO2HH`, Redirect URI
+  `https://snowlog.bendi.dev/`) y Worker en https://snowlog-auth.serbenda.workers.dev
+  (`ALLOWED_ORIGIN=https://snowlog.bendi.dev`, `GITHUB_CLIENT_SECRET` como secreto en Cloudflare).
+  El token personal sigue disponible como alternativa.
 
 ## Arquitectura en una frase
 

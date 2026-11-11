@@ -12,8 +12,10 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - Etiquetas `#tag` en el texto y en las tareas.
 - `CLAUDE.md`, `docs/CONTEXT.md`, `docs/DEFINITION-OF-DONE.md` y comandos en `.claude/commands/`.
 - Comprobación en CI de la autoría de los commits.
+- Login con GitHub activo: Client ID de la GitHub App y URL del Worker en la configuración.
 
 ### Cambiado
+- Snowlog se publica en `https://snowlog.bendi.dev`; el Worker solo acepta ese origen.
 - En las tareas hechas solo se tacha el texto, no la casilla ni el espacio.
 - El esquema y el contador de palabras ignoran el frontmatter.
 
