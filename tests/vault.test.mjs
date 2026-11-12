@@ -102,3 +102,34 @@ test('recuperar con el código cambia la frase en el repo', async () => {
   await v.loadIndex();
   assert.ok(v.findByTitle('Plan secreto'));
 });
+
+test('importar notas en lotes, sin texto en claro y resolviendo nombres repetidos', async () => {
+  const commitsBefore = fake.commitCount();
+  const items = [
+    { path: 'Personal/Ideas/Viaje a Japón', text: '# Japón\nVer [[Lista de la compra]] #viaje' },
+    { path: 'Personal/Lista de la compra', text: '- [ ] leche' },
+    { path: 'Plan secreto', text: 'otra versión' },
+    ...Array.from({ length: 5 }, (_, i) => ({ path: `Diario/2026-11-0${i + 1}`, text: `día ${i + 1}` })),
+  ];
+  const progress = [];
+  const result = await vault.importNotes(items, { batchSize: 3, onProgress: (d, t) => progress.push(`${d}/${t}`) });
+  assert.equal(result.length, 8);
+  assert.deepEqual(progress, ['3/8', '6/8', '8/8']);
+  assert.equal(fake.commitCount() - commitsBefore, 3);
+  assert.equal(result[2].path, 'Plan secreto (importada)');
+  assert.ok(vault.index.folders.includes('Personal/Ideas'));
+
+  const fresh = new Vault(newRepo(), vault.dek);
+  await fresh.loadIndex();
+  const japon = fresh.findByTitle('Viaje a Japón');
+  assert.equal(await fresh.read(japon.id), '# Japón\nVer [[Lista de la compra]] #viaje');
+  for (const [path, content] of fake.files()) {
+    assert.ok(!path.includes('Japón') && !content.includes('Japón') && !content.includes('leche'), path);
+  }
+});
+
+test('importNotes puede crear carpetas vacías y usar otro mensaje', async () => {
+  await vault.importNotes([{ path: 'Inicio', text: '# Inicio' }], { message: 'configurar mi espacio', folders: ['Archivo', 'Proyectos'] });
+  assert.ok(vault.index.folders.includes('Archivo'));
+  assert.ok(vault.findByPath('Inicio'));
+});

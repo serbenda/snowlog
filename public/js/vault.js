@@ -185,6 +185,49 @@ export class Vault {
     return id;
   }
 
+  // Importa muchas notas de golpe, en lotes (un commit por lote).
+  // items: [{ path, text }]. Si un nombre ya existe, añade « (importada)», « (importada 2)»…
+  // Devuelve [{ id, path }] en el orden recibido.
+  async importNotes(items, { batchSize = 100, onProgress, message = 'importar', folders = [] } = {}) {
+    const taken = new Set(this.notes().map((n) => n.path.toLowerCase()));
+    const planned = items.map(({ path, text }) => {
+      let p = normalizePath(path);
+      validName(p);
+      if (taken.has(p.toLowerCase())) {
+        let n = 1;
+        const base = p;
+        do {
+          p = `${base} (importada${n > 1 ? ` ${n}` : ''})`;
+          n += 1;
+        } while (taken.has(p.toLowerCase()));
+      }
+      taken.add(p.toLowerCase());
+      return { id: C.randomId(), path: p, text };
+    });
+
+    for (let i = 0; i < planned.length; i += batchSize) {
+      const batch = planned.slice(i, i + batchSize);
+      const now = new Date().toISOString();
+      await this.apply(
+        `Snowlog: ${message} (${batch.length} notas)`,
+        (idx) => {
+          if (i === 0) for (const f of folders) this.addFolderChain(idx, f);
+          for (const n of batch) {
+            idx.notes[n.id] = { path: n.path, created: now, updated: now };
+            this.addFolderChain(idx, parentPath(n.path));
+          }
+        },
+        async () => Promise.all(batch.map(async (n) => ({
+          path: notePath(n.id),
+          content: await C.encryptText(this.dek, n.text, n.id),
+        }))),
+      );
+      for (const n of batch) this.cache.set(n.id, n.text);
+      if (onProgress) onProgress(Math.min(i + batchSize, planned.length), planned.length);
+    }
+    return planned.map(({ id, path }) => ({ id, path }));
+  }
+
   async saveNote(id, text) {
     await this.apply(
       'Snowlog: guardar nota',

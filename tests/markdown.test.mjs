@@ -103,3 +103,9 @@ test('etiquetas en el texto, sin confundir encabezados, anclas ni apóstrofos', 
   assert.match(render('[web](https://x.com/#a) #ok'), /href="https:\/\/x.com\/#a".*<span class="tag" data-tag="ok">/);
   assert.equal(render('# Título'), '<h1>Título</h1>');
 });
+
+test('listas anidadas con 4 espacios o tabuladores', () => {
+  const four = render('- A\n    - a1\n    - a2\n- B\n\t- b1');
+  assert.equal(four, '<ul><li>A<ul><li>a1</li><li>a2</li></ul></li><li>B<ul><li>b1</li></ul></li></ul>');
+  assert.equal(render('- a\n      - b\n  - c\n- d'), '<ul><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ul>');
+});

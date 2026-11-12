@@ -273,7 +273,7 @@ export function render(md, { frontmatter = false } = {}) {
       const items = [];
       while (i < lines.length && LIST_RE.test(lines[i])) {
         const [, indent, marker, itemText] = lines[i].match(LIST_RE);
-        items.push({ depth: Math.floor(indent.replace(/\t/g, '    ').length / 2), ordered: /\d/.test(marker), text: itemText });
+        items.push({ indent: indent.replace(/\t/g, '    ').length, ordered: /\d/.test(marker), text: itemText });
         i += 1;
       }
       out.push(renderList(items));
@@ -299,14 +299,22 @@ export function render(md, { frontmatter = false } = {}) {
 }
 
 function renderList(items) {
+  // Los niveles salen de la sangría real: da igual usar 2, 4 espacios o tabuladores.
   let html = '';
-  const stack = [];
+  const stack = []; // [{ tag, indent }]
   for (const item of items) {
-    const depth = Math.min(item.depth, stack.length);
-    while (stack.length > depth + 1) html += `</li></${stack.pop()}>`;
-    if (stack.length === depth) {
+    while (stack.length > 1 && item.indent < stack[stack.length - 1].indent) {
+      // Sangría intermedia: sigue en el mismo nivel en vez de abrir otra lista.
+      if (item.indent > stack[stack.length - 2].indent) {
+        stack[stack.length - 1].indent = item.indent;
+        break;
+      }
+      html += `</li></${stack.pop().tag}>`;
+    }
+    const top = stack[stack.length - 1];
+    if (!top || item.indent > top.indent) {
       const tag = item.ordered ? 'ol' : 'ul';
-      stack.push(tag);
+      stack.push({ tag, indent: item.indent });
       html += `<${tag}>`;
     } else {
       html += '</li>';
@@ -319,7 +327,7 @@ function renderList(items) {
       html += `<li>${inline(item.text)}`;
     }
   }
-  while (stack.length) html += `</li></${stack.pop()}>`;
+  while (stack.length) html += `</li></${stack.pop().tag}>`;
   return html;
 }
 
