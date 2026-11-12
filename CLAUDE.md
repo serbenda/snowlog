@@ -37,6 +37,10 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/vault.js      bóveda: índice cifrado + una nota cifrada por fichero con id aleatorio
   js/auth.js       login (GitHub App vía Worker, o token personal); credenciales locales cifradas
   js/markdown.js   Markdown seguro: frontmatter, tablas, callouts, tareas, etiquetas, [[enlaces]]
+  js/noteindex.js  índice en memoria de notas descifradas (tareas, etiquetas, enlaces)
+  js/query.js      consultas tipo Dataview
+  js/templates.js  plantillas, nota diaria y espacio inicial
+  js/import.js     importar carpeta de Markdown
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)

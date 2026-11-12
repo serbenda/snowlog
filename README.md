@@ -19,9 +19,29 @@ propios; no se usa código ni recursos de Obsidian.
 | Ctrl/Cmd + O (o P) | Selector rápido: abrir o crear nota |
 | Ctrl/Cmd + E | Cambiar entre editar y leer |
 | Ctrl/Cmd + S | Guardar ya |
+| Ctrl/Cmd + D | Nota de hoy |
 | F2 (en el árbol) | Renombrar |
 
 También: clic derecho en el árbol, arrastrar notas a carpetas, enlaces `[[Otra nota]]` que abren o crean notas.
+
+### Día a día
+
+- **Nota diaria** (Ctrl+D o el botón del calendario): `Diario/AAAA-MM-DD`, creada desde `Plantillas/Nota diaria`.
+- **Panel principal** (botón de la casa): la nota `Inicio`, con compromisos y pendientes de todas tus notas.
+- **Consultas** en bloques `dataview`:
+
+  ````markdown
+  ```dataview
+  TASK
+  WHERE contains(text, "#compromiso") AND !completed
+  GROUP BY file.link
+  ```
+  ````
+
+  También `LIST FROM "Diario" SORT file.name DESC LIMIT 7` o
+  `TABLE area, status FROM "Proyectos" WHERE status = "activo"`.
+- **Configurar mi espacio** (menú ⋯) crea Inicio, Diario, Proyectos, Plantillas y Archivo.
+- **Importar carpeta** (menú ⋯): trae una carpeta de Markdown; se cifra en el navegador.
 
 ## Cómo está montado
 
@@ -32,6 +52,10 @@ public/            la web (lo que publica GitHub Pages)
   js/vault.js      bóveda: índice cifrado + notas cifradas
   js/auth.js       login con GitHub (OAuth) o token personal; credenciales locales cifradas
   js/markdown.js   Markdown seguro (todo se escapa antes de dar formato)
+  js/noteindex.js  índice en memoria: propiedades, etiquetas, tareas y enlaces
+  js/query.js      consultas tipo Dataview (TASK, LIST, TABLE)
+  js/templates.js  plantillas, nota diaria y espacio inicial
+  js/import.js     importar una carpeta de Markdown
   js/app.js        interfaz
 worker/            Cloudflare Worker para el login con GitHub (guarda el client secret)
 tests/             tests con node --test, incluido un GitHub falso en memoria

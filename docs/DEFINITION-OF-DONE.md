@@ -28,9 +28,10 @@ Un cambio está terminado cuando cumple **todo** lo de esta lista.
 ### Fase 2: conocimiento enlazado
 - [ ] `[[` sugiere notas; un enlace a una nota que no existe permite crearla.
 - [ ] Renombrar una nota actualiza los enlaces que apuntan a ella.
-- [ ] Backlinks, panel de etiquetas y búsqueda en menos de 300 ms con 1.000 notas.
-- [ ] Nota diaria y plantillas.
-- [ ] Importar una carpeta de Markdown sin perder enlaces.
+- [ ] Panel de etiquetas y búsqueda en menos de 300 ms con 1.000 notas (backlinks: hecho).
+- [x] Nota diaria y plantillas.
+- [x] Importar una carpeta de Markdown sin perder enlaces.
+- [x] Consultas de tareas por etiqueta, agrupadas por nota, que se pueden marcar.
 
 ### Fase 3: móvil y sin conexión
 - [ ] PWA instalable; leer y editar sin conexión, con la caché local cifrada.
