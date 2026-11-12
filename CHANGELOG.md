@@ -21,12 +21,14 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - Panel principal con `cssclasses: dashboard`: las listas de primer nivel se muestran en columnas.
 - «Configurar mi espacio»: crea Inicio, Diario, Proyectos, Plantillas (nota diaria, nota, proyecto, reunión, píldora de conocimiento y procedimiento) y Archivo.
 - Importar una carpeta de Markdown (por ejemplo, una bóveda de Obsidian): se cifra en el navegador y se sube por lotes.
+- «Cargar ejemplos»: un proyecto de ejemplo (Web de recetas) con 4 historias, tablero, reunión, píldora y notas diarias enlazadas, para ver cómo organizarse.
 
 ### Cambiado
 - Snowlog se publica en `https://snowlog.bendi.dev`; el Worker solo acepta ese origen.
 - En las tareas hechas solo se tacha el texto, no la casilla ni el espacio.
 - El esquema y el contador de palabras ignoran el frontmatter.
 - Las listas se anidan según la sangría real (2 o 4 espacios, o tabuladores).
+- Los enlaces y etiquetas escritos dentro de `código` ya no cuentan como enlaces ni etiquetas.
 
 ### Corregido
 - La pantalla de acceso ya no muestra el texto «null» cuando el login con GitHub está activo.

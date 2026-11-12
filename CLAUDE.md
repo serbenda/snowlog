@@ -41,6 +41,7 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/query.js      consultas tipo Dataview
   js/templates.js  plantillas, nota diaria y espacio inicial
   js/import.js     importar carpeta de Markdown
+  js/examples.js   proyecto de ejemplo (Cargar ejemplos)
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)

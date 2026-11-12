@@ -42,6 +42,8 @@ También: clic derecho en el árbol, arrastrar notas a carpetas, enlaces `[[Otra
   `TABLE area, status FROM "Proyectos" WHERE status = "activo"`.
 - **Configurar mi espacio** (menú ⋯) crea Inicio, Diario, Proyectos, Plantillas y Archivo.
 - **Importar carpeta** (menú ⋯): trae una carpeta de Markdown; se cifra en el navegador.
+- **Cargar ejemplos** (menú ⋯): crea `Proyectos/Ejemplo - Web de recetas` con historias, tablero, reunión,
+  píldora y notas diarias enlazadas. Empieza por la nota «Cómo usar este ejemplo».
 
 ## Cómo está montado
 
@@ -56,6 +58,7 @@ public/            la web (lo que publica GitHub Pages)
   js/query.js      consultas tipo Dataview (TASK, LIST, TABLE)
   js/templates.js  plantillas, nota diaria y espacio inicial
   js/import.js     importar una carpeta de Markdown
+  js/examples.js   proyecto de ejemplo con historias
   js/app.js        interfaz
 worker/            Cloudflare Worker para el login con GitHub (guarda el client secret)
 tests/             tests con node --test, incluido un GitHub falso en memoria

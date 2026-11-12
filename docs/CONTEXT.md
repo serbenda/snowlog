@@ -7,7 +7,8 @@
 - **Fase 1 (núcleo seguro): hecha.** Login, bóveda cifrada, notas y carpetas, interfaz tipo Obsidian.
 - **Fase 1b (lectura): hecha.** Frontmatter como propiedades, tablas, callouts y etiquetas.
 - **Día a día: hecho** (en `development`). Nota diaria, plantillas, consultas tipo Dataview, tareas que se marcan,
-  calendario, enlaces entrantes, panel en columnas, «Configurar mi espacio» e importar carpeta.
+  calendario, enlaces entrantes, panel en columnas, «Configurar mi espacio», importar carpeta y «Cargar ejemplos»
+  (proyecto «Web de recetas» con historias que tienen `estado`, `prioridad` y `puntos` en el frontmatter).
 - Publicado en https://snowlog.bendi.dev/ con GitHub Pages (origen: GitHub Actions) desde `main`.
 - Login con GitHub configurado: GitHub App (Client ID `Iv23li5tmgS4GIWdO2HH`, Redirect URI
   `https://snowlog.bendi.dev/`) y Worker en https://snowlog-auth.serbenda.workers.dev
