@@ -5,6 +5,10 @@ import * as Auth from './auth.js';
 import { GitHubRepo } from './github.js';
 import { Vault, baseName, parentPath, normalizePath } from './vault.js';
 import { render, outline, wordCount } from './markdown.js';
+import { planImport, formatBytes } from './import.js';
+import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
+import { parseQuery, runQuery, renderResult } from './query.js';
+import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
 
 // ---------------------------------------------------------------------------
 // Iconos (trazos propios, estilo línea)
@@ -25,6 +29,12 @@ const ICONS = {
   trash: 'M4 7h16 M10 11v6 M14 11v6 M9 7V4h6v3 M6 7l1 13h10l1-13',
   rename: 'M4 20h4L19 9l-4-4L4 16z',
   move: 'M5 12h14 M13 6l6 6-6 6',
+  import: 'M12 4v11 M7 10l5 5 5-5 M4 19h16',
+  today: 'M5 6h14v14H5z M5 10h14 M9 4v4 M15 4v4 M9 14h2v2H9z',
+  home: 'M4 11l8-7 8 7 M6 10v10h12V10 M10 20v-5h4v5',
+  template: 'M6 4h12v16H6z M9 8h6 M9 12h6 M9 16h3',
+  setup: 'M12 3l8 4.5v9L12 21l-8-4.5v-9z M12 12l8-4.5 M12 12v9 M12 12L4 7.5',
+  chevronLeft: 'M15 6l-6 6 6 6',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
@@ -57,7 +67,11 @@ const S = {
   saving: Promise.resolve(),
   expanded: new Set(JSON.parse(localStorage.getItem('snowlog.expanded') || '[]')),
   lastActivity: Date.now(),
+  notesIdx: new Map(), // id -> nota analizada (solo en memoria)
+  indexReady: null,
+  calMonth: null,
 };
+const WS = CONFIG.workspace || {};
 
 const isMobile = () => matchMedia('(max-width: 760px)').matches;
 
@@ -378,6 +392,10 @@ function wipe() {
   $('reading').replaceChildren();
   $('tree').replaceChildren();
   $('outline').replaceChildren();
+  $('backlinks').replaceChildren();
+  $('calendar').replaceChildren();
+  S.notesIdx.clear();
+  S.indexReady = null;
 }
 
 async function lock() {
@@ -412,7 +430,19 @@ function enterApp() {
   $('lock').hidden = true;
   $('app').hidden = false;
   S.lastActivity = Date.now();
+  S.notesIdx.clear();
+  S.indexReady = null;
+  S.calMonth = null;
   renderTree();
+  // El índice completo (para consultas y enlaces entrantes) se carga en segundo plano.
+  ensureIndex().then(() => {
+    refreshBacklinks();
+    if (S.mode === 'read' && S.current) runQueries();
+  }).catch(() => {});
+  if (WS.openDailyOnStart && WS.dailyFolder && S.vault.index.folders.includes(WS.dailyFolder)) {
+    openDaily();
+    return;
+  }
   const last = localStorage.getItem('snowlog.last');
   const first = S.vault.notes().sort((a, b) => b.updated.localeCompare(a.updated))[0];
   const target = (last && S.vault.index.notes[last]) ? last : first?.id;
@@ -420,12 +450,50 @@ function enterApp() {
   else showEmpty();
 }
 
+// --- Índice de notas (consultas, enlaces entrantes) ---
+function ensureIndex() {
+  if (!S.indexReady) {
+    const vault = S.vault;
+    S.indexReady = (async () => {
+      const ids = vault.notes().map((n) => n.id);
+      let i = 0;
+      const worker = async () => {
+        while (i < ids.length && S.vault === vault) {
+          const id = ids[i++];
+          await vault.read(id);
+        }
+      };
+      await Promise.all(Array.from({ length: 6 }, worker));
+      if (S.vault === vault) syncIndex();
+    })();
+    S.indexReady.catch(() => { S.indexReady = null; });
+  }
+  return S.indexReady;
+}
+
+// Pone el índice al día con lo que hay en la bóveda y en la caché descifrada.
+function syncIndex() {
+  if (!S.vault) return;
+  const metas = S.vault.index.notes;
+  for (const id of [...S.notesIdx.keys()]) if (!metas[id]) S.notesIdx.delete(id);
+  for (const [id, meta] of Object.entries(metas)) {
+    const text = S.vault.cache.get(id);
+    if (text == null) continue;
+    const old = S.notesIdx.get(id);
+    if (old && old.path === meta.path && old.mtime === meta.updated && old.text === text) continue;
+    S.notesIdx.set(id, parseNote({ id, path: meta.path, text, created: meta.created, updated: meta.updated }));
+  }
+}
+
+const indexedNotes = () => [...S.notesIdx.values()];
+
 function showEmpty() {
   S.current = null;
   $('note').hidden = true;
   $('empty').hidden = false;
   $('breadcrumb').replaceChildren();
   $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'Sin nota abierta'));
+  $('backlinks').replaceChildren();
   setStatus('');
   $('st-words').textContent = '';
   $('st-chars').textContent = '';
@@ -494,6 +562,8 @@ function renderTree() {
   walk(buildTree(), 0, frag);
   if (!frag.childNodes.length) frag.append(h('p', { class: 'tree-empty' }, 'Aún no hay notas.'));
   tree.replaceChildren(frag);
+  syncIndex();
+  renderCalendar();
 }
 
 function moreButton() {
@@ -915,7 +985,14 @@ function setMode(mode) {
   const reading = mode === 'read';
   $('editor').hidden = reading;
   $('reading').hidden = !reading;
-  if (reading) $('reading').innerHTML = render($('editor').value, { frontmatter: true });
+  if (reading) {
+    const text = $('editor').value;
+    const view = $('reading');
+    view.innerHTML = render(text, { frontmatter: true });
+    applyCssClasses(view, text);
+    enableOwnTasks(view, text);
+    runQueries();
+  }
   const btn = $('mode-btn');
   btn.innerHTML = icon(reading ? 'edit' : 'read');
   btn.setAttribute('aria-label', reading ? 'Cambiar a edición (Ctrl+E)' : 'Cambiar a lectura (Ctrl+E)');
@@ -942,6 +1019,7 @@ function refreshSide() {
       return b;
     })
     : [h('p', { class: 'outline-empty' }, 'Sin encabezados')]));
+  refreshBacklinks();
 }
 
 function jumpTo(head, index) {
@@ -987,6 +1065,8 @@ function saveNow() {
     .then(() => vault.saveNote(id, text))
     .then(() => {
       if (!S.dirty && S.current === id) setStatus('saved');
+      syncIndex();
+      renderCalendar();
     })
     .catch((e) => {
       if (S.current === id) {
@@ -1017,6 +1097,320 @@ async function openByTitle(title) {
   return newNoteAt(title);
 }
 
+// --- Lectura enriquecida: cssclasses, tareas que se pueden marcar y consultas ---
+function applyCssClasses(view, text) {
+  view.className = 'reading markdown';
+  const fm = (text.match(/^---\n[\s\S]*?\n---/) && parseNote({ id: '', path: 'x', text }).fm) || {};
+  const raw = fm.cssclasses ?? fm.cssclass ?? [];
+  for (const c of (Array.isArray(raw) ? raw : String(raw).split(/[\s,]+/))) {
+    const name = String(c).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (name) view.classList.add(`cs-${name}`);
+  }
+}
+
+// Las casillas de la propia nota se corresponden, en orden, con las líneas de tarea del texto.
+function enableOwnTasks(view, text) {
+  const boxes = [...view.querySelectorAll('li.task > input[type=checkbox]')];
+  const lines = contentLines(text).filter((l) => TASK_LINE_RE.test(l.value));
+  if (boxes.length !== lines.length) return;
+  boxes.forEach((box, i) => {
+    box.disabled = false;
+    box.classList.add('task-checkbox');
+    box.dataset.line = String(lines[i].line);
+    box.setAttribute('aria-label', 'Marcar tarea');
+  });
+}
+
+async function runQueries() {
+  const view = $('reading');
+  const blocks = [...view.querySelectorAll('pre > code.language-dataview, pre > code.language-query')];
+  if (!blocks.length) return;
+  const id = S.current;
+  const placeholders = blocks.map((code) => {
+    const box = h('div', { class: 'query', 'data-source': code.textContent }, h('p', { class: 'query-empty' }, 'Cargando…'));
+    code.parentElement.replaceWith(box);
+    return box;
+  });
+  try {
+    await ensureIndex();
+  } catch (e) {
+    placeholders.forEach((b) => b.replaceChildren(h('p', { class: 'query-error' }, errText(e))));
+    return;
+  }
+  if (S.current !== id || S.mode !== 'read') return;
+  renderQueryBoxes(view);
+}
+
+function renderQueryBoxes(view) {
+  const exclude = [WS.templatesFolder].filter(Boolean);
+  for (const box of view.querySelectorAll('div.query')) {
+    try {
+      const res = runQuery(parseQuery(box.dataset.source), indexedNotes(), { exclude });
+      box.innerHTML = renderResult(res);
+    } catch (e) {
+      box.replaceChildren(h('p', { class: 'query-error' }, `Consulta: ${e.message}`));
+    }
+  }
+}
+
+async function toggleTask(box) {
+  const line = Number(box.dataset.line);
+  const done = box.checked;
+  const target = box.dataset.note || S.current;
+  box.disabled = true;
+  try {
+    if (target === S.current) {
+      const text = toggleTaskLine($('editor').value, line, done);
+      if (text == null) throw new Error('La tarea ha cambiado; recarga la nota.');
+      $('editor').value = text;
+      S.dirty = true;
+      await saveNow();
+      syncIndex();
+      if (box.dataset.note) setMode('read');
+    } else {
+      const text = toggleTaskLine(await S.vault.read(target), line, done);
+      if (text == null) throw new Error('La tarea ha cambiado; recarga la nota.');
+      await S.vault.saveNote(target, text);
+      syncIndex();
+    }
+    box.closest('li')?.classList.toggle('done', done);
+    if (S.mode === 'read') renderQueryBoxes($('reading'));
+  } catch (e) {
+    box.checked = !done;
+    notice(e.message || errText(e), 'error');
+  } finally {
+    box.disabled = false;
+  }
+}
+
+// --- Enlaces entrantes ---
+function refreshBacklinks() {
+  const el = $('backlinks');
+  const me = S.current && S.notesIdx.get(S.current);
+  if (!S.current) {
+    el.replaceChildren();
+    return;
+  }
+  if (!S.indexReady || !me) {
+    el.replaceChildren(h('p', { class: 'outline-empty' }, 'Buscando…'));
+    return;
+  }
+  const from = indexedNotes().filter((n) => n.id !== me.id && linksTo(n, me));
+  el.replaceChildren(...(from.length
+    ? from.sort((a, b) => a.name.localeCompare(b.name, 'es')).map((n) => h('button', {
+      class: 'outline-item', type: 'button', title: n.path, onclick: () => openNote(n.id),
+    }, n.name))
+    : [h('p', { class: 'outline-empty' }, 'Ninguna nota enlaza aquí')]));
+}
+
+// --- Calendario ---
+function renderCalendar() {
+  const el = $('calendar');
+  if (!S.vault || !el) return;
+  const today = new Date();
+  if (!S.calMonth) S.calMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const y = S.calMonth.getFullYear();
+  const m = S.calMonth.getMonth();
+  const prefix = WS.dailyFolder ? `${WS.dailyFolder}/` : '';
+  const days = new Set(S.vault.notes()
+    .filter((n) => n.path.startsWith(prefix) && /^\d{4}-\d{2}-\d{2}$/.test(n.path.slice(prefix.length)))
+    .map((n) => n.path.slice(prefix.length)));
+  const first = new Date(y, m, 1);
+  const offset = (first.getDay() + 6) % 7; // semana de lunes a domingo
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < offset; i++) cells.push(h('span', { class: 'cal-day blank', 'aria-hidden': 'true' }));
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(y, m, d);
+    const iso = isoDate(date);
+    const cls = ['cal-day'];
+    if (iso === isoDate(today)) cls.push('today');
+    if (days.has(iso)) cls.push('has-note');
+    const cur = S.current && S.vault.index.notes[S.current];
+    if (cur && cur.path === `${prefix}${iso}`) cls.push('active');
+    cells.push(h('button', {
+      class: cls.join(' '),
+      type: 'button',
+      title: `${formatDate(date, 'dddd D [de] MMMM')}${days.has(iso) ? ' · tiene nota' : ''}`,
+      'aria-label': `${formatDate(date, 'dddd D [de] MMMM [de] YYYY')}${days.has(iso) ? ', tiene nota' : ''}`,
+      onclick: () => openDaily(date),
+    }, String(d)));
+  }
+  const move = (delta) => {
+    S.calMonth = new Date(y, m + delta, 1);
+    renderCalendar();
+  };
+  el.replaceChildren(
+    h('div', { class: 'cal-head' },
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Mes anterior', html: icon('chevronLeft'), onclick: () => move(-1) }),
+      h('button', { class: 'cal-title', type: 'button', title: 'Ir a hoy', onclick: () => { S.calMonth = null; renderCalendar(); } },
+        formatDate(first, 'MMMM YYYY')),
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Mes siguiente', html: icon('chevron'), onclick: () => move(1) })),
+    h('div', { class: 'cal-grid', role: 'grid' },
+      ...['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => h('span', { class: 'cal-dow', 'aria-hidden': 'true' }, d)),
+      ...cells),
+  );
+}
+
+// --- Nota diaria y plantillas ---
+async function templateText(path, fallback) {
+  const t = S.vault.findByPath(path);
+  if (!t) return fallback;
+  try {
+    return await S.vault.read(t.id);
+  } catch {
+    return fallback;
+  }
+}
+
+async function openDaily(date = new Date()) {
+  if (!S.vault) return;
+  const path = dailyPath(WS.dailyFolder || '', date);
+  const hit = S.vault.findByPath(path);
+  if (hit) return openNote(hit.id);
+  await saveNow();
+  const tpl = await templateText(WS.dailyTemplate || '', DAILY_TEMPLATE);
+  const text = applyTemplate(tpl, { title: isoDate(date), date });
+  const id = await run(() => S.vault.createNote(path, text));
+  if (!id) return undefined;
+  expandTo(path);
+  return openNote(id);
+}
+
+function openHome() {
+  const home = WS.home && S.vault.findByPath(WS.home);
+  if (home) {
+    S.mode = 'read';
+    return openNote(home.id);
+  }
+  notice('Aún no tienes panel principal. Usa «Configurar mi espacio» en el menú ⋯.');
+  return undefined;
+}
+
+function templateNotes() {
+  const f = WS.templatesFolder;
+  return S.vault.notes().filter((n) => f && n.path.startsWith(`${f}/`)).sort((a, b) => a.path.localeCompare(b.path, 'es'));
+}
+
+function pickModal(title, items) {
+  return modal((close) => h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+    h('h2', { class: 'pick-title' }, title),
+    h('div', { class: 'switcher-list', role: 'listbox' }, ...items.map((it) => h('button', {
+      class: 'switcher-item', type: 'button', role: 'option', onclick: () => close(it.value),
+    }, h('span', {}, it.label), it.sub ? h('span', { class: 'sub' }, it.sub) : null)))));
+}
+
+async function chooseTemplate(title) {
+  const list = templateNotes();
+  if (!list.length) {
+    notice(`No hay plantillas en «${WS.templatesFolder}». Usa «Configurar mi espacio» en el menú ⋯.`);
+    return null;
+  }
+  const prefix = `${WS.templatesFolder}/`;
+  return pickModal(title, list.map((n) => ({ label: n.path.slice(prefix.length), value: n })));
+}
+
+async function insertTemplate() {
+  if (!S.current) return;
+  const t = await chooseTemplate('Insertar plantilla');
+  if (!t) return;
+  const note = S.vault.index.notes[S.current];
+  const text = applyTemplate(await S.vault.read(t.id), { title: baseName(note.path), date: new Date() });
+  if (S.mode !== 'edit') setMode('edit');
+  const ed = $('editor');
+  ed.focus();
+  const body = ed.value.trim() === '' ? text : `\n${text}`;
+  if (!document.execCommand('insertText', false, body)) {
+    ed.setRangeText(body, ed.selectionStart, ed.selectionEnd, 'end');
+    ed.dispatchEvent(new Event('input'));
+  }
+}
+
+async function newFromTemplate() {
+  const t = await chooseTemplate('Nueva nota desde plantilla');
+  if (!t) return;
+  const name = await promptModal('Nueva nota', 'Título (puedes poner Carpeta/Título)', '', 'Crear');
+  if (!name || !name.trim()) return;
+  const path = name.includes('/') ? name : `${currentFolder()}/${name}`;
+  const text = applyTemplate(await S.vault.read(t.id), { title: baseName(normalizePath(path)), date: new Date() });
+  await saveNow();
+  const id = await run(() => S.vault.createNote(path, text));
+  if (!id) return;
+  expandTo(normalizePath(path));
+  await openNote(id);
+}
+
+async function setupSpace() {
+  const space = starterSpace(WS);
+  const missing = space.notes.filter((n) => !S.vault.findByPath(n.path));
+  const folders = space.folders.filter((f) => !S.vault.index.folders.includes(f));
+  if (!missing.length && !folders.length) {
+    notice('Tu espacio ya está configurado.');
+    return;
+  }
+  const ok = await confirmModal('Configurar mi espacio',
+    `Se crean el panel «${WS.home}», las carpetas ${space.folders.map((f) => `«${f}»`).join(', ')} y ${missing.length} plantillas y notas. No se toca nada de lo que ya tienes.`,
+    'Configurar', false);
+  if (!ok) return;
+  await saveNow();
+  const done = await run(() => S.vault.importNotes(missing, { message: 'configurar mi espacio', folders }));
+  if (!done) return;
+  for (const f of [WS.templatesFolder, WS.dailyFolder]) if (f) S.expanded.add(f);
+  renderTree();
+  notice('Espacio listo: panel, diario, proyectos, plantillas y archivo.');
+  await openDaily();
+}
+
+// --- Importar carpeta ---
+async function importFolder(files) {
+  const plan = planImport(files);
+  const skippedTotal = plan.skipped.config + plan.skipped.other + plan.skipped.tooBig;
+  if (!plan.notes.length) {
+    notice('No hay notas Markdown (.md) en esa carpeta.', 'error');
+    return;
+  }
+  const bytes = plan.notes.reduce((acc, n) => acc + n.file.size, 0);
+  const parts = [];
+  if (plan.skipped.other) parts.push(`${plan.skipped.other} imágenes u otros ficheros`);
+  if (plan.skipped.config) parts.push(`${plan.skipped.config} de configuración (.obsidian, .git…)`);
+  if (plan.skipped.tooBig) parts.push(`${plan.skipped.tooBig} notas de más de 2 MB`);
+  const folder = await promptModal(
+    `Importar ${plan.notes.length} nota${plan.notes.length === 1 ? '' : 's'} (${formatBytes(bytes)})`,
+    'Carpeta de destino en Snowlog (vacío = raíz)',
+    plan.root,
+    'Importar',
+    `Se cifran en este dispositivo antes de subir.${skippedTotal ? ` Se omiten ${parts.join(', ')}.` : ''} Si un nombre ya existe, se añade «(importada)».`,
+  );
+  if (folder == null) return;
+  await saveNow();
+  const target = normalizePath(folder);
+  setStatus('');
+  const st = $('st-sync');
+  try {
+    st.textContent = 'Leyendo ficheros…';
+    const items = await Promise.all(plan.notes.map(async (n) => ({
+      path: target ? `${target}/${n.path}` : n.path,
+      text: await n.file.text(),
+    })));
+    st.textContent = `Cifrando e importando 0/${items.length}…`;
+    const result = await S.vault.importNotes(items, {
+      onProgress: (done, total) => {
+        S.lastActivity = Date.now();
+        st.textContent = `Cifrando e importando ${done}/${total}…`;
+      },
+    });
+    if (target) S.expanded.add(target);
+    renderTree();
+    st.textContent = '';
+    notice(`Importadas ${result.length} notas${target ? ` en «${target}»` : ''}.`);
+    if (!S.current && result[0]) openNote(result[0].id);
+  } catch (e) {
+    renderTree();
+    st.textContent = '';
+    notice(`La importación se ha detenido: ${errText(e)}. Lo ya importado se conserva.`, 'error');
+  }
+}
+
 // --- Paneles ---
 function closeMobilePanels() {
   $('app').classList.remove('mobile-left', 'mobile-right');
@@ -1045,7 +1439,17 @@ function noteMenu(x, y) {
     const id = S.current;
     items.push(['rename', 'Renombrar', () => renameNotePrompt(id)], ['move', 'Mover a…', () => moveNotePrompt(id)]);
   }
-  items.push(['search', 'Abrir nota (Ctrl+O)', () => quickSwitcher()], ['filePlus', 'Nueva nota', () => newNote()]);
+  if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()]);
+  items.push(
+    ['search', 'Abrir nota (Ctrl+O)', () => quickSwitcher()],
+    ['filePlus', 'Nueva nota', () => newNote()],
+    ['template', 'Nueva nota desde plantilla…', () => newFromTemplate()],
+    null,
+    ['today', 'Nota de hoy (Ctrl+D)', () => openDaily()],
+    ['home', 'Panel principal', () => openHome()],
+    ['setup', 'Configurar mi espacio…', () => setupSpace()],
+    ['import', 'Importar carpeta…', () => ACTIONS.import()],
+  );
   if (S.current) items.push(null, ['trash', 'Eliminar nota', () => deleteNote(S.current), 'danger']);
   items.push(null, ['lock', 'Bloquear', () => lock()], ['logout', 'Cerrar sesión', () => logout()]);
   openMenu(x, y, items);
@@ -1058,6 +1462,9 @@ const ACTIONS = {
   switcher: () => quickSwitcher(),
   'new-note': () => newNote(),
   'new-folder': () => newFolder(''),
+  import: () => { if (S.vault) $('import-input').click(); },
+  today: () => openDaily(),
+  home: () => openHome(),
   'collapse-all': () => { S.expanded.clear(); localStorage.setItem('snowlog.expanded', '[]'); renderTree(); },
   'toggle-mode': () => S.current && setMode(S.mode === 'edit' ? 'read' : 'edit'),
   'note-menu': (btn) => { const r = btn.getBoundingClientRect(); noteMenu(r.right - 200, r.bottom + 4); },
@@ -1066,7 +1473,7 @@ const ACTIONS = {
 };
 
 const BUTTON_ICONS = {
-  'toggle-left': 'files', switcher: 'search', 'new-note': 'filePlus', 'new-folder': 'folderPlus', 'collapse-all': 'collapse',
+  'toggle-left': 'files', switcher: 'search', 'new-note': 'filePlus', 'new-folder': 'folderPlus', 'collapse-all': 'collapse', import: 'import', today: 'today', home: 'home',
   lock: 'lock', logout: 'logout', 'note-menu': 'more', 'toggle-right': 'sidebarRight', 'toggle-mode': 'read',
 };
 
@@ -1109,6 +1516,10 @@ function setupUi() {
   });
   title.addEventListener('blur', commitTitle);
 
+  $('reading').addEventListener('change', (ev) => {
+    const box = ev.target.closest('input.task-checkbox');
+    if (box) toggleTask(box);
+  });
   $('reading').addEventListener('click', (ev) => {
     const link = ev.target.closest('a.internal-link');
     if (!link) return;
@@ -1129,6 +1540,7 @@ function setupUi() {
     else if (k === 'o' || k === 'p') { ev.preventDefault(); quickSwitcher(); }
     else if (k === 'n') { ev.preventDefault(); newNote(); }
     else if (k === 's') { ev.preventDefault(); saveNow(); }
+    else if (k === 'd') { ev.preventDefault(); openDaily(); }
   });
 
   addEventListener('beforeunload', (ev) => {
@@ -1139,6 +1551,11 @@ function setupUi() {
   });
   addEventListener('resize', () => { if (!isMobile()) closeMobilePanels(); });
   setupTree();
+  $('import-input').addEventListener('change', async (ev) => {
+    const files = [...ev.target.files];
+    ev.target.value = '';
+    if (files.length && S.vault) await importFolder(files);
+  });
 }
 
 // ---------------------------------------------------------------------------

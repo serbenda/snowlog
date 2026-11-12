@@ -514,3 +514,56 @@ button { cursor: pointer; }
 }
 
 .lock-card .hint { font-size: 13px; margin: 10px 0 0; }
+
+/* ---------- Panel derecho: calendario, esquema y enlaces entrantes ---------- */
+.right-scroll { flex: 1; overflow: auto; padding-bottom: 24px; }
+.sidebar-right .outline { flex: none; overflow: visible; padding-top: 0; }
+.side-section + .side-section { border-top: 1px solid var(--border); }
+.calendar { padding: 10px 10px 12px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.cal-title {
+  border: 0; background: none; font-weight: 600; font-size: 14px; text-transform: capitalize;
+  padding: 4px 8px; border-radius: 6px;
+}
+.cal-title:hover { background: var(--hover); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; text-align: center; }
+.cal-dow { font-size: 11px; color: var(--text-faint); padding: 2px 0 4px; }
+.cal-day {
+  position: relative; border: 0; background: none; border-radius: 6px;
+  font-size: 13px; line-height: 1; padding: 7px 0 9px; color: var(--text-muted);
+}
+.cal-day:hover { background: var(--hover); color: var(--text-normal); }
+.cal-day.today { color: var(--accent); font-weight: 700; }
+.cal-day.active { background: var(--active); color: var(--text-normal); }
+.cal-day.has-note::after {
+  content: ""; position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px;
+  margin-left: -2px; border-radius: 50%; background: var(--accent);
+}
+
+/* ---------- Consultas ---------- */
+.markdown .query { margin: 0.6em 0 1.4em; }
+.markdown .query-group + .query-group { margin-top: 0.7em; }
+.markdown .query-group-title { font-weight: 600; font-size: 0.92em; margin-bottom: 0.2em; }
+.markdown .query-tasks { list-style: none; padding-left: 0; margin: 0; }
+.markdown .query-tasks li.task { margin-left: 0; }
+.markdown .query-empty { color: var(--text-faint); font-style: italic; margin: 0.3em 0; }
+.markdown .query-error {
+  color: var(--danger); font-family: var(--font-mono); font-size: 13px;
+  border: 1px dashed var(--danger); border-radius: 6px; padding: 8px 10px;
+}
+.markdown .query-list { margin: 0.3em 0; }
+.markdown input.task-checkbox { cursor: pointer; accent-color: var(--accent); }
+
+/* ---------- Panel principal (cssclasses: dashboard) ---------- */
+.note:has(> .reading.cs-dashboard:not([hidden])) { max-width: 1100px; }
+.reading.cs-dashboard > ul {
+  list-style: none; padding: 0; margin: 1em 0 1.6em;
+  display: flex; flex-wrap: wrap; gap: 18px 40px;
+}
+.reading.cs-dashboard > ul > li { flex: 1 1 180px; min-width: 160px; font-weight: 600; }
+.reading.cs-dashboard > ul > li > ul { font-weight: 400; padding-left: 1.1em; margin-top: 0.3em; }
+.reading.cs-dashboard h2 { border-bottom: 1px dotted var(--border); padding-bottom: 4px; }
+
+/* Selector de plantilla */
+.switcher .pick-title { margin: 0; padding: 14px 16px; font-size: 15px; border-bottom: 1px solid var(--border); }
+.reading.cs-dashboard > .properties { display: none; }

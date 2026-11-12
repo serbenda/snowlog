@@ -23,6 +23,8 @@
     <button class="ribbon-btn" data-action="toggle-left" aria-label="Mostrar u ocultar archivos" title="Archivos"></button>
     <button class="ribbon-btn" data-action="switcher" aria-label="Abrir nota (Ctrl+O)" title="Abrir nota (Ctrl+O)"></button>
     <button class="ribbon-btn" data-action="new-note" aria-label="Nueva nota (Ctrl+N)" title="Nueva nota (Ctrl+N)"></button>
+    <button class="ribbon-btn" data-action="today" aria-label="Nota de hoy (Ctrl+D)" title="Nota de hoy (Ctrl+D)"></button>
+    <button class="ribbon-btn" data-action="home" aria-label="Panel principal" title="Panel principal"></button>
     <span class="ribbon-spacer"></span>
     <button class="ribbon-btn" data-action="lock" aria-label="Bloquear" title="Bloquear"></button>
     <button class="ribbon-btn" data-action="logout" aria-label="Cerrar sesión en este dispositivo" title="Cerrar sesión"></button>
@@ -34,6 +36,7 @@
       <span class="sidebar-actions">
         <button class="icon-btn" data-action="new-note" aria-label="Nueva nota" title="Nueva nota"></button>
         <button class="icon-btn" data-action="new-folder" aria-label="Nueva carpeta" title="Nueva carpeta"></button>
+        <button class="icon-btn" data-action="import" aria-label="Importar carpeta de Markdown" title="Importar carpeta"></button>
         <button class="icon-btn" data-action="collapse-all" aria-label="Plegar todo" title="Plegar todo"></button>
       </span>
     </div>
@@ -71,15 +74,25 @@
     </footer>
   </main>
 
-  <aside class="sidebar sidebar-right" id="right" aria-label="Esquema">
-    <div class="sidebar-header"><span class="sidebar-title">Esquema</span></div>
-    <nav class="outline" id="outline"></nav>
+  <aside class="sidebar sidebar-right" id="right" aria-label="Panel lateral">
+    <div class="right-scroll">
+      <section class="side-section" aria-label="Calendario"><div class="calendar" id="calendar"></div></section>
+      <section class="side-section">
+        <div class="sidebar-header"><span class="sidebar-title">Esquema</span></div>
+        <nav class="outline" id="outline" aria-label="Esquema"></nav>
+      </section>
+      <section class="side-section">
+        <div class="sidebar-header"><span class="sidebar-title">Enlaces entrantes</span></div>
+        <nav class="outline" id="backlinks" aria-label="Enlaces entrantes"></nav>
+      </section>
+    </div>
   </aside>
 
   <div class="backdrop" id="backdrop" hidden></div>
 </div>
 
 <div class="menu" id="menu" role="menu" hidden></div>
+<input type="file" id="import-input" webkitdirectory multiple hidden>
 <div class="modal-root" id="modal-root"></div>
 <div class="notices" id="notices" aria-live="polite"></div>
 
