@@ -11,6 +11,15 @@ export const CONFIG = {
   // Ejemplo: 'https://snowlog-auth.serbenda.workers.dev'
   authWorker: 'https://snowlog-auth.serbenda.workers.dev',
 
+  // Organización del día a día (como una bóveda de Obsidian con panel y nota diaria).
+  workspace: {
+    home: 'Inicio', // nota del panel principal
+    dailyFolder: 'Diario', // carpeta de las notas diarias (AAAA-MM-DD)
+    templatesFolder: 'Plantillas', // carpeta de plantillas (no aparecen en las consultas)
+    dailyTemplate: 'Plantillas/Nota diaria',
+    openDailyOnStart: true, // abrir la nota de hoy al entrar, si existe la carpeta del diario
+  },
+
   // Minutos sin actividad antes de bloquear y borrar la clave de memoria.
   lockAfterMinutes: 10,
 
