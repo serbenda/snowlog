@@ -6,6 +6,7 @@ import { GitHubRepo } from './github.js';
 import { Vault, baseName, parentPath, normalizePath } from './vault.js';
 import { render, outline, wordCount } from './markdown.js';
 import { planImport, formatBytes } from './import.js';
+import { exampleSpace } from './examples.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
 import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
@@ -35,6 +36,7 @@ const ICONS = {
   template: 'M6 4h12v16H6z M9 8h6 M9 12h6 M9 16h3',
   setup: 'M12 3l8 4.5v9L12 21l-8-4.5v-9z M12 12l8-4.5 M12 12v9 M12 12L4 7.5',
   chevronLeft: 'M15 6l-6 6 6 6',
+  example: 'M9 4h6l-1 5 4 9a2 2 0 0 1-2 3H8a2 2 0 0 1-2-3l4-9z M8 15h8',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
@@ -1361,6 +1363,32 @@ async function setupSpace() {
   await openDaily();
 }
 
+async function loadExamples() {
+  const space = exampleSpace({ dailyFolder: WS.dailyFolder || '' });
+  const missing = space.notes.filter((n) => !S.vault.findByPath(n.path));
+  if (!missing.length) {
+    notice('El proyecto de ejemplo ya está cargado.');
+    return;
+  }
+  const skipped = space.notes.length - missing.length;
+  const ok = await confirmModal('Cargar ejemplos',
+    `Se crea «${space.root}» con un proyecto, 4 historias, un tablero, una reunión, una píldora y notas diarias de ayer, anteayer y hoy enlazadas entre sí.${skipped ? ` Se respetan ${skipped} notas que ya tienes (por ejemplo, la de hoy).` : ''} Puedes borrarlo cuando quieras.`,
+    'Cargar', false);
+  if (!ok) return;
+  await saveNow();
+  const done = await run(() => S.vault.importNotes(missing, { message: 'cargar ejemplos', folders: space.folders }));
+  if (!done) return;
+  for (const f of space.folders) S.expanded.add(f);
+  expandTo(`${space.root}/x`);
+  renderTree();
+  notice('Ejemplos cargados. Empieza por «Cómo usar este ejemplo».');
+  const guide = S.vault.findByPath(`${space.root}/Cómo usar este ejemplo`);
+  if (guide) {
+    S.mode = 'read';
+    await openNote(guide.id);
+  }
+}
+
 // --- Importar carpeta ---
 async function importFolder(files) {
   const plan = planImport(files);
@@ -1448,6 +1476,7 @@ function noteMenu(x, y) {
     ['today', 'Nota de hoy (Ctrl+D)', () => openDaily()],
     ['home', 'Panel principal', () => openHome()],
     ['setup', 'Configurar mi espacio…', () => setupSpace()],
+    ['example', 'Cargar ejemplos…', () => loadExamples()],
     ['import', 'Importar carpeta…', () => ACTIONS.import()],
   );
   if (S.current) items.push(null, ['trash', 'Eliminar nota', () => deleteNote(S.current), 'danger']);

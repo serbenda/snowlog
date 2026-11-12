@@ -27,6 +27,8 @@ test('índice: frontmatter, etiquetas, tareas fuera de código y enlaces', () =>
   assert.ok(linksTo(notes[1], notes[2]));
   assert.ok(!linksTo(notes[3], notes[2]));
   assert.equal(contentLines('```\nx\n```\ny').map((l) => l.value).join(), 'y');
+  const code = parseNote({ id: 'c', path: 'C', text: 'Escribe `[[Otra]]` o `#tag` así' });
+  assert.equal(code.links.size + code.tags.size, 0);
 });
 
 test('marcar y desmarcar una tarea por su línea, también en callouts', () => {

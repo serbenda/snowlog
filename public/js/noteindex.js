@@ -42,8 +42,9 @@ export function parseNote({ id, path, text = '', created, updated }) {
   const tasks = [];
   const links = new Set();
   for (const { line, value } of contentLines(text)) {
-    for (const m of value.matchAll(TAG_RE)) tags.add(m[2].toLowerCase());
-    for (const m of value.matchAll(LINK_RE)) links.add(m[1].trim().toLowerCase());
+    const plain = value.replace(/`[^`]*`/g, ''); // lo que va en `código` no cuenta
+    for (const m of plain.matchAll(TAG_RE)) tags.add(m[2].toLowerCase());
+    for (const m of plain.matchAll(LINK_RE)) links.add(m[1].trim().toLowerCase());
     const t = value.match(TASK_LINE_RE);
     if (t) {
       // Una tarea vacía (o solo con etiquetas, como la de una plantilla) no es una tarea real.
