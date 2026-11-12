@@ -19,6 +19,9 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - En las tareas hechas solo se tacha el texto, no la casilla ni el espacio.
 - El esquema y el contador de palabras ignoran el frontmatter.
 
+### Corregido
+- La pantalla de acceso ya no muestra el texto «null» cuando el login con GitHub está activo.
+
 ## [0.1.0] - 2026-11-09
 
 ### Añadido

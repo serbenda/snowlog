@@ -101,7 +101,7 @@ function lockScreen(...children) {
   const card = $('lock-card');
   card.replaceChildren(
     h('div', { class: 'lock-logo' }, h('img', { src: 'icon.svg', alt: '' }), h('span', {}, 'Snowlog')),
-    ...children,
+    ...children.filter((c) => c != null && c !== false),
   );
   const first = card.querySelector('input:not([type=checkbox])');
   if (first) first.focus();
