@@ -42,6 +42,9 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/templates.js  plantillas, nota diaria y espacio inicial
   js/import.js     importar carpeta de Markdown
   js/examples.js   proyecto de ejemplo (Cargar ejemplos)
+  js/localvault.js bóveda local: .md en una carpeta (File System Access) o en el navegador (OPFS)
+  js/zip.js        exportar .zip sin dependencias
+scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)
@@ -54,6 +57,7 @@ docs/              contexto, Definition of Done y puesta en marcha
 ```bash
 npm test                                  # tests (Node 20+), deben pasar siempre
 python3 -m http.server 8000 -d public     # probar la web en local
+npm run build:portable                    # versión portátil en dist/snowlog-portable.html
 ```
 
 ## Reglas de seguridad (no negociables)
@@ -66,7 +70,10 @@ python3 -m http.server 8000 -d public     # probar la web en local
   formato. Los enlaces solo admiten `http(s)`, `mailto` y anclas.
 - La clave y la frase de paso solo viven en memoria. No las escribas en `localStorage`, logs ni errores.
 - Ningún secreto en el código: el client secret va solo como secreto del Worker.
-- Cada cambio en `crypto.js`, `vault.js` o `markdown.js` lleva tests nuevos.
+- Cada cambio en `crypto.js`, `vault.js`, `localvault.js` o `markdown.js` lleva tests nuevos.
+- **Versión portátil sin red:** su CSP lleva `connect-src 'none'` y hashes del script y del estilo. Nunca
+  añadas conexiones, CDN ni `unsafe-inline`. Todo módulo nuevo debe usar `import { … } from './x.js'` o
+  `import * as X from './x.js'` y `export function|const|class`, que es lo que entiende el empaquetador.
 
 ## Cómo trabajar
 

@@ -1,6 +1,6 @@
 # Contexto actual de Snowlog
 
-Última actualización: 2026-11-12
+Última actualización: 2026-11-13
 
 ## Estado
 
@@ -14,6 +14,19 @@
   `https://snowlog.bendi.dev/`) y Worker en https://snowlog-auth.serbenda.workers.dev
   (`ALLOWED_ORIGIN=https://snowlog.bendi.dev`, `GITHUB_CLIENT_SECRET` como secreto en Cloudflare).
   El token personal sigue disponible como alternativa.
+
+## Dos versiones
+
+| | Online | Portátil |
+| --- | --- | --- |
+| Fichero | `public/` en GitHub Pages | `snowlog-portable.html` (lo genera `scripts/build-portable.mjs`) |
+| Bóveda | `Vault` (`vault.js`): GitHub, cifrada | `LocalVault` (`localvault.js`): `.md` en una carpeta o en OPFS |
+| Red | GitHub API y el Worker | Ninguna (`connect-src 'none'`) |
+| `CONFIG.mode` | `online` | `portable` |
+
+`LocalVault` tiene la misma interfaz que `Vault`, así que la interfaz no distingue una de otra (`S.local`
+solo cambia el arranque, cerrar/olvidar y el exportar). La carpeta elegida se recuerda en IndexedDB. En
+`file://` el almacenamiento del navegador (OPFS) no está disponible: solo carpeta, con Chrome o Edge.
 
 ## Arquitectura en una frase
 
@@ -64,10 +77,11 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 ## Siguiente
 
 1. Búsqueda de texto completo y panel de etiquetas.
-2. Editor con resaltado y autocompletado de `[[enlaces]]`; renombrar actualiza enlaces.
-3. Atajos de listas (mover líneas, sangrar) y edición de tablas.
-4. Kanban y marcadores.
-5. PWA y uso sin conexión.
+2. Portátil: guardar en el navegador cuando se abre desde disco (IndexedDB) para Safari/Firefox.
+3. Editor con resaltado y autocompletado de `[[enlaces]]`; renombrar actualiza enlaces.
+4. Atajos de listas (mover líneas, sangrar) y edición de tablas.
+5. Kanban y marcadores.
+6. PWA de la versión online.
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

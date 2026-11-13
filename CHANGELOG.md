@@ -21,6 +21,11 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - Panel principal con `cssclasses: dashboard`: las listas de primer nivel se muestran en columnas.
 - «Configurar mi espacio»: crea Inicio, Diario, Proyectos, Plantillas (nota diaria, nota, proyecto, reunión, píldora de conocimiento y procedimiento) y Archivo.
 - Importar una carpeta de Markdown (por ejemplo, una bóveda de Obsidian): se cifra en el navegador y se sube por lotes.
+- **Versión portátil** `snowlog-portable.html`: un solo fichero que se abre con doble clic en Chrome o Edge, sin instalar nada y sin internet. Las notas son ficheros `.md` en una carpeta del ordenador; la CSP prohíbe cualquier conexión.
+- Modo local también en la versión online: «Usar notas de este ordenador, sin GitHub».
+- Exportar copia (.zip) de todas las notas, en las dos versiones.
+- Lo que se borra en modo local va a `.trash` dentro de la carpeta.
+- GitHub Actions construye la versión portátil y la publica en `https://snowlog.bendi.dev/snowlog-portable.html`.
 - «Cargar ejemplos»: un proyecto de ejemplo (Web de recetas) con 4 historias, tablero, reunión, píldora y notas diarias enlazadas, para ver cómo organizarse.
 
 ### Cambiado

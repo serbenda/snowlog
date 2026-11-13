@@ -7,6 +7,12 @@ Cuaderno de notas personal al estilo Obsidian, **cifrado de extremo a extremo**,
 - Se cifra en el navegador con AES-256-GCM. La clave sale de tu frase de paso y nunca abandona el dispositivo.
 - Cada guardado es un commit: tienes historial completo y copia de seguridad gratis.
 
+## Dos versiones
+
+- **Online** en <https://snowlog.bendi.dev>: notas cifradas en un repo privado de GitHub, desde cualquier dispositivo.
+- **Portátil**: un solo fichero `snowlog-portable.html` que se abre con doble clic en Chrome o Edge, sin instalar
+  nada y sin internet; las notas son ficheros `.md` en una carpeta de tu ordenador. Ver [docs/PORTATIL.md](docs/PORTATIL.md).
+
 ## Interfaz
 
 La disposición se inspira en Obsidian: barra lateral de iconos (ribbon), explorador de archivos con carpetas,
@@ -59,6 +65,9 @@ public/            la web (lo que publica GitHub Pages)
   js/templates.js  plantillas, nota diaria y espacio inicial
   js/import.js     importar una carpeta de Markdown
   js/examples.js   proyecto de ejemplo con historias
+  js/localvault.js notas como ficheros .md en una carpeta local (o en el navegador)
+  js/zip.js        exportar copia .zip
+scripts/build-portable.mjs  empaqueta todo en un único HTML sin red (versión portátil)
   js/app.js        interfaz
 worker/            Cloudflare Worker para el login con GitHub (guarda el client secret)
 tests/             tests con node --test, incluido un GitHub falso en memoria
@@ -82,6 +91,7 @@ personal de momento, o crear la GitHub App y el Worker para el login con GitHub.
 ```bash
 npm test                                  # tests (Node 20+)
 python3 -m http.server 8000 -d public     # servir la web en local
+npm run build:portable                    # genera dist/snowlog-portable.html
 git config core.hooksPath .githooks       # una vez por clon: limpia atribuciones en los commits
 ```
 
