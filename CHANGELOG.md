@@ -6,6 +6,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- **Pasar notas entre la versión portátil y la online:** «Importar copia (.snowlog o .zip)…» acepta la copia cifrada de la online y el .zip de la portátil (o de «Exportar sin cifrar»). Se puede importar en una carpeta aparte o tal cual, con sus carpetas y adjuntos.
 - Versión portátil en Firefox y Safari (y en cualquier navegador que no deje elegir carpetas): «Guardar dentro del navegador» guarda las notas en IndexedDB (o en localStorage si no hay) y siguen ahí al volver a abrir el fichero.
 - Carpetas del ordenador: Snowlog detecta lo que cambia desde fuera (otro editor, OneDrive, Dropbox…) al volver a la ventana y cada 10 s. Actualiza el explorador y la nota abierta; si la nota abierta se borra fuera mientras escribes, lo escrito se guarda en «Recuperada».
 - **Tableros Kanban** sobre Markdown normal (`## Columna` y `- [ ] tarjeta`, con `kanban-plugin: basic` o `kanban: true` en las propiedades): arrastrar tarjetas entre columnas, añadir, editar, marcar y borrar tarjetas, y crear, renombrar, mover y borrar columnas. «Nuevo tablero Kanban» en el menú y en la paleta. El texto sigue siendo editable con Ctrl+E.
@@ -66,6 +67,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - Los enlaces y etiquetas escritos dentro de `código` ya no cuentan como enlaces ni etiquetas.
 
 ### Corregido
+- El menú ⋯ ya no se sale de la pantalla (tiene su propio desplazamiento) y se cierra al usar un atajo de teclado.
 - Con muchas notas, el explorador ya no estira la página entera: cada panel tiene su propio desplazamiento.
 - La pantalla de acceso ya no muestra el texto «null» cuando el login con GitHub está activo.
 

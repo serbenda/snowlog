@@ -583,6 +583,8 @@ button { cursor: pointer; }
   position: fixed;
   z-index: 40;
   min-width: 190px;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
   padding: 4px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);

@@ -65,3 +65,13 @@ fichero. Ten en cuenta:
 | Navegadores | Cualquiera moderno | Chrome o Edge (carpeta); Firefox o Safari (dentro del navegador) |
 
 Desde la versión online también puedes usar una carpeta local con *Usar notas de este ordenador, sin GitHub*.
+
+## Pasar notas de una versión a otra
+
+- **De la online a la portátil:** en la online, menú ⋯ → **Copia de seguridad cifrada** (fichero `.snowlog`).
+  En la portátil, menú ⋯ → **Importar copia (.snowlog o .zip)…**, escribe tu frase de paso (o el código de
+  recuperación) y elige **Importarlas tal cual**. Funciona sin internet: el descifrado se hace en el navegador.
+- **De la portátil a la online:** en la portátil, menú ⋯ → **Copia de seguridad (.zip)**. En la online, menú ⋯ →
+  **Importar copia (.snowlog o .zip)…** y **Importarlas tal cual**: se cifran en el navegador antes de subir.
+- **Importarlas en la carpeta «Copia AAAA-MM-DD»** deja tus notas actuales sin tocar, para revisar con calma.
+- Si un nombre ya existe, la importada se llama «… (importada)»: nunca se sobrescribe nada.

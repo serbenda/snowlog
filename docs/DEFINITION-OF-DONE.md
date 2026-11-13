@@ -55,5 +55,5 @@ La hoja de ruta completa, con el motivo de cada punto, está en [ROADMAP.md](ROA
 - [x] Kanban sobre Markdown y vista de grafo.
 - [ ] Portátil en Safari y Firefox; detectar cambios hechos desde fuera de la app.
   Hecho y probado en Chrome simulando un navegador sin carpetas; falta comprobarlo en Firefox y Safari reales.
-- [ ] Pasar notas entre la versión portátil y la online (exportar de una, importar en la otra).
+- [x] Pasar notas entre la versión portátil y la online (exportar de una, importar en la otra).
 - [ ] Tests de navegador en la CI para los recorridos principales.
