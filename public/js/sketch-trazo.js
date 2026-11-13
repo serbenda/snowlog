@@ -1,4 +1,4 @@
-// Copiado de serbenda/sketch (js/trazo.js, commit 0d64f54) con scripts/update-sketch.mjs. No editar aquí.
+// Copiado de serbenda/sketch (js/trazo.js, commit 80f776f) con scripts/update-sketch.mjs. No editar aquí.
 // Trazo "a mano": convierte formas geométricas en caminos con un ligero temblor, siempre igual
 // para la misma figura (generador pseudoaleatorio con semilla). Implementación propia.
 //

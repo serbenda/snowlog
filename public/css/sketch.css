@@ -1,4 +1,4 @@
-/* Copiado de serbenda/sketch (css/sketch.css, commit 0d64f54). No editar aquí. */
+/* Copiado de serbenda/sketch (css/sketch.css, commit 80f776f). No editar aquí. */
 /* Editor de sketch. Todo con el prefijo sk- para poder incrustarlo en otras páginas (Snowlog). */
 
 /* Letra a mano: Caveat (SIL Open Font License, ver fonts/OFL.txt), recortada a los caracteres latinos. */
@@ -288,4 +288,15 @@
 
 .sk-editor [hidden] {
   display: none !important;
+}
+
+/* Foco visible con el teclado. */
+.sk-editor:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--sk-accent);
+}
+
+.sk-editor button:focus-visible,
+.sk-editor input:focus-visible {
+  outline: 2px solid var(--sk-accent);
+  outline-offset: 1px;
 }

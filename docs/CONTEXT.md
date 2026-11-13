@@ -136,5 +136,7 @@ Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI q
   `node scripts/update-sketch.mjs <ruta-a-sketch>`; no se editan aquí. La portátil quita el `@font-face` (sin
   `font-src`) y usa la cursiva del sistema. Los dibujos
   son adjuntos `.sketch` (JSON) cifrados como cualquier otro; se incrustan con `![[x.sketch]]` como SVG hecho
-  con DOM (sin innerHTML). Si un dibujo cambia en dos dispositivos, no se fusiona: la otra versión se guarda
-  como copia.
+  con DOM (sin innerHTML). Si un dibujo cambia en dos dispositivos se fusiona por elemento
+  (`mergeScenes` de sketch, que `app.js` pasa a `saveFile` como `merge`); solo si chocan en el mismo elemento
+  se guarda además la otra versión como copia. La búsqueda descifra los dibujos para buscar en sus textos
+  (`S.drawText`, solo en memoria; se vacía al bloquear).

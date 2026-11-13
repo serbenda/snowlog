@@ -16,7 +16,7 @@ import { makeBackup, openBackup, parseBackup } from './backup.js';
 import { openCache } from './cache.js';
 import * as K from './kanban.js';
 import { createEditor as createSketch } from './sketch-editor.js';
-import { emptyScene as emptySketch, parseScene as parseSketch, serializeScene as serializeSketch } from './sketch-escena.js';
+import { emptyScene as emptySketch, parseScene as parseSketch, serializeScene as serializeSketch, mergeScenes as mergeSketch } from './sketch-escena.js';
 import { toSvgElement as sketchSvg } from './sketch-pintar.js';
 import { merge3 } from './merge.js';
 import { openKvDir, browserBackend } from './kvdir.js';
@@ -110,6 +110,7 @@ const S = {
   lastActivity: Date.now(),
   local: false, // true = notas en una carpeta local o en el navegador (sin GitHub)
   notesIdx: new Map(), // id -> nota analizada (solo en memoria)
+  drawText: new Map(), // id de dibujo -> { ver, note } con su texto, para buscar (solo en memoria)
   indexReady: null,
   calMonth: null,
 };
@@ -810,6 +811,7 @@ function wipe() {
   $('backlinks').replaceChildren();
   $('calendar').replaceChildren();
   S.notesIdx.clear();
+  S.drawText.clear();
   S.indexReady = null;
 }
 
@@ -876,6 +878,7 @@ async function enterApp() {
   $('app').hidden = false;
   S.lastActivity = Date.now();
   S.notesIdx.clear();
+  S.drawText.clear();
   S.indexReady = null;
   S.calMonth = null;
   updatePlace();
@@ -2028,8 +2031,10 @@ async function toggleTask(box) {
 // --- Enlaces entrantes ---
 function refreshBacklinks() {
   const el = $('backlinks');
-  const me = S.current && S.notesIdx.get(S.current);
-  if (!S.current) {
+  // Con un dibujo abierto: las notas que lo incrustan o enlazan.
+  const file = !S.current && D.id ? S.vault?.index.files?.[D.id] : null;
+  const me = S.current ? S.notesIdx.get(S.current) : file && { id: D.id, name: baseName(file.path), path: file.path };
+  if (!S.current && !file) {
     el.replaceChildren();
     return;
   }
@@ -3122,7 +3127,8 @@ async function openDrawing(id) {
   $('breadcrumb').replaceChildren(...parts.flatMap((p, i) => [i ? h('span', { class: 'crumb-sep' }, '/') : null, h('span', { class: i === parts.length - 1 ? 'crumb-last' : '' }, p)]).filter(Boolean));
   document.title = `${baseName(f.path)} · Snowlog`;
   $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'Dibujo'));
-  $('backlinks').replaceChildren();
+  refreshBacklinks();
+  ensureIndex().then(() => { if (D.id === id) refreshBacklinks(); }).catch(() => {});
   $('st-words').textContent = '';
   $('st-chars').textContent = '';
   setStatus('loading');
@@ -3156,12 +3162,20 @@ function saveDrawing() {
   D.dirty = false;
   setStatus('saving');
   D.saving = D.saving
-    .then(() => vault.saveFile(id, bytes))
+    .then(() => vault.saveFile(id, bytes, { merge: mergeDrawing }))
     .then((res) => {
       if (D.id === id && !D.dirty) setStatus('saved');
+      // Se juntaron cambios de otro dispositivo: el editor pasa a mostrar el dibujo junto.
+      if (res?.merged && D.id === id && !D.dirty && D.editor) {
+        try {
+          D.editor.setScene(parseSketch(new TextDecoder().decode(res.merged)), { fit: false });
+        } catch { /* se verá al volver a abrirlo */ }
+      }
       if (res?.conflict) {
         renderTree();
-        notice(`Este dibujo también se cambió en otro sitio: la otra versión está en «${baseName(res.conflict.path)}».`);
+        notice(`Este dibujo también se cambió en otro sitio en las mismas partes: se han juntado y la otra versión está en «${baseName(res.conflict.path)}».`);
+      } else if (res?.merged) {
+        notice('Se han juntado los cambios de este dibujo hechos en otro sitio.');
       }
     })
     .catch((e) => {
@@ -3173,6 +3187,34 @@ function saveDrawing() {
       else notice(`No se pudo guardar el dibujo: ${errText(e)}`, 'error');
     });
   return D.saving;
+}
+
+// Junta dos versiones de un dibujo elemento a elemento (null si alguna no es un dibujo válido).
+function mergeDrawing(base, mine, theirs) {
+  const dec = (b) => parseSketch(new TextDecoder().decode(b));
+  const r = mergeSketch(dec(base), dec(mine), dec(theirs));
+  return { bytes: new TextEncoder().encode(serializeSketch(r.scene)), conflict: r.conflict };
+}
+
+// Dibujos como "notas" para la búsqueda: nombre, carpeta y los textos que llevan dentro.
+async function drawingNotes() {
+  const out = [];
+  for (const [id, f] of Object.entries(S.vault?.index.files || {})) {
+    if (f.type !== SKETCH_TYPE) continue;
+    const ver = f.updated || f.created || '';
+    let c = S.drawText.get(id);
+    if (!c || c.ver !== ver || c.note.path !== f.path) {
+      let text = '';
+      try {
+        text = parseSketch(new TextDecoder().decode(await S.vault.readFile(id))).elements
+          .filter((e) => e.type === 'text').map((e) => e.text).join('\n');
+      } catch { /* sin conexión o dañado: se busca solo por el nombre */ }
+      c = { ver, note: { id, path: f.path, name: baseName(f.path), folder: parentPath(f.path), text, tags: new Set(), links: new Set(), fm: {}, tasks: [], ctime: f.created || '', mtime: ver, drawing: true } };
+      S.drawText.set(id, c);
+    }
+    out.push(c.note);
+  }
+  return out;
 }
 
 async function closeDrawing() {
@@ -3385,7 +3427,9 @@ async function runSearch() {
   if (seq !== searchSeq || !S.vault) return;
   syncIndex();
   const t0 = performance.now();
-  const results = searchNotes(indexedNotes(), query);
+  const drawings = await drawingNotes();
+  if (seq !== searchSeq || !S.vault) return;
+  const results = searchNotes([...indexedNotes(), ...drawings], query);
   const ms = Math.round(performance.now() - t0);
   const total = results.reduce((a, r) => a + r.count, 0);
   const head = h('p', { class: 'search-count' }, results.length
@@ -3394,7 +3438,8 @@ async function runSearch() {
   box.replaceChildren(head, ...results.map((r) => h('div', { class: 'search-result', role: 'listitem' },
     h('button', { class: 'search-note', type: 'button', title: r.note.path, onclick: () => openResult(r.note.id) },
       h('span', { class: 'search-name' }, r.note.name),
-      r.note.folder ? h('span', { class: 'search-folder' }, r.note.folder) : null),
+      r.note.drawing ? h('span', { class: 'search-folder' }, `Dibujo${r.note.folder ? ` · ${r.note.folder}` : ''}`)
+        : r.note.folder ? h('span', { class: 'search-folder' }, r.note.folder) : null),
     ...r.matches.map((m) => h('button', { class: 'search-line', type: 'button', onclick: () => openResult(r.note.id, m) }, ...marked(m))),
   )));
 }
@@ -3415,6 +3460,10 @@ function marked(m) {
 
 async function openResult(id, match) {
   closeMobilePanels();
+  if (isSketch(id)) {
+    await openDrawing(id);
+    return;
+  }
   if (S.current !== id) await openNote(id);
   if (!match || S.current !== id) return;
   if (S.mode === 'read') setMode('edit');

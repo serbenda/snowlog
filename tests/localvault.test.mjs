@@ -213,3 +213,26 @@ test('dibujos en local: se reescriben y lo cambiado fuera se guarda como copia',
   assert.equal(root.text('Dibujos/esquema.sketch'), 'tres');
   assert.equal(root.text(res.conflict.path), 'cambiado fuera');
 });
+
+test('dibujos en local: lo cambiado fuera en otros elementos se junta', async () => {
+  const { mergeScenes, parseScene, serializeScene, emptyScene } = await import('../public/js/sketch-escena.js');
+  const enc = (scene) => new TextEncoder().encode(serializeScene(scene));
+  const dec = (b) => parseScene(new TextDecoder().decode(b));
+  const merge = (b, m, t) => {
+    const r = mergeScenes(dec(b), dec(m), dec(t));
+    return { bytes: enc(r.scene), conflict: r.conflict };
+  };
+  const box = (id, x) => ({ id, type: 'rectangle', x, y: 0, w: 10, h: 10, seed: 1 });
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  const base = { ...emptyScene(), elements: [box('a', 0)] };
+  const { id } = await v.addFile('Dibujos', 'esquema.sketch', enc(base));
+  root.put('Dibujos/esquema.sketch', serializeScene({ ...base, elements: [box('a', 0), box('fuera', 50)] }));
+  const res = await v.saveFile(id, enc({ ...base, elements: [box('a', 9)] }), { merge });
+  assert.equal(res.conflict, undefined);
+  assert.deepEqual(dec(new TextEncoder().encode(root.text('Dibujos/esquema.sketch'))).elements.map((e) => [e.id, e.x]), [['a', 9], ['fuera', 50]]);
+  // Si no se puede juntar (no es un dibujo), copia como antes.
+  root.put('Dibujos/esquema.sketch', 'esto no es json');
+  const res2 = await v.saveFile(id, enc(base), { merge });
+  assert.ok(res2.conflict);
+});

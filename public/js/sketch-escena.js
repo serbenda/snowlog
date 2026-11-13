@@ -1,4 +1,4 @@
-// Copiado de serbenda/sketch (js/escena.js, commit 0d64f54) con scripts/update-sketch.mjs. No editar aquí.
+// Copiado de serbenda/sketch (js/escena.js, commit 80f776f) con scripts/update-sketch.mjs. No editar aquí.
 // Escena de un dibujo: una lista de elementos con su estilo. Funciones puras (sin DOM) para crear,
 // medir, tocar, mover, girar, redimensionar, enlazar, guardar, abrir (también .excalidraw) y
 // convertir en trazos.
@@ -53,8 +53,12 @@ const isBindable = (el) => isContainer(el) || (el.type === 'text' && !el.contain
 // --- Texto: medida y líneas ---
 // La medida real la pone quien pinta (canvas.measureText); sin DOM se estima.
 let measure = (text, fontSize) => text.length * fontSize * 0.5;
+// Los elementos no se cambian nunca en el sitio (cada cambio crea uno nuevo), así que su caja se puede
+// guardar por objeto. Al cambiar la medida de los textos se empieza de cero.
+let boxes = new WeakMap();
 export function setTextMeasurer(fn) {
   measure = fn;
+  boxes = new WeakMap();
 }
 export const measureText = (text, fontSize) => measure(text, fontSize);
 
@@ -100,6 +104,15 @@ export function rotatePoint(p, c, a) {
 
 // Caja del elemento sin girar: { x, y, w, h } con w y h positivos.
 export function bounds(el) {
+  let b = boxes.get(el);
+  if (!b) {
+    b = computeBounds(el);
+    boxes.set(el, b);
+  }
+  return b;
+}
+
+function computeBounds(el) {
   if (isLinear(el) && el.points?.length) {
     const xs = el.points.map((p) => el.x + p.x);
     const ys = el.points.map((p) => el.y + p.y);
@@ -325,6 +338,23 @@ export function rotateElement(el, c, delta) {
   return out;
 }
 
+// Agranda (o encoge) un elemento sin mover su centro. Los textos cambian de tamaño de letra.
+export function growElement(el, dw, dh) {
+  if (el.type === 'text') {
+    const fontSize = clamp(el.fontSize + Math.sign(dw || dh) * 2, 6, 400);
+    const c = center(el);
+    const t = { ...el, fontSize };
+    const b = bounds(t);
+    return { ...t, x: c.x - b.w / 2, y: c.y - b.h / 2 };
+  }
+  const b = bounds(el);
+  if (isLinear(el)) return resizeElement(el, b, { x: b.x, y: b.y, w: Math.max(1, b.w + dw), h: Math.max(b.h ? 1 : 0, b.h + dh) });
+  const w = Math.max(4, b.w + dw);
+  const h = Math.max(4, b.h + dh);
+  const c = center(el);
+  return { ...el, x: c.x - w / 2, y: c.y - h / 2, w, h };
+}
+
 // Normaliza: anchos y altos positivos (tras dibujar hacia arriba o a la izquierda).
 export function normalize(el) {
   if (isLinear(el) || el.type === 'text') return el;
@@ -409,6 +439,52 @@ export function syncBindings(elements) {
     }
     return el;
   });
+}
+
+// Fusión a tres bandas de dos versiones de un dibujo (la mía y la de otro dispositivo) desde la que
+// ambas partieron, elemento a elemento por id. Si los dos cambiaron el mismo elemento de forma
+// distinta gana el mío y `conflict` es true (quien llama puede guardar la otra versión aparte).
+export function mergeScenes(base, mine, theirs) {
+  const key = (e) => JSON.stringify(e);
+  const B = new Map(base.elements.map((e) => [e.id, key(e)]));
+  const T = new Map(theirs.elements.map((e) => [e.id, e]));
+  const M = new Set(mine.elements.map((e) => e.id));
+  let conflict = false;
+  const out = [];
+  for (const m of mine.elements) {
+    const t = T.get(m.id);
+    const b = B.get(m.id);
+    const km = key(m);
+    if (!t) {
+      // Lo borraron allí: se va si aquí no se tocó; si aquí se cambió, se queda.
+      if (b === undefined || km !== b) out.push(m);
+      continue;
+    }
+    const kt = key(t);
+    if (km === kt || kt === b) out.push(m);
+    else if (km === b) out.push(t);
+    else {
+      conflict = true;
+      out.push(m);
+    }
+  }
+  // Lo nuevo de allí, en su sitio relativo (detrás del elemento que lo precede allí).
+  let prev = null;
+  for (const t of theirs.elements) {
+    if (!M.has(t.id)) {
+      const b = B.get(t.id);
+      // Si aquí se borró y allí no cambió, sigue borrado.
+      if (b === undefined || key(t) !== b) {
+        const at = prev ? out.findIndex((e) => e.id === prev) + 1 : 0;
+        out.splice(at, 0, t);
+      } else {
+        continue;
+      }
+    }
+    prev = t.id;
+  }
+  const bg = mine.background === theirs.background || theirs.background === base.background ? mine.background : theirs.background;
+  return { scene: { ...mine, background: bg, elements: syncBindings(out) }, conflict };
 }
 
 // Copias de unos elementos, desplazadas: ids nuevos y enlaces y grupos rehechos entre las copias.

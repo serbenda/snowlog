@@ -1,8 +1,8 @@
-// Copiado de serbenda/sketch (js/pintar.js, commit 0d64f54) con scripts/update-sketch.mjs. No editar aquí.
+// Copiado de serbenda/sketch (js/pintar.js, commit 80f776f) con scripts/update-sketch.mjs. No editar aquí.
 // Pinta una escena en un <canvas> o la convierte en SVG (texto para descargar o nodos DOM para
 // incrustar). Los textos del dibujo nunca se meten como HTML: se escapan o van con textContent.
 
-import { drawOps, sceneBounds, textLayout, setTextMeasurer, FONT, FONT_NAME } from './sketch-escena.js';
+import { drawOps, sceneBounds, textLayout, setTextMeasurer, aabb, FONT, FONT_NAME } from './sketch-escena.js';
 import { toSvgD, tracePath } from './sketch-trazo.js';
 
 // Mide los textos con un canvas (la letra a mano es más estrecha que la estimación sin DOM).
@@ -27,6 +27,29 @@ export function fontReady(doc) {
   }
 }
 
+// Trazos ya preparados por elemento (Path2D si existe): pintar de nuevo un elemento que no ha cambiado
+// no vuelve a calcular su trazo a mano ni su rayado. Los elementos nunca se cambian en el sitio.
+const prepared = new WeakMap();
+function opsOf(el) {
+  let ops = prepared.get(el);
+  if (!ops) {
+    const P = globalThis.Path2D;
+    ops = drawOps(el).map((op) => {
+      if (!P) return op;
+      const path = new P();
+      tracePath(path, op.path);
+      let clip = null;
+      if (op.clip) {
+        clip = new P();
+        tracePath(clip, op.clip);
+      }
+      return { ...op, p2d: path, clip2d: clip };
+    });
+    prepared.set(el, ops);
+  }
+  return ops;
+}
+
 export function paintElement(ctx, el) {
   ctx.save();
   if (el.type === 'text') {
@@ -45,26 +68,33 @@ export function paintElement(ctx, el) {
     ctx.restore();
     return;
   }
-  for (const op of drawOps(el)) {
+  for (const op of opsOf(el)) {
     ctx.save();
     ctx.globalAlpha = op.opacity ?? 1;
     if (op.clip) {
-      ctx.beginPath();
-      tracePath(ctx, op.clip);
-      ctx.clip();
+      if (op.clip2d) ctx.clip(op.clip2d);
+      else {
+        ctx.beginPath();
+        tracePath(ctx, op.clip);
+        ctx.clip();
+      }
     }
-    ctx.beginPath();
-    tracePath(ctx, op.path);
+    if (!op.p2d) {
+      ctx.beginPath();
+      tracePath(ctx, op.path);
+    }
     if (op.fill) {
       ctx.fillStyle = op.fill;
-      ctx.fill();
+      if (op.p2d) ctx.fill(op.p2d);
+      else ctx.fill();
     } else {
       ctx.strokeStyle = op.stroke;
       ctx.lineWidth = op.width;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.setLineDash(op.dashed ? [op.width * 4, op.width * 3] : []);
-      ctx.stroke();
+      if (op.p2d) ctx.stroke(op.p2d);
+      else ctx.stroke();
     }
     ctx.restore();
   }
@@ -80,7 +110,17 @@ export function paintScene(ctx, scene, { view = { x: 0, y: 0, zoom: 1 }, width, 
   }
   ctx.translate(view.x, view.y);
   ctx.scale(view.zoom, view.zoom);
-  for (const el of scene.elements) paintElement(ctx, el);
+  // Solo lo que se ve (con margen para el grosor y el temblor del trazo).
+  const m = 20 / view.zoom;
+  const x1 = -view.x / view.zoom - m;
+  const y1 = -view.y / view.zoom - m;
+  const x2 = (width - view.x) / view.zoom + m;
+  const y2 = (height - view.y) / view.zoom + m;
+  for (const el of scene.elements) {
+    const b = aabb(el);
+    if (b.x > x2 || b.y > y2 || b.x + b.w < x1 || b.y + b.h < y1) continue;
+    paintElement(ctx, el);
+  }
   ctx.restore();
 }
 

@@ -86,6 +86,8 @@ export function validName(path) {
   if (/[\\:*?"<>|#^[\]]/.test(path)) throw new Error('bad_chars');
 }
 
+const sameBytes = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
 export class Vault {
   // store: caché opcional de ficheros cifrados (cache.js) para no volver a bajar lo que no cambió.
   constructor(repo, dek, { store = null } = {}) {
@@ -106,6 +108,7 @@ export class Vault {
     this.baseText = new Map();
     // Igual para los adjuntos que se pueden editar (dibujos): versión con la que se leyeron aquí.
     this.fileBase = new Map();
+    this.fileBaseBytes = new Map(); // contenido de cada adjunto tal como se leyó o guardó aquí (para fusionar)
   }
 
   remember(id, text) {
@@ -768,6 +771,7 @@ export class Vault {
     }, async () => [{ path: filePath(id), content }]);
     this.fileCache.set(id, bytes);
     this.fileBase.set(id, this.versionOf(id));
+    this.fileBaseBytes.set(id, bytes);
     return { id, path };
   }
 
@@ -778,22 +782,26 @@ export class Vault {
     const bytes = await C.decryptBytes(this.dek, C.fromB64(b64.trim()), id);
     this.fileCache.set(id, bytes);
     this.fileBase.set(id, this.versionOf(id));
+    this.fileBaseBytes.set(id, bytes);
     return bytes;
   }
 
   // Guarda una versión nueva de un adjunto (un dibujo). Si cambió en otro dispositivo desde que se
-  // leyó aquí, la otra versión se guarda como copia al lado. Devuelve { conflict? }.
-  async saveFile(id, bytes) {
+  // leyó aquí, `merge(base, mío, suyo)` puede juntar las dos versiones ({ bytes, conflict }); si no se
+  // puede, o si chocan, la otra versión se guarda como copia al lado.
+  // Devuelve { merged?: bytes guardados, conflict?: { id, path } }.
+  async saveFile(id, bytes, { merge = null } = {}) {
     const meta = this.index.files?.[id];
     if (!meta) throw new Error('missing');
     this.checkAttachment(meta.path, bytes);
     const mine = { ...meta };
     let conflict = null;
+    let out = bytes;
     await this.apply('Snowlog: guardar dibujo', (idx) => {
       const now = new Date().toISOString();
       if (!idx.files[id]) idx.files[id] = { ...mine };
       idx.files[id].updated = now;
-      idx.files[id].size = bytes.length;
+      idx.files[id].size = out.length;
       if (conflict) {
         const name = baseName(idx.files[id].path);
         const ext = extOf(name);
@@ -802,28 +810,41 @@ export class Vault {
       }
     }, async () => {
       conflict = null;
-      const changes = [{ path: filePath(id), content: C.toB64(await C.encryptBytes(this.dek, bytes, id)) }];
+      out = bytes;
+      const changes = [];
       const remote = this.index.files?.[id];
       const base = this.fileBase.get(id);
       if (remote && base !== undefined && (remote.updated || remote.created) !== base) {
         const theirs = await this.repo.readText(filePath(id));
         if (theirs) {
           const plain = await C.decryptBytes(this.dek, C.fromB64(theirs.trim()), id);
-          const same = plain.length === bytes.length && plain.every((b, i) => b === bytes[i]);
-          if (!same) {
-            conflict = { id: C.randomId(), bytes: plain };
-            changes.push({ path: filePath(conflict.id), content: C.toB64(await C.encryptBytes(this.dek, plain, conflict.id)) });
+          if (!sameBytes(plain, bytes)) {
+            const baseBytes = this.fileBaseBytes.get(id);
+            let joined = null;
+            try {
+              joined = merge && baseBytes ? merge(baseBytes, bytes, plain) : null;
+            } catch { /* no se pudo juntar: copia */ }
+            if (joined?.bytes) out = joined.bytes;
+            if (!joined?.bytes || joined.conflict) {
+              conflict = { id: C.randomId(), bytes: plain };
+              changes.push({ path: filePath(conflict.id), content: C.toB64(await C.encryptBytes(this.dek, plain, conflict.id)) });
+            }
           }
         }
       }
+      this.checkAttachment(meta.path, out);
+      changes.unshift({ path: filePath(id), content: C.toB64(await C.encryptBytes(this.dek, out, id)) });
       return changes;
     });
-    this.fileCache.set(id, bytes);
+    this.fileCache.set(id, out);
     this.fileBase.set(id, this.versionOf(id));
-    if (!conflict) return {};
+    this.fileBaseBytes.set(id, out);
+    const res = out !== bytes ? { merged: out } : {};
+    if (!conflict) return res;
     this.fileCache.set(conflict.id, conflict.bytes);
     this.fileBase.set(conflict.id, this.versionOf(conflict.id));
-    return { conflict: { id: conflict.id, path: conflict.path } };
+    this.fileBaseBytes.set(conflict.id, conflict.bytes);
+    return { ...res, conflict: { id: conflict.id, path: conflict.path } };
   }
 
   async deleteFile(id) {

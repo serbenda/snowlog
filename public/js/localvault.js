@@ -385,13 +385,15 @@ export class LocalVault {
     return bytes;
   }
 
-  // Guarda una versión nueva de un dibujo. Si el fichero cambió fuera desde que se leyó, lo de fuera
-  // se guarda como copia al lado.
-  async saveFile(id, bytes) {
+  // Guarda una versión nueva de un dibujo. Si el fichero cambió fuera desde que se leyó,
+  // `merge(base, mío, de fuera)` puede juntar las dos versiones ({ bytes, conflict }); si no se puede,
+  // o si chocan, lo de fuera se guarda como copia al lado. Devuelve { merged?, conflict? }.
+  async saveFile(id, bytes, { merge = null } = {}) {
     const meta = this.index.files[id];
     if (!meta) throw new Error('missing');
     this.checkAttachment(meta.path, bytes);
     let conflict = null;
+    let out = bytes;
     const before = this.fileCache.get(id);
     let disk = null;
     try {
@@ -400,16 +402,26 @@ export class LocalVault {
     } catch { /* borrado fuera: se vuelve a crear */ }
     const eq = (a, b) => a && b && a.length === b.length && a.every((x, i) => x === b[i]);
     if (before && disk && !eq(disk, before) && !eq(disk, bytes)) {
-      const name = baseName(meta.path);
-      const ext = extOf(name);
-      const res = await this.addFile(parentPath(meta.path), `${conflictName(name.slice(0, -(ext.length + 1)))}.${ext}`, disk);
-      conflict = res;
+      let joined = null;
+      try {
+        joined = merge ? merge(before, bytes, disk) : null;
+      } catch { /* no se pudo juntar: copia */ }
+      if (joined?.bytes) {
+        this.checkAttachment(meta.path, joined.bytes);
+        out = joined.bytes;
+      }
+      if (!joined?.bytes || joined.conflict) {
+        const name = baseName(meta.path);
+        const ext = extOf(name);
+        conflict = await this.addFile(parentPath(meta.path), `${conflictName(name.slice(0, -(ext.length + 1)))}.${ext}`, disk);
+      }
     }
-    await writeFile(this.root, meta.path, bytes);
-    meta.size = bytes.length;
+    await writeFile(this.root, meta.path, out);
+    meta.size = out.length;
     meta.updated = iso();
-    this.fileCache.set(id, bytes);
-    return conflict ? { conflict } : {};
+    this.fileCache.set(id, out);
+    const res = out !== bytes ? { merged: out } : {};
+    return conflict ? { ...res, conflict } : res;
   }
 
   async deleteFile(id) {

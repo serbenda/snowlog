@@ -1,4 +1,4 @@
-// Copiado de serbenda/sketch (js/editor.js, commit 0d64f54) con scripts/update-sketch.mjs. No editar aquí.
+// Copiado de serbenda/sketch (js/editor.js, commit 80f776f) con scripts/update-sketch.mjs. No editar aquí.
 // Editor de dibujos: barra de herramientas, lienzo y panel de estilo. Se monta en cualquier
 // contenedor (la web de sketch o Snowlog) y no usa innerHTML: todo se crea con el DOM.
 //
@@ -91,7 +91,12 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   let clipboard = null;
 
   // --- DOM ---
-  const root = el('div', { class: `sk-editor${readOnly ? ' sk-readonly' : ''}`, tabindex: '0' });
+  const helpId = `sk-ayuda-${Math.random().toString(36).slice(2, 8)}`;
+  const root = el('div', { class: `sk-editor${readOnly ? ' sk-readonly' : ''}`, tabindex: '0', role: 'application', 'aria-label': readOnly ? 'Dibujo' : 'Pizarra', 'aria-describedby': readOnly ? null : helpId });
+  const help = el('p', { class: 'sk-sr', id: helpId },
+    'Herramientas: V seleccionar, R rectángulo, D rombo, O elipse, A flecha, L línea, P lápiz, T texto, E borrar. '
+    + 'Intro crea la forma elegida en el centro o escribe dentro de la seleccionada. Tab y Mayús+Tab recorren los elementos; '
+    + 'flechas los mueven; Alt+flechas cambian su tamaño; [ y ] los giran; Supr los borra; Escape quita la selección.');
   const canvas = el('canvas', { class: 'sk-canvas', 'aria-label': 'Lienzo de dibujo' });
   const textBox = el('textarea', { class: 'sk-textbox', 'aria-label': 'Texto', spellcheck: 'false', hidden: true });
   const status = el('div', { class: 'sk-sr', 'aria-live': 'polite' });
@@ -162,7 +167,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       btn('redo', 'Rehacer (Ctrl+Y)', () => doRedo())));
   const stage = el('div', { class: 'sk-stage' }, canvas, textBox);
   if (readOnly) root.append(stage);
-  else root.append(stage, toolbar, panel, bottom, status);
+  else root.append(stage, toolbar, panel, bottom, status, help);
   container.append(root);
   const ctx = canvas.getContext('2d');
 
@@ -500,6 +505,42 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     }
     update(list);
     changed();
+  }
+
+  // Centro de lo que se ve, en coordenadas del dibujo.
+  function viewCenter() {
+    const r = canvas.getBoundingClientRect();
+    return { x: (r.width / 2 - view.x) / view.zoom, y: (r.height / 2 - view.y) / view.zoom };
+  }
+
+  // Crear con el teclado: la forma elegida, de tamaño normal, en el centro de la vista.
+  function createAtCenter() {
+    const c = viewCenter();
+    if (tool === 'text') {
+      newText(c);
+      return;
+    }
+    commit();
+    let e;
+    if (tool === 'line' || tool === 'arrow') e = { ...E.createElement(tool, c.x - 80, c.y, style), points: [{ x: 0, y: 0 }, { x: 160, y: 0 }] };
+    else e = { ...E.createElement(tool, c.x - 80, c.y - 40, style), w: 160, h: 80 };
+    update([...scene.elements, e]);
+    setTool('select');
+    select([e.id]);
+    changed();
+  }
+
+  // Si lo seleccionado queda fuera de la vista, la vista va hacia ello.
+  function revealSelection() {
+    const s = primary();
+    if (!s.length) return;
+    const b = E.sceneBounds(s);
+    const r = canvas.getBoundingClientRect();
+    const sx = b.x * view.zoom + view.x;
+    const sy = b.y * view.zoom + view.y;
+    if (sx < 0 || sy < 0 || sx + b.w * view.zoom > r.width || sy + b.h * view.zoom > r.height) {
+      view = { ...view, x: r.width / 2 - (b.x + b.w / 2) * view.zoom, y: r.height / 2 - (b.y + b.h / 2) * view.zoom };
+    }
   }
 
   // --- Texto ---
@@ -933,6 +974,55 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     if (mod) return;
     if ((ev.key === 'Delete' || ev.key === 'Backspace') && selected.size) { ev.preventDefault(); removeSelected(); return; }
     if (ev.key === 'Escape') { selected.clear(); announce(); setTool('select'); return; }
+    // Tab recorre los elementos mientras hay algo seleccionado (Escape lo suelta y Tab sale del editor).
+    if (ev.key === 'Tab' && ev.target === root && selected.size) {
+      const list = [];
+      for (const e of scene.elements) if (!E.isBoundText(e) && !list.some((x) => e.group && x.group === e.group)) list.push(e);
+      if (list.length) {
+        ev.preventDefault();
+        const cur = list.findIndex((e) => selected.has(e.id));
+        const next = list[(cur + (ev.shiftKey ? -1 : 1) + list.length) % list.length];
+        select([next.id]);
+        revealSelection();
+        syncPanel();
+        redraw();
+      }
+      return;
+    }
+    if (ev.key === 'Enter' && !selected.size) {
+      ev.preventDefault();
+      if (tool === 'select' && scene.elements.length) {
+        select([scene.elements.find((e) => !E.isBoundText(e)).id]);
+        revealSelection();
+        syncPanel();
+        redraw();
+      } else if (tool !== 'select' && tool !== 'hand' && tool !== 'eraser' && tool !== 'draw') {
+        createAtCenter();
+      }
+      return;
+    }
+    if ((ev.key === '[' || ev.key === ']') && selected.size) {
+      ev.preventDefault();
+      const f = frame();
+      const c = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
+      if (f.kind === 'ends') Object.assign(c, E.center(f.el));
+      const delta = (ev.key === ']' ? 1 : -1) * (Math.PI / 12);
+      commit();
+      update(scene.elements.map((e) => (selected.has(e.id) && !E.isBoundText(e) ? E.rotateElement(e, c, delta) : e)));
+      changed();
+      return;
+    }
+    if (ev.altKey && ev.key.startsWith('Arrow') && primary().length === 1) {
+      ev.preventDefault();
+      const e = primary()[0];
+      const d = ev.shiftKey ? 1 : 10;
+      const dw = ev.key === 'ArrowRight' ? d : ev.key === 'ArrowLeft' ? -d : 0;
+      const dh = ev.key === 'ArrowDown' ? d : ev.key === 'ArrowUp' ? -d : 0;
+      commit();
+      update(scene.elements.map((x) => (x.id === e.id ? E.growElement(x, dw, dh) : x)));
+      changed();
+      return;
+    }
     if (ev.key === 'Enter' && primary().length === 1) {
       const s = primary()[0];
       if (s.type === 'text') { ev.preventDefault(); commit(); editText(s.id); return; }

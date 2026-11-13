@@ -446,3 +446,33 @@ test('dibujos: se guardan cifrados, se actualizan y si cambian en dos sitios se 
   // Sin cambios de otros: sin copia.
   assert.deepEqual(await otro.saveFile(id, enc('v4')), {});
 });
+
+test('dibujos: los cambios de dos dispositivos en elementos distintos se juntan', async () => {
+  const { mergeScenes, parseScene, serializeScene, emptyScene } = await import('../public/js/sketch-escena.js');
+  const enc = (scene) => new TextEncoder().encode(serializeScene(scene));
+  const dec = (b) => parseScene(new TextDecoder().decode(b));
+  const merge = (b, m, t) => {
+    const r = mergeScenes(dec(b), dec(m), dec(t));
+    return { bytes: enc(r.scene), conflict: r.conflict };
+  };
+  const box = (id, x) => ({ id, type: 'rectangle', x, y: 0, w: 10, h: 10, seed: 1 });
+  const base = { ...emptyScene(), elements: [box('a', 0), box('b', 20)] };
+  const { id } = await vault.addFile('Dibujos', 'juntar.sketch', enc(base));
+  const otro = new Vault(newRepo(), vault.dek);
+  await otro.loadIndex();
+  await otro.readFile(id);
+  await vault.saveFile(id, enc({ ...base, elements: [box('a', 100), box('b', 20)] }), { merge });
+  const res = await otro.saveFile(id, enc({ ...base, elements: [box('a', 0), box('b', 20), box('c', 40)] }), { merge });
+  assert.equal(res.conflict, undefined, 'sin copia');
+  assert.ok(res.merged);
+  const check = new Vault(newRepo(), vault.dek);
+  await check.loadIndex();
+  const got = dec(await check.readFile(id));
+  assert.deepEqual(got.elements.map((e) => [e.id, e.x]), [['a', 100], ['b', 20], ['c', 40]]);
+  // Mismo elemento cambiado en los dos: se juntan y además se guarda la otra versión aparte.
+  await check.saveFile(id, enc({ ...got, elements: [box('a', 1), box('b', 20), box('c', 40)] }), { merge });
+  const res2 = await otro.saveFile(id, enc({ ...got, elements: [box('a', 2), box('b', 20), box('c', 40)] }), { merge });
+  assert.ok(res2.conflict);
+  assert.equal(dec(res2.merged).elements[0].x, 2);
+  for (const [p, c] of fake.files()) assert.ok(!c.includes('juntar') && !c.includes('rectangle'), p);
+});
