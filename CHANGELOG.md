@@ -6,6 +6,8 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- Caché local cifrada (IndexedDB) de las notas y adjuntos de la versión online: solo se descargan los que han cambiado. Con 1.000 notas, entrar tarda menos de medio segundo y la búsqueda está lista en menos de 1 s; en un dispositivo nuevo, la primera vez se descargan todas en segundo plano (10 a la vez) mientras ya puedes trabajar. «Cerrar sesión» y «Olvidar este dispositivo» la borran.
+- La búsqueda dice cuántas notas encajan aunque solo muestre las 200 primeras, y cuántas lleva descifradas mientras prepara el índice.
 - Copias de seguridad: «Copia de seguridad cifrada» descarga un fichero `.snowlog` con todas las notas y adjuntos cifrados, que se abre con la frase de paso o con el código de recuperación, sin GitHub. «Abrir copia de seguridad…» la importa en una carpeta aparte o la descarga como .zip sin cifrar; también funciona en la versión portátil, sin red. En local, la copia es el .zip de siempre.
 - Recordatorio cuando pasan 7 días sin copia (`backupReminderDays` en la configuración), con «Hacer copia ahora» o «Mañana».
 - Al bloquear también se vacían los avisos de la pantalla.
@@ -44,6 +46,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - «Cargar ejemplos»: un proyecto de ejemplo (Web de recetas) con 4 historias, tablero, reunión, píldora y notas diarias enlazadas, para ver cómo organizarse.
 
 ### Cambiado
+- Guardados agrupados: en online se guarda tras 4 s sin escribir (antes 2,5 s) y como mucho cada 30 s escribiendo sin parar, así hay menos commits y no se pierde nada; al cambiar de pestaña o de app se guarda enseguida. En local, 1 s.
 - Snowlog se publica en `https://snowlog.bendi.dev`; el Worker solo acepta ese origen.
 - En las tareas hechas solo se tacha el texto, no la casilla ni el espacio.
 - El esquema y el contador de palabras ignoran el frontmatter.

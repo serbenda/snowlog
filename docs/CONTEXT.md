@@ -59,7 +59,11 @@ aunque se robe no puede modificar el código de la web.
 
 - Sin framework ni build: módulos ES servidos tal cual. Menos superficie de ataque.
 - Markdown propio en `markdown.js` en lugar de una librería: escapa todo antes de dar formato.
-- Un commit por guardado (con retardo de 2,5 s), con un reintento si otro dispositivo escribió antes.
+- Un commit por guardado (4 s sin escribir o 30 s como mucho), con un reintento si otro dispositivo escribió antes.
+- Caché cifrada (`cache.js`, IndexedDB `snowlog-cache`): guarda el texto cifrado de `n/` y `a/` tal cual está en
+  el repo, con la versión del índice (`updated`). Si coincide, no se descarga; si no descifra (dañada o
+  manipulada), se vuelve a pedir. Medido con 1.000 notas: entrar 0,3 s; índice listo 0,6 s con caché y 3,8 s sin
+  ella contra un GitHub simulado sin latencia (con GitHub real, unos 15 s en segundo plano la primera vez).
 - Copias (`backup.js`): `.snowlog` = JSON con `vault.json` (claves envueltas) y un .zip cifrado con la DEK
   (AAD `snowlog-backup`). Se abre con `unlockWithAny` (frase o código). El navegador no deja guardar ficheros
   solo, así que «periódica» es un recordatorio: en `localStorage` solo se guarda la fecha de la última copia.
@@ -102,7 +106,7 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
 [DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). **Fase 1** hecha (enlaces al renombrar, editor, búsqueda, etiquetas, adjuntos y conflictos). En curso: **Fase 2**
-(hecho: historial, cambiar la frase de paso y copias de seguridad).
+(hecho: historial, cambiar la frase de paso, copias de seguridad y rendimiento).
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

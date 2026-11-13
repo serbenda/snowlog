@@ -13,6 +13,7 @@ import { rewriteLinks, linkChanges } from './links.js';
 import * as Ed from './editor.js';
 import { searchNotes, tagCounts } from './search.js';
 import { makeBackup, openBackup, parseBackup } from './backup.js';
+import { openCache } from './cache.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
 import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
@@ -194,6 +195,9 @@ function showLogin(message) {
 
 // ---------------------------------------------------------------------------
 // Modo local: carpeta del ordenador o almacenamiento del navegador (sin red)
+// Caché cifrada de las notas del repo configurado (solo texto cifrado, como en GitHub).
+const noteCache = () => openCache(`${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}`);
+
 const IDB_NAME = 'snowlog';
 function idb(mode, fn) {
   return new Promise((resolve, reject) => {
@@ -509,6 +513,7 @@ function showCreate() {
       p1.value = '';
       p2.value = '';
       S.vault = vault;
+      vault.store = noteCache();
       S.dek = vault.dek;
       S.vaultFile = vaultFile;
       Auth.cacheVault(vaultFile);
@@ -598,7 +603,7 @@ async function afterUnlock(fresh) {
     Auth.cacheVault(S.vaultFile);
   }
   await Auth.saveCred(S.dek, S.cred);
-  S.vault = new Vault(S.repo, S.dek);
+  S.vault = new Vault(S.repo, S.dek, { store: noteCache() });
   await S.vault.loadIndex();
   enterApp();
 }
@@ -623,7 +628,7 @@ function showRecover(vaultFile, fresh) {
         if (!S.cred) throw new Error('session_expired');
         S.repo = makeRepo();
       }
-      S.vault = new Vault(S.repo, dek);
+      S.vault = new Vault(S.repo, dek, { store: noteCache() });
       await S.vault.writeVaultFile(updated);
       S.vaultFile = updated;
       Auth.cacheVault(updated);
@@ -649,6 +654,7 @@ async function forgetAndLogin() {
   const ok = await confirmModal('¿Olvidar este dispositivo?', 'Se borran la sesión y la copia cifrada local. Tus notas en GitHub no se tocan.', 'Olvidar');
   if (!ok) return;
   Auth.forgetDevice();
+  noteCache().clear();
   wipe();
   showLogin();
 }
@@ -713,6 +719,7 @@ async function logout() {
   if (!ok) return;
   await saveNow();
   Auth.forgetDevice();
+  await noteCache().clear();
   wipe();
   showLogin('Sesión cerrada.');
 }
@@ -766,13 +773,16 @@ function ensureIndex() {
     S.indexReady = (async () => {
       const ids = vault.notes().map((n) => n.id);
       let i = 0;
+      S.indexProgress = { done: 0, total: ids.length };
       const worker = async () => {
         while (i < ids.length && S.vault === vault) {
           const id = ids[i++];
           await vault.read(id);
+          S.indexProgress.done += 1;
         }
       };
-      await Promise.all(Array.from({ length: 6 }, worker));
+      // Lo que ya está en la caché local sale al momento; el resto se pide a GitHub, 10 a la vez.
+      await Promise.all(Array.from({ length: 10 }, worker));
       if (S.vault === vault) syncIndex();
     })();
     S.indexReady.catch(() => { S.indexReady = null; });
@@ -1564,11 +1574,15 @@ function scheduleSave() {
   S.dirty = true;
   setStatus('pending');
   clearTimeout(S.saveTimer);
-  S.saveTimer = setTimeout(saveNow, CONFIG.saveDelayMs);
+  const now = Date.now();
+  if (!S.dirtySince) S.dirtySince = now;
+  const idle = S.local ? CONFIG.localSaveDelayMs : CONFIG.saveDelayMs;
+  S.saveTimer = setTimeout(saveNow, Math.max(0, Math.min(idle, S.dirtySince + CONFIG.saveMaxWaitMs - now)));
 }
 
 function saveNow() {
   clearTimeout(S.saveTimer);
+  S.dirtySince = 0;
   if (!S.dirty || !S.current || !S.vault) return S.saving;
   const id = S.current;
   const text = $('editor').value;
@@ -2283,7 +2297,10 @@ async function runSearch() {
     return;
   }
   info.hidden = true;
-  if (!S.indexReady || S.notesIdx.size < S.vault.notes().length) box.replaceChildren(h('p', { class: 'search-empty' }, 'Descifrando notas…'));
+  if (!S.indexReady || S.notesIdx.size < S.vault.notes().length) {
+    const p = S.indexProgress;
+    box.replaceChildren(h('p', { class: 'search-empty' }, p && p.total ? `Descifrando notas (${p.done} de ${p.total})…` : 'Descifrando notas…'));
+  }
   await saveNow();
   await ensureIndex();
   if (seq !== searchSeq || !S.vault) return;
@@ -2293,7 +2310,7 @@ async function runSearch() {
   const ms = Math.round(performance.now() - t0);
   const total = results.reduce((a, r) => a + r.count, 0);
   const head = h('p', { class: 'search-count' }, results.length
-    ? `${results.length} nota${results.length === 1 ? '' : 's'}${total ? ` · ${total} coincidencia${total === 1 ? '' : 's'}` : ''} · ${ms} ms`
+    ? `${results.total} nota${results.total === 1 ? '' : 's'}${results.total > results.length ? ` (se muestran ${results.length})` : ''}${total ? ` · ${total} coincidencia${total === 1 ? '' : 's'}` : ''} · ${ms} ms`
     : 'Sin resultados');
   box.replaceChildren(head, ...results.map((r) => h('div', { class: 'search-result', role: 'listitem' },
     h('button', { class: 'search-note', type: 'button', title: r.note.path, onclick: () => openResult(r.note.id) },
@@ -2530,6 +2547,8 @@ function setupUi() {
     else if (k === 'd') { ev.preventDefault(); openDaily(); }
   });
 
+  // Al cambiar de pestaña o de app (móvil) se guarda enseguida.
+  document.addEventListener('visibilitychange', () => { if (document.hidden && S.dirty) saveNow(); });
   addEventListener('beforeunload', (ev) => {
     if (S.dirty) {
       saveNow();

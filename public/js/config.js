@@ -31,7 +31,11 @@ export const CONFIG = {
   kdfIterations: 600000,
 
   // Espera tras dejar de escribir antes de guardar (ms).
-  saveDelayMs: 2500,
+  // Guardado: tras saveDelayMs sin escribir, y como mucho cada saveMaxWaitMs escribiendo sin parar.
+  // En online cada guardado es un commit; en local, una escritura en disco (localSaveDelayMs).
+  saveDelayMs: 4000,
+  saveMaxWaitMs: 30000,
+  localSaveDelayMs: 1000,
   // Días sin copia de seguridad antes de recordarla (0 = nunca).
   backupReminderDays: 7,
 };

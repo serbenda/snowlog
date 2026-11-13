@@ -23,6 +23,9 @@ test('analiza términos, frases, exclusiones, etiquetas y rutas', () => {
 test('busca sin acentos ni mayúsculas y da el contexto', () => {
   const r = searchNotes(notes, 'diseno');
   assert.deepEqual(r.map((x) => x.note.id).sort(), ['a', 'b']);
+  const one = searchNotes(notes, 'diseno', { limit: 1 });
+  assert.equal(one.length, 1);
+  assert.equal(one.total, 2);
   const b = r.find((x) => x.note.id === 'b');
   const m = b.matches[0];
   assert.equal(m.line, 0);

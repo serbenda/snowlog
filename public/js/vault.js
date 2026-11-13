@@ -80,9 +80,11 @@ export function validName(path) {
 }
 
 export class Vault {
-  constructor(repo, dek) {
+  // store: caché opcional de ficheros cifrados (cache.js) para no volver a bajar lo que no cambió.
+  constructor(repo, dek, { store = null } = {}) {
     this.repo = repo;
     this.dek = dek;
+    this.store = store;
     this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
     this.fileCache = new Map();
@@ -126,6 +128,34 @@ export class Vault {
     if (!this.index.files) this.index.files = {};
   }
 
+  // Guarda en la caché local los ficheros cifrados recién subidos (o los quita si se borraron).
+  async cacheChanges(changes) {
+    if (!this.store) return;
+    for (const c of changes) {
+      const m = c.path.match(/^[na]\/([^/]+)\.enc$/);
+      if (!m) continue;
+      if (c.delete) await this.store.delete(c.path);
+      else await this.store.put(c.path, { v: this.versionOf(m[1]), content: c.content });
+    }
+  }
+
+  // Versión de un fichero según el índice: si coincide con la de la caché, la caché vale.
+  versionOf(id) {
+    return this.index.notes[id]?.updated || this.index.files?.[id]?.created || null;
+  }
+
+  // Lee un fichero cifrado: de la caché si está al día, si no del repo (y lo guarda en la caché).
+  async readEncrypted(path, id) {
+    const v = this.versionOf(id);
+    if (this.store && v) {
+      const hit = await this.store.get(path);
+      if (hit && hit.v === v && typeof hit.content === 'string') return { content: hit.content, cached: true };
+    }
+    const content = await this.repo.readText(path);
+    if (content != null && this.store && v) await this.store.put(path, { v, content });
+    return { content, cached: false };
+  }
+
   async indexChange() {
     return { path: INDEX_FILE, content: await C.encryptText(this.dek, JSON.stringify(this.index), 'index') };
   }
@@ -139,6 +169,7 @@ export class Vault {
         const fileChanges = await files();
         const result = mutate(this.index);
         await this.repo.commit([...fileChanges, await this.indexChange()], message);
+        await this.cacheChanges(fileChanges);
         return result;
       } catch (e) {
         this.index = snapshot;
@@ -192,8 +223,17 @@ export class Vault {
 
   async read(id) {
     if (this.cache.has(id)) return this.cache.get(id);
-    const text = await this.repo.readText(notePath(id));
-    const plain = text ? await C.decryptText(this.dek, text, id) : '';
+    let { content, cached } = await this.readEncrypted(notePath(id), id);
+    let plain;
+    try {
+      plain = content ? await C.decryptText(this.dek, content, id) : '';
+    } catch (e) {
+      // Una copia local dañada o manipulada no se descifra: se vuelve a pedir al repo.
+      if (!cached) throw e;
+      content = await this.repo.readText(notePath(id));
+      plain = content ? await C.decryptText(this.dek, content, id) : '';
+      if (content != null) await this.store.put(notePath(id), { v: this.versionOf(id), content });
+    }
     this.remember(id, plain);
     return plain;
   }
@@ -433,7 +473,7 @@ export class Vault {
 
   async readFile(id) {
     if (this.fileCache.has(id)) return this.fileCache.get(id);
-    const b64 = await this.repo.readText(filePath(id));
+    const { content: b64 } = await this.readEncrypted(filePath(id), id);
     if (b64 == null) throw new Error('missing');
     const bytes = await C.decryptBytes(this.dek, C.fromB64(b64.trim()), id);
     this.fileCache.set(id, bytes);

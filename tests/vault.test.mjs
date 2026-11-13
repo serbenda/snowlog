@@ -232,3 +232,51 @@ test('historial: lista las versiones de una nota, las descifra y permite restaur
   assert.equal(await fresh.read(id), 'v1');
   assert.equal((await fresh.history(id)).length, 4, 'restaurar no borra el historial');
 });
+
+test('caché local cifrada: no vuelve a bajar lo que no ha cambiado y sigue al día', async () => {
+  const { memoryCache } = await import('../public/js/cache.js');
+  const store = memoryCache();
+  const a = await vault.createNote('Cache/A', 'a1');
+  const b = await vault.createNote('Cache/B', 'b1');
+  let gets = 0;
+  const counting = async (url, opts) => {
+    if ((opts?.method || 'GET') === 'GET' && url.includes('/contents/n/')) gets += 1;
+    return fake.fetch(url, opts);
+  };
+  globalThis.fetch = counting;
+  try {
+    const first = new Vault(newRepo(), vault.dek, { store });
+    await first.loadIndex();
+    await first.read(a);
+    await first.read(b);
+    assert.equal(gets, 2);
+    for (const [, v] of store.map) assert.ok(!v.content.includes('a1') && !v.content.includes('b1'), 'la caché va cifrada');
+    gets = 0;
+    const second = new Vault(newRepo(), vault.dek, { store });
+    await second.loadIndex();
+    assert.equal(await second.read(a), 'a1');
+    assert.equal(await second.read(b), 'b1');
+    assert.equal(gets, 0, 'todo sale de la caché');
+    await vault.saveNote(a, 'a2'); // cambia en otro dispositivo
+    const third = new Vault(newRepo(), vault.dek, { store });
+    await third.loadIndex();
+    gets = 0;
+    assert.equal(await third.read(a), 'a2');
+    assert.equal(await third.read(b), 'b1');
+    assert.equal(gets, 1, 'solo baja la que cambió');
+    await third.saveNote(b, 'b2'); // lo guardado aquí entra en la caché
+    const fourth = new Vault(newRepo(), vault.dek, { store });
+    await fourth.loadIndex();
+    gets = 0;
+    assert.equal(await fourth.read(b), 'b2');
+    assert.equal(gets, 0);
+    // Una entrada manipulada no se descifra y se vuelve a pedir al repo.
+    const key = [...store.map.keys()].find((k) => k.includes(a));
+    store.map.set(key, { ...store.map.get(key), content: store.map.get(key).content.slice(0, -6) + 'AAAAA=' });
+    const fifth = new Vault(newRepo(), vault.dek, { store });
+    await fifth.loadIndex();
+    assert.equal(await fifth.read(a), 'a2');
+  } finally {
+    globalThis.fetch = fake.fetch;
+  }
+});

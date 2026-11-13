@@ -66,7 +66,8 @@ function snippet(line, ranges, width = 140) {
   return { text, marks };
 }
 
-// Devuelve [{ note, score, matches: [{ line, text, marks }], count }] ordenado por relevancia.
+// Devuelve [{ note, score, matches: [{ line, text, marks }], count }] ordenado por relevancia,
+// con `total` = número de notas que encajan.
 export function searchNotes(notes, input, { limit = 200, perNote = 3 } = {}) {
   const q = typeof input === 'string' ? parseSearch(input) : input;
   if (isEmptySearch(q)) return [];
@@ -107,7 +108,9 @@ export function searchNotes(notes, input, { limit = 200, perNote = 3 } = {}) {
     results.push({ note, score, matches, count });
   }
   results.sort((a, b) => b.score - a.score || (b.note.mtime || '').localeCompare(a.note.mtime || ''));
-  return results.slice(0, limit);
+  const out = results.slice(0, limit);
+  out.total = results.length; // notas que encajan, aunque solo se devuelvan `limit`
+  return out;
 }
 
 // Etiquetas con el número de notas que las usan, de más a menos usadas.
