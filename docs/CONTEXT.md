@@ -123,10 +123,12 @@ dependen de alguien más:
   [SEGURIDAD.md](SEGURIDAD.md)).
 - Probar la versión portátil en Firefox y Safari reales (está probada en Chrome simulando esos navegadores).
 
-Ideas para después: PKCE en el login, firmar el índice para detectar que alguien
-reponga versiones antiguas, y un CLI para que scripts externos escriban notas cifradas.
+Ideas para después: PKCE en el login y firmar el índice para detectar que alguien
+reponga versiones antiguas.
 
-Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
+Scripts y agentes externos: servidor MCP en `agent/` (fase 1 hecha: leer, buscar, enlaces, crear, añadir, nota
+diaria), sobre un clon del repo de notas con `GitDirRepo` y `Vault` tal cual. Ver [AGENTES.md](AGENTES.md). Fase 2:
+editar por sección, mover, borrar, tareas, consultas, huérfanas y un CLI.
 
 ## Proyectos relacionados
 
