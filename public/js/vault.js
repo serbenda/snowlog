@@ -56,7 +56,7 @@ export function parentPath(path) {
   return i === -1 ? '' : path.slice(0, i);
 }
 
-function validName(path) {
+export function validName(path) {
   if (!path) throw new Error('empty_name');
   if (path.length > 300) throw new Error('name_too_long');
   if (/[\\:*?"<>|#^[\]]/.test(path)) throw new Error('bad_chars');
