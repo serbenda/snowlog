@@ -6,6 +6,7 @@
 
 - **Fase 1 (núcleo seguro): hecha.** Login, bóveda cifrada, notas y carpetas, interfaz tipo Obsidian.
 - **Fase 1b (lectura): hecha.** Frontmatter como propiedades, tablas, callouts y etiquetas.
+- **Fases 1, 2 y 3 de la hoja de ruta: hechas** (en `development`, PR #4). Ver «Siguiente».
 - **Día a día: hecho** (en `development`). Nota diaria, plantillas, consultas tipo Dataview, tareas que se marcan,
   calendario, enlaces entrantes, panel en columnas, «Configurar mi espacio», importar carpeta y «Cargar ejemplos»
   (proyecto «Web de recetas» con historias que tienen `estado`, `prioridad` y `puntos` en el frontmatter).
@@ -113,7 +114,15 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 ## Siguiente
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
-[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). **Fase 1** hecha (enlaces al renombrar, editor, búsqueda, etiquetas, adjuntos y conflictos). **Fase 2** hecha salvo la revisión de seguridad por una persona externa (la interna está en [SEGURIDAD.md](SEGURIDAD.md)).
+[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). Las tres están hechas en `development`, con dos puntos que
+dependen de alguien más:
+
+- Revisión de seguridad por una persona externa (la interna, con sus hallazgos resueltos, está en
+  [SEGURIDAD.md](SEGURIDAD.md)).
+- Probar la versión portátil en Firefox y Safari reales (está probada en Chrome simulando esos navegadores).
+
+Ideas para después: rotar la DEK (recifrar todo), PKCE en el login, firmar el índice para detectar que alguien
+reponga versiones antiguas, y un CLI para que scripts externos escriban notas cifradas.
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

@@ -1,7 +1,10 @@
 # Hoja de ruta
 
-Snowlog hoy: base sólida (cifrado, versión online y portátil, día a día con nota diaria, panel y consultas).
-Para llegar a un 10/10 faltan tres fases. Los criterios para dar cada punto por terminado están en
+Estado (2026-11-13): las tres fases están hechas en `development`. Quedan pendientes la revisión de seguridad
+por una persona externa y probar la portátil en Firefox y Safari reales.
+
+Punto de partida: base sólida (cifrado, versión online y portátil, día a día con nota diaria, panel y consultas).
+Para llegar a un 10/10 se plantearon tres fases. Los criterios para dar cada punto por terminado están en
 [DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md).
 
 ## Fase 1: Imprescindible (de 6,5 a 8,5)
