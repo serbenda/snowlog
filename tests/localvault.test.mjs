@@ -199,3 +199,17 @@ test('cambios de fuera en otras líneas se juntan con los de aquí', async () =>
   assert.equal(res.merged, 'UNO\ndos\ntres\ncuatro (de OneDrive)');
   assert.equal(root.text('Lista.md'), 'UNO\ndos\ntres\ncuatro (de OneDrive)');
 });
+
+test('dibujos en local: se reescriben y lo cambiado fuera se guarda como copia', async () => {
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  const enc = (s) => new TextEncoder().encode(s);
+  const { id } = await v.addFile('Dibujos', 'esquema.sketch', enc('uno'));
+  await v.saveFile(id, enc('dos'));
+  assert.equal(root.text('Dibujos/esquema.sketch'), 'dos');
+  root.put('Dibujos/esquema.sketch', 'cambiado fuera');
+  const res = await v.saveFile(id, enc('tres'));
+  assert.ok(res.conflict);
+  assert.equal(root.text('Dibujos/esquema.sketch'), 'tres');
+  assert.equal(root.text(res.conflict.path), 'cambiado fuera');
+});

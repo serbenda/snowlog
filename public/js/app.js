@@ -15,6 +15,9 @@ import { searchNotes, tagCounts, fold } from './search.js';
 import { makeBackup, openBackup, parseBackup } from './backup.js';
 import { openCache } from './cache.js';
 import * as K from './kanban.js';
+import { createEditor as createSketch } from './sketch-editor.js';
+import { emptyScene as emptySketch, parseScene as parseSketch, serializeScene as serializeSketch } from './sketch-escena.js';
+import { toSvgElement as sketchSvg } from './sketch-pintar.js';
 import { merge3 } from './merge.js';
 import { openKvDir, browserBackend } from './kvdir.js';
 import { buildGraph, localGraph, initLayout, step as graphStep } from './graph.js';
@@ -53,6 +56,7 @@ const ICONS = {
   history: 'M4 12a8 8 0 1 0 2.3-5.6 M4 4v4h4 M12 8v4l3 2',
   bookmark: 'M7 4h10v16l-5-4-5 4z',
   kanban: 'M4 5h4v14H4z M10 5h4v9h-4z M16 5h4v6h-4z',
+  sketch: 'M3 17c3-4 5-9 8-9s1 9 4 9 4-6 6-8 M15 4l5 5',
   graph: 'M6 7a2 2 0 1 0 0-.1z M18 6a2 2 0 1 0 0-.1z M12 18a2 2 0 1 0 0-.1z M7.5 7.8l3.4 8.6 M16.6 7.4l-3.6 8.9 M8 6.3h8',
   command: 'M4 6l5 6-5 6 M12 18h8',
   settings: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1',
@@ -74,6 +78,8 @@ const TT = globalThis.trustedTypes?.createPolicy('snowlog', {
 const trusted = (s) => (TT ? TT.createHTML(s) : s);
 
 const $ = (id) => document.getElementById(id);
+// Dibujo abierto (si hay uno) y su guardado pendiente.
+const D = { id: null, editor: null, timer: 0, dirty: false, saving: Promise.resolve() };
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -119,6 +125,7 @@ function applySettings() {
 function applyTheme(theme = (() => { try { return localStorage.getItem('snowlog.theme') || 'auto'; } catch { return 'auto'; } })()) {
   if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
   else delete document.documentElement.dataset.theme;
+  if (D.editor) sketchTheme(D.editor.root);
 }
 
 const isMobile = () => matchMedia('(max-width: 760px)').matches;
@@ -145,6 +152,7 @@ function errText(e) {
     offline: 'Sin conexión: esto se podrá hacer cuando vuelva la red. Lo que escribes en las notas sí se guarda.',
     bad_backup: 'Ese fichero no es una copia de seguridad de Snowlog o está dañado.',
     bad_zip: 'El contenido de la copia está dañado.',
+    bad_file: 'Ese fichero no es un dibujo de sketch ni de Excalidraw.',
     zip_compressed: 'Este .zip está comprimido y no se puede leer aquí. Descomprímelo y usa «Importar carpeta».',
     bad_type: 'Solo se pueden adjuntar imágenes (png, jpg, gif, webp, avif, bmp) y PDF.',
     too_big: 'El adjunto es demasiado grande (máximo 20 MB).',
@@ -787,6 +795,11 @@ function wipe() {
   $('title').value = '';
   $('breadcrumb').replaceChildren();
   document.title = 'Snowlog';
+  if (D.editor) D.editor.destroy();
+  Object.assign(D, { id: null, editor: null, dirty: false });
+  clearTimeout(D.timer);
+  $('drawing').replaceChildren();
+  $('drawing').hidden = true;
   $('modal-root').replaceChildren();
   $('menu').hidden = true;
   $('menu').replaceChildren();
@@ -803,6 +816,11 @@ function wipe() {
 async function lock(message = '') {
   if (!S.vault) return;
   if (!message) await saveNow();
+  if (D.editor) {
+    D.editor.destroy();
+    Object.assign(D, { id: null, editor: null, dirty: false });
+    $('drawing').hidden = true;
+  }
   if (S.local) {
     wipe();
     S.local = false;
@@ -931,6 +949,7 @@ function syncIndex() {
 const indexedNotes = () => [...S.notesIdx.values()];
 
 function showEmpty() {
+  closeDrawing();
   S.current = null;
   $('note').hidden = true;
   $('empty').hidden = false;
@@ -992,7 +1011,7 @@ function renderTree() {
     const notes = node.notes.slice().sort((a, b) => collator.compare(baseName(a.path), baseName(b.path)));
     for (const n of notes) {
       if (n.file) {
-        const row = h('div', { class: 'tree-row is-file', role: 'treeitem', tabindex: '0', 'data-file': n.id },
+        const row = h('div', { class: `tree-row is-file${n.id === D.id ? ' active' : ''}`, role: 'treeitem', tabindex: '0', 'data-file': n.id },
           h('span', { class: 'spacer' }), h('span', { class: 'label' }, baseName(n.path).replace(/\.[^.]+$/, '')),
           h('span', { class: 'file-ext' }, extOf(n.path)), moreButton());
         row.style.setProperty('--depth', depth);
@@ -1065,7 +1084,10 @@ function setupTree() {
       return rowMenu(row, r.left, r.bottom);
     }
     if (row.dataset.folder) toggleFolder(row.dataset.folder);
-    else if (row.dataset.file) openAttachment(row.dataset.file);
+    else if (row.dataset.file) {
+      if (isSketch(row.dataset.file)) openDrawing(row.dataset.file);
+      else openAttachment(row.dataset.file);
+    }
     else openNote(row.dataset.note);
   });
   tree.addEventListener('keydown', (ev) => {
@@ -1141,7 +1163,7 @@ function rowMenu(row, x, y) {
   if (row.dataset.file) {
     const id = row.dataset.file;
     openMenu(x, y, [
-      ['read', 'Abrir', () => openAttachment(id)],
+      ['read', 'Abrir', () => (isSketch(id) ? openDrawing(id) : openAttachment(id))],
       ['import', 'Insertar en la nota', () => insertEmbed(S.vault.index.files[id].path)],
       null,
       ['trash', 'Eliminar', () => deleteAttachment(id), 'danger'],
@@ -1461,6 +1483,7 @@ async function deleteFolder(path) {
 async function openNote(id, { focusTitle = false } = {}) {
   if (!S.vault.index.notes[id]) return;
   await saveNow();
+  await closeDrawing();
   closeMobilePanels();
   S.current = id;
   try { localStorage.setItem('snowlog.last', id); } catch { /* sin almacenamiento */ }
@@ -1861,9 +1884,10 @@ function scheduleSave() {
 }
 
 function saveNow() {
+  if (D.dirty) saveDrawing();
   clearTimeout(S.saveTimer);
   S.dirtySince = 0;
-  if (!S.dirty || !S.current || !S.vault) return S.saving;
+  if (!S.dirty || !S.current || !S.vault) return Promise.all([S.saving, D.saving]);
   const id = S.current;
   const text = $('editor').value;
   const vault = S.vault;
@@ -2646,6 +2670,8 @@ function commands() {
     ['graph', 'Vista de grafo', 'Ctrl+G', () => graphView()],
     cur && ['graph-local', 'Grafo de esta nota', '', () => graphView(cur)],
     ['board', 'Nuevo tablero Kanban', '', () => newBoard()],
+    ['drawing', 'Nuevo dibujo', '', () => newDrawing()],
+    cur && ['drawing-in', 'Insertar un dibujo nuevo en la nota', '', () => newDrawing({ insert: true })],
     ['files', 'Ver archivos', '', () => showLeftPane('files')],
     ['tags', 'Ver etiquetas', '', () => showLeftPane('tags')],
     ['bookmarks', 'Ver marcadores', '', () => showLeftPane('bookmarks')],
@@ -3052,6 +3078,130 @@ async function historyModal(id) {
   notice('Versión restaurada. La que había sigue en el historial.');
 }
 
+// --- Dibujos (serbenda/sketch) ---
+// Son adjuntos .sketch (JSON, cifrados en online). Se editan aquí mismo y se ven en las notas con
+// ![[dibujo.sketch]]. El editor viene de sketch y no usa innerHTML.
+const SKETCH_TYPE = 'application/vnd.sketch+json';
+const isSketch = (id) => S.vault?.index.files?.[id]?.type === SKETCH_TYPE;
+
+function sketchTheme(root) {
+  const t = document.documentElement.dataset.theme;
+  const dark = t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches);
+  root.classList.toggle('sk-dark', dark);
+  root.classList.toggle('sk-light', !dark);
+}
+
+function sketchFigure(f, bytes, width) {
+  let scene;
+  try {
+    scene = parseSketch(new TextDecoder().decode(bytes));
+  } catch {
+    return h('span', { class: 'embed embed-missing' }, `«${baseName(f.path)}» no es un dibujo válido`);
+  }
+  const fig = h('button', { class: 'embed-sketch', type: 'button', title: 'Abrir el dibujo', 'aria-label': `Dibujo ${baseName(f.path)}. Pulsa para editarlo.`, onclick: () => openDrawing(f.id) });
+  if (!scene.elements.length) fig.append(h('span', { class: 'embed-sketch-empty' }, `Dibujo vacío: pulsa para dibujar en «${baseName(f.path)}»`));
+  else fig.append(sketchSvg(document, scene, { maxWidth: Number(width) || 720 }));
+  return fig;
+}
+
+async function openDrawing(id) {
+  const f = S.vault?.index.files?.[id];
+  if (!f) return;
+  await saveNow();
+  await closeDrawing();
+  closeMobilePanels();
+  S.current = null;
+  $('empty').hidden = true;
+  $('note').hidden = true;
+  const box = $('drawing');
+  box.hidden = false;
+  expandTo(f.path);
+  D.id = id;
+  renderTree();
+  const parts = f.path.split('/');
+  $('breadcrumb').replaceChildren(...parts.flatMap((p, i) => [i ? h('span', { class: 'crumb-sep' }, '/') : null, h('span', { class: i === parts.length - 1 ? 'crumb-last' : '' }, p)]).filter(Boolean));
+  document.title = `${baseName(f.path)} · Snowlog`;
+  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'Dibujo'));
+  $('backlinks').replaceChildren();
+  $('st-words').textContent = '';
+  $('st-chars').textContent = '';
+  setStatus('loading');
+  let scene = emptySketch();
+  try {
+    scene = parseSketch(new TextDecoder().decode(await S.vault.readFile(id)));
+    setStatus('saved');
+  } catch (e) {
+    setStatus('error');
+    notice(`No se pudo abrir el dibujo: ${errText(e)}`, 'error');
+  }
+  if (D.id !== id) return;
+  D.editor = createSketch(box, { scene, onChange: () => scheduleDrawingSave() });
+  sketchTheme(D.editor.root);
+  D.editor.focus();
+}
+
+function scheduleDrawingSave() {
+  D.dirty = true;
+  setStatus('pending');
+  clearTimeout(D.timer);
+  D.timer = setTimeout(saveDrawing, S.local ? CONFIG.localSaveDelayMs : CONFIG.saveDelayMs);
+}
+
+function saveDrawing() {
+  clearTimeout(D.timer);
+  if (!D.dirty || !D.id || !D.editor || !S.vault) return D.saving;
+  const id = D.id;
+  const vault = S.vault;
+  const bytes = new TextEncoder().encode(serializeSketch(D.editor.getScene()));
+  D.dirty = false;
+  setStatus('saving');
+  D.saving = D.saving
+    .then(() => vault.saveFile(id, bytes))
+    .then((res) => {
+      if (D.id === id && !D.dirty) setStatus('saved');
+      if (res?.conflict) {
+        renderTree();
+        notice(`Este dibujo también se cambió en otro sitio: la otra versión está en «${baseName(res.conflict.path)}».`);
+      }
+    })
+    .catch((e) => {
+      if (D.id === id) {
+        D.dirty = true;
+        setStatus('error');
+      }
+      if (e?.message === 'key_changed') keyChanged();
+      else notice(`No se pudo guardar el dibujo: ${errText(e)}`, 'error');
+    });
+  return D.saving;
+}
+
+async function closeDrawing() {
+  if (!D.editor) return;
+  await saveDrawing();
+  D.editor.destroy();
+  D.editor = null;
+  D.id = null;
+  $('drawing').hidden = true;
+}
+
+async function newDrawing({ insert = false } = {}) {
+  if (!S.vault) return;
+  const into = insert && S.current ? S.current : null;
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const name = `Dibujo ${isoDate(d)} ${p(d.getHours())}${p(d.getMinutes())}.sketch`;
+  try {
+    const { id, path } = await S.vault.addFile(WS.drawingsFolder || '', name, new TextEncoder().encode(serializeSketch(emptySketch())));
+    if (into) {
+      insertEmbed(path);
+      await saveNow();
+    }
+    await openDrawing(id);
+  } catch (e) {
+    notice(`No se pudo crear el dibujo: ${errText(e)}`, 'error');
+  }
+}
+
 // --- Adjuntos (imágenes y PDF) ---
 const fmtSize = (n) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 let blobUrls = [];
@@ -3082,6 +3232,10 @@ async function fillEmbeds(view) {
     try {
       const bytes = await vault.readFile(f.id);
       if (S.vault !== vault || !slot.isConnected) return;
+      if (f.type === SKETCH_TYPE) {
+        slot.replaceWith(sketchFigure(f, bytes, slot.dataset.width));
+        continue;
+      }
       if (f.type === 'application/pdf') {
         slot.replaceWith(h('span', { class: 'embed-file' },
           h('span', { class: 'embed-file-ext' }, 'PDF'),
@@ -3150,7 +3304,14 @@ async function attachFiles(files) {
   for (const file of files) {
     $('st-sync').textContent = S.local ? 'Guardando adjunto…' : 'Cifrando y subiendo adjunto…';
     try {
-      const { path } = await vault.addFile(folder, pastedName(file), new Uint8Array(await file.arrayBuffer()));
+      let name = pastedName(file);
+      let data = new Uint8Array(await file.arrayBuffer());
+      // Un .excalidraw se convierte en dibujo de sketch; un .sketch se comprueba antes de guardarlo.
+      if (/\.(excalidraw|sketch)$/i.test(name)) {
+        data = new TextEncoder().encode(serializeSketch(parseSketch(new TextDecoder().decode(data))));
+        name = name.replace(/\.excalidraw$/i, '.sketch');
+      }
+      const { path } = await vault.addFile(/\.sketch$/i.test(name) ? (WS.drawingsFolder || folder) : folder, name, data);
       if (S.vault !== vault) return;
       expandTo(path);
       insertEmbed(path);
@@ -3307,12 +3468,13 @@ function noteMenu(x, y) {
     items.push(['rename', 'Renombrar', () => renameNotePrompt(id)], ['move', 'Mover a…', () => moveNotePrompt(id)], ['history', 'Historial de versiones…', () => historyModal(id)],
       ['bookmark', isBookmarked(id) ? 'Quitar de marcadores' : 'Añadir a marcadores', () => toggleBookmark(id)]);
   }
-  if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()], ['import', 'Adjuntar imagen o PDF…', () => $('attach-input').click()]);
+  if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()], ['import', 'Adjuntar imagen, PDF o dibujo…', () => $('attach-input').click()], ['sketch', 'Insertar un dibujo nuevo', () => newDrawing({ insert: true })]);
   items.push(
     ['command', 'Paleta de comandos (Ctrl+P)', () => commandPalette()],
     ['filePlus', 'Nueva nota', () => newNote()],
     ['template', 'Nueva nota desde plantilla…', () => newFromTemplate()],
     ['kanban', 'Nuevo tablero Kanban', () => newBoard()],
+    ['sketch', 'Nuevo dibujo', () => newDrawing()],
     ['graph', 'Vista de grafo (Ctrl+G)', () => graphView()],
     null,
     ['today', 'Nota de hoy (Ctrl+D)', () => openDaily()],

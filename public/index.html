@@ -11,6 +11,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/sketch.css">
 <script type="module" src="js/app.js"></script>
 </head>
 <body>
@@ -93,6 +94,7 @@
         </div>
         <article class="reading markdown" id="reading" hidden></article>
       </div>
+      <div class="drawing" id="drawing" hidden></div>
     </div>
 
     <footer class="status-bar" aria-live="polite">
@@ -123,7 +125,7 @@
 <div class="menu" id="menu" role="menu" hidden></div>
 <input type="file" id="import-input" webkitdirectory multiple hidden>
 <input type="file" id="backup-input" accept=".snowlog,.zip,application/json,application/zip" hidden>
-<input type="file" id="attach-input" accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/bmp,application/pdf" multiple hidden>
+<input type="file" id="attach-input" accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/bmp,application/pdf,.sketch,.excalidraw" multiple hidden>
 <div class="hover-preview" id="hover-preview" hidden></div>
 <div class="modal-root" id="modal-root"></div>
 <div class="notices" id="notices" aria-live="polite"></div>

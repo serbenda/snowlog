@@ -426,3 +426,23 @@ test('rotar la clave: todo se recifra, el historial se sigue leyendo y la clave 
   await other.repo.fetchHead();
   assert.equal(await other.readVersion(id, (await other.history(id))[0].ref), 'versión 3');
 });
+
+test('dibujos: se guardan cifrados, se actualizan y si cambian en dos sitios se guarda copia', async () => {
+  const enc = (s) => new TextEncoder().encode(s);
+  const { id, path } = await vault.addFile('Dibujos', 'plano casa.sketch', enc('{"type":"sketch","elements":[]}'));
+  assert.equal(path, 'Dibujos/plano casa.sketch');
+  for (const [p, c] of fake.files()) assert.ok(!p.includes('plano') && !c.includes('plano') && !c.includes('"sketch"'), p);
+  await vault.saveFile(id, enc('v2'));
+  const otro = new Vault(newRepo(), vault.dek);
+  await otro.loadIndex();
+  assert.equal(new TextDecoder().decode(await otro.readFile(id)), 'v2');
+  await vault.saveFile(id, enc('v3 portátil'));
+  const res = await otro.saveFile(id, enc('v3 móvil'));
+  assert.match(res.conflict.path, /^Dibujos\/plano casa \(otro dispositivo .+\)\.sketch$/);
+  const check = new Vault(newRepo(), vault.dek);
+  await check.loadIndex();
+  assert.equal(new TextDecoder().decode(await check.readFile(id)), 'v3 móvil');
+  assert.equal(new TextDecoder().decode(await check.readFile(res.conflict.id)), 'v3 portátil');
+  // Sin cambios de otros: sin copia.
+  assert.deepEqual(await otro.saveFile(id, enc('v4')), {});
+});

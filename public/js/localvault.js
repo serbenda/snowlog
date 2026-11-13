@@ -385,6 +385,33 @@ export class LocalVault {
     return bytes;
   }
 
+  // Guarda una versión nueva de un dibujo. Si el fichero cambió fuera desde que se leyó, lo de fuera
+  // se guarda como copia al lado.
+  async saveFile(id, bytes) {
+    const meta = this.index.files[id];
+    if (!meta) throw new Error('missing');
+    this.checkAttachment(meta.path, bytes);
+    let conflict = null;
+    const before = this.fileCache.get(id);
+    let disk = null;
+    try {
+      const dir = await getDir(this.root, parentPath(meta.path));
+      disk = new Uint8Array(await (await (await dir.getFileHandle(baseName(meta.path))).getFile()).arrayBuffer());
+    } catch { /* borrado fuera: se vuelve a crear */ }
+    const eq = (a, b) => a && b && a.length === b.length && a.every((x, i) => x === b[i]);
+    if (before && disk && !eq(disk, before) && !eq(disk, bytes)) {
+      const name = baseName(meta.path);
+      const ext = extOf(name);
+      const res = await this.addFile(parentPath(meta.path), `${conflictName(name.slice(0, -(ext.length + 1)))}.${ext}`, disk);
+      conflict = res;
+    }
+    await writeFile(this.root, meta.path, bytes);
+    meta.size = bytes.length;
+    meta.updated = iso();
+    this.fileCache.set(id, bytes);
+    return conflict ? { conflict } : {};
+  }
+
   async deleteFile(id) {
     const { path } = this.index.files[id];
     const bytes = await this.readFile(id);

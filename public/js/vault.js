@@ -20,6 +20,7 @@ const filePath = (id) => `a/${id}.enc`;
 export const ATTACHMENT_TYPES = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
   avif: 'image/avif', bmp: 'image/bmp', pdf: 'application/pdf',
+  sketch: 'application/vnd.sketch+json', // dibujos de serbenda/sketch
 };
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const extOf = (name) => (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';
@@ -103,6 +104,8 @@ export class Vault {
     this.base = new Map();
     // Texto de esa misma versión: la base para juntar cambios de dos dispositivos.
     this.baseText = new Map();
+    // Igual para los adjuntos que se pueden editar (dibujos): versión con la que se leyeron aquí.
+    this.fileBase = new Map();
   }
 
   remember(id, text) {
@@ -157,6 +160,9 @@ export class Vault {
     for (const id of [...this.cache.keys()]) {
       if (this.index.notes[id]?.updated !== this.base.get(id)) this.cache.delete(id);
     }
+    for (const id of [...this.fileCache.keys()]) {
+      if (this.fileBase.has(id) && this.versionOf(id) !== this.fileBase.get(id)) this.fileCache.delete(id);
+    }
     if (!this.index.files) this.index.files = {};
   }
 
@@ -173,7 +179,7 @@ export class Vault {
 
   // Versión de un fichero según el índice: si coincide con la de la caché, la caché vale.
   versionOf(id) {
-    return this.index.notes[id]?.updated || this.index.files?.[id]?.created || null;
+    return this.index.notes[id]?.updated || this.index.files?.[id]?.updated || this.index.files?.[id]?.created || null;
   }
 
   // Lee un fichero cifrado: de la caché si está al día, si no del repo (y lo guarda en la caché).
@@ -761,6 +767,7 @@ export class Vault {
       this.addFolderChain(idx, parentPath(path));
     }, async () => [{ path: filePath(id), content }]);
     this.fileCache.set(id, bytes);
+    this.fileBase.set(id, this.versionOf(id));
     return { id, path };
   }
 
@@ -770,7 +777,53 @@ export class Vault {
     if (b64 == null) throw new Error('missing');
     const bytes = await C.decryptBytes(this.dek, C.fromB64(b64.trim()), id);
     this.fileCache.set(id, bytes);
+    this.fileBase.set(id, this.versionOf(id));
     return bytes;
+  }
+
+  // Guarda una versión nueva de un adjunto (un dibujo). Si cambió en otro dispositivo desde que se
+  // leyó aquí, la otra versión se guarda como copia al lado. Devuelve { conflict? }.
+  async saveFile(id, bytes) {
+    const meta = this.index.files?.[id];
+    if (!meta) throw new Error('missing');
+    this.checkAttachment(meta.path, bytes);
+    const mine = { ...meta };
+    let conflict = null;
+    await this.apply('Snowlog: guardar dibujo', (idx) => {
+      const now = new Date().toISOString();
+      if (!idx.files[id]) idx.files[id] = { ...mine };
+      idx.files[id].updated = now;
+      idx.files[id].size = bytes.length;
+      if (conflict) {
+        const name = baseName(idx.files[id].path);
+        const ext = extOf(name);
+        conflict.path = this.freeFilePath(parentPath(idx.files[id].path), `${conflictName(name.slice(0, -(ext.length + 1)))}.${ext}`);
+        idx.files[conflict.id] = { path: conflict.path, type: idx.files[id].type, size: conflict.bytes.length, created: now };
+      }
+    }, async () => {
+      conflict = null;
+      const changes = [{ path: filePath(id), content: C.toB64(await C.encryptBytes(this.dek, bytes, id)) }];
+      const remote = this.index.files?.[id];
+      const base = this.fileBase.get(id);
+      if (remote && base !== undefined && (remote.updated || remote.created) !== base) {
+        const theirs = await this.repo.readText(filePath(id));
+        if (theirs) {
+          const plain = await C.decryptBytes(this.dek, C.fromB64(theirs.trim()), id);
+          const same = plain.length === bytes.length && plain.every((b, i) => b === bytes[i]);
+          if (!same) {
+            conflict = { id: C.randomId(), bytes: plain };
+            changes.push({ path: filePath(conflict.id), content: C.toB64(await C.encryptBytes(this.dek, plain, conflict.id)) });
+          }
+        }
+      }
+      return changes;
+    });
+    this.fileCache.set(id, bytes);
+    this.fileBase.set(id, this.versionOf(id));
+    if (!conflict) return {};
+    this.fileCache.set(conflict.id, conflict.bytes);
+    this.fileBase.set(conflict.id, this.versionOf(conflict.id));
+    return { conflict: { id: conflict.id, path: conflict.path } };
   }
 
   async deleteFile(id) {

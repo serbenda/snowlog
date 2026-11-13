@@ -130,4 +130,9 @@ Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI q
 
 ## Proyectos relacionados
 
-- Pizarra estilo Excalidraw (repo por crear): reutilizará login y cifrado de Snowlog.
+- [sketch](https://github.com/serbenda/sketch): pizarra a mano alzada, web propia sin red. Su motor
+  (`js/{trazo,escena,pintar,editor}.js` y `css/sketch.css`) se copia en `public/js/sketch-*.js` y
+  `public/css/sketch.css` con `node scripts/update-sketch.mjs <ruta-a-sketch>`; no se editan aquí. Los dibujos
+  son adjuntos `.sketch` (JSON) cifrados como cualquier otro; se incrustan con `![[x.sketch]]` como SVG hecho
+  con DOM (sin innerHTML). Si un dibujo cambia en dos dispositivos, no se fusiona: la otra versión se guarda
+  como copia.

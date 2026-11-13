@@ -1,0 +1,256 @@
+/* Copiado de serbenda/sketch (css/sketch.css, commit db44696). No editar aquí. */
+/* Editor de sketch. Todo con el prefijo sk- para poder incrustarlo en otras páginas (Snowlog). */
+.sk-editor {
+  --sk-bg: #ffffff;
+  --sk-ui: #ffffff;
+  --sk-text: #1b1b1f;
+  --sk-muted: #6b6e76;
+  --sk-border: #e3e4e8;
+  --sk-accent: #6965db;
+  --sk-active: rgba(105, 101, 219, 0.14);
+  --sk-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  outline: none;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--sk-text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sk-editor:not(.sk-light) {
+    --sk-ui: #232329;
+    --sk-text: #ececf1;
+    --sk-muted: #a1a1aa;
+    --sk-border: #34343c;
+    --sk-accent: #a8a5ff;
+    --sk-active: rgba(168, 165, 255, 0.18);
+    --sk-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  }
+}
+
+.sk-stage {
+  position: absolute;
+  inset: 0;
+}
+
+/* En tema oscuro el dibujo se ve invertido (sin cambiar sus colores reales ni lo que se exporta). */
+@media (prefers-color-scheme: dark) {
+  .sk-editor:not(.sk-light) .sk-canvas {
+    filter: invert(93%) hue-rotate(180deg);
+  }
+}
+
+.sk-editor.sk-dark .sk-canvas {
+  filter: invert(93%) hue-rotate(180deg);
+}
+
+.sk-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.sk-toolbar,
+.sk-panel,
+.sk-group {
+  position: absolute;
+  background: var(--sk-ui);
+  border: 1px solid var(--sk-border);
+  border-radius: 10px;
+  box-shadow: var(--sk-shadow);
+}
+
+.sk-toolbar {
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  max-width: calc(100% - 20px);
+  overflow-x: auto;
+}
+
+.sk-btn {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--sk-text);
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.sk-btn:hover {
+  background: var(--sk-active);
+}
+
+.sk-btn[aria-pressed="true"] {
+  background: var(--sk-accent);
+  color: #ffffff;
+}
+
+.sk-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sk-panel {
+  top: 64px;
+  left: 10px;
+  width: 210px;
+  max-height: calc(100% - 140px);
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.sk-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sk-muted);
+  margin: 10px 0 5px;
+}
+
+.sk-label:first-child {
+  margin-top: 0;
+}
+
+.sk-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.sk-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--sk-border);
+  cursor: pointer;
+  padding: 0;
+}
+
+.sk-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--sk-accent);
+  outline-offset: 1px;
+}
+
+.sk-none {
+  background: linear-gradient(45deg, transparent 45%, #e03131 45%, #e03131 55%, transparent 55%), #ffffff;
+}
+
+.sk-color {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--sk-border);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sk-seg {
+  display: flex;
+  margin-top: 6px;
+  border: 1px solid var(--sk-border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.sk-segbtn {
+  flex: 1;
+  border: 0;
+  padding: 5px 2px;
+  background: transparent;
+  color: var(--sk-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sk-segbtn + .sk-segbtn {
+  border-left: 1px solid var(--sk-border);
+}
+
+.sk-segbtn[aria-pressed="true"] {
+  background: var(--sk-active);
+  color: var(--sk-accent);
+  font-weight: 600;
+}
+
+.sk-bottom {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.sk-bottom .sk-group {
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  pointer-events: auto;
+}
+
+.sk-zoomlabel {
+  min-width: 58px;
+  border: 0;
+  background: transparent;
+  color: var(--sk-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sk-textbox {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 1px dashed var(--sk-accent);
+  outline: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", "Chalkboard SE", cursive;
+  min-width: 40px;
+}
+
+.sk-readonly .sk-canvas {
+  cursor: grab;
+}
+
+@media (max-width: 640px) {
+  .sk-toolbar {
+    top: auto;
+    bottom: 60px;
+  }
+
+  .sk-panel {
+    top: 10px;
+    width: auto;
+    right: 10px;
+    max-height: 34%;
+  }
+}
