@@ -6,6 +6,9 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- Búsqueda en todas las notas (Ctrl+Mayús+F): sin acentos ni mayúsculas, con el fragmento de cada coincidencia resaltado; admite `"frase"`, `-palabra`, `tag:#etiqueta` y `path:carpeta`. Pulsar un resultado abre la nota con el texto seleccionado.
+- Panel de etiquetas con el número de notas de cada una; pulsar una etiqueta busca sus notas.
+- Panel izquierdo con pestañas: Archivos, Buscar y Etiquetas.
 - Editor: resaltado de Markdown mientras escribes (solo color, sin mover el texto); Intro continúa listas, tareas y citas, y en un elemento vacío sale de la lista; Tab y Mayús+Tab sangran.
 - Editor: al escribir `[[` aparecen sugerencias de notas; si la nota no existe, se puede crear desde ahí.
 - Atajos: Ctrl+B (negrita), Ctrl+I (cursiva), Ctrl+K (enlace) y Ctrl+Intro (marcar o crear tarea), con deshacer normal.

@@ -60,6 +60,9 @@ aunque se robe no puede modificar el código de la web.
 - Editor sin librerías (`editor.js`): el cuadro de texto se queda transparente y un `<pre>` detrás muestra el
   mismo texto coloreado. El resaltado solo cambia colores, nunca tamaños, para que coincidan al píxel. Las
   ediciones van por `execCommand('insertText')` para conservar el deshacer. Al bloquear se vacía el `<pre>`.
+- Búsqueda (`search.js`) sobre el índice en memoria: el texto se pliega (sin acentos ni mayúsculas, misma
+  longitud) una vez por versión de nota; 1.000 notas en pocos milisegundos. Los resultados se pintan como texto,
+  nunca como HTML, y se vacían al bloquear.
 - Renombrar o mover reescribe los `[[enlaces]]` de todas las notas (`links.js`) en un solo commit (`saveMany`).
 
 ## Cómo se organiza el día a día
@@ -81,7 +84,7 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 ## Siguiente
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
-[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1** (hecho: enlaces al renombrar y editor; sigue búsqueda y etiquetas).
+[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1** (hecho: enlaces al renombrar, editor, búsqueda y etiquetas; sigue adjuntos).
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

@@ -31,7 +31,12 @@
   </nav>
 
   <aside class="sidebar sidebar-left" id="left" aria-label="Archivos">
-    <div class="sidebar-header">
+    <div class="left-tabs" role="tablist" aria-label="Panel izquierdo">
+      <button class="icon-btn left-tab" role="tab" data-tab="files" aria-label="Archivos" title="Archivos" aria-selected="true"></button>
+      <button class="icon-btn left-tab" role="tab" data-tab="search" aria-label="Buscar (Ctrl+Mayús+F)" title="Buscar (Ctrl+Mayús+F)" aria-selected="false"></button>
+      <button class="icon-btn left-tab" role="tab" data-tab="tags" aria-label="Etiquetas" title="Etiquetas" aria-selected="false"></button>
+    </div>
+    <div class="sidebar-header" data-pane="files">
       <span class="sidebar-title">Archivos</span>
       <span class="sidebar-actions">
         <button class="icon-btn" data-action="new-note" aria-label="Nueva nota" title="Nueva nota"></button>
@@ -40,7 +45,16 @@
         <button class="icon-btn" data-action="collapse-all" aria-label="Plegar todo" title="Plegar todo"></button>
       </span>
     </div>
-    <div class="tree" id="tree" role="tree" tabindex="-1"></div>
+    <div class="tree" id="tree" role="tree" tabindex="-1" data-pane="files"></div>
+    <div class="left-pane" data-pane="search" hidden>
+      <input class="search-input" id="search-input" type="search" placeholder="Buscar en todas las notas" aria-label="Buscar en todas las notas" autocomplete="off" spellcheck="false">
+      <p class="search-help" id="search-info">Sin acentos ni mayúsculas. También <code>"frase"</code>, <code>-palabra</code>, <code>tag:#etiqueta</code> y <code>path:carpeta</code>.</p>
+      <div class="search-results" id="search-results" role="list"></div>
+    </div>
+    <div class="left-pane" data-pane="tags" hidden>
+      <div class="sidebar-header"><span class="sidebar-title">Etiquetas</span></div>
+      <div class="tag-list" id="tag-list" role="list"></div>
+    </div>
   </aside>
 
   <main class="workspace">

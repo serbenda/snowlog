@@ -45,6 +45,7 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/localvault.js bóveda local: .md en una carpeta (File System Access) o en el navegador (OPFS)
   js/zip.js        exportar .zip sin dependencias
   js/links.js      reescribir [[enlaces]] al renombrar o mover
+  js/search.js     búsqueda de texto completo y recuento de etiquetas
   js/editor.js     ayudas del editor: listas, sangría, atajos, autocompletar [[ y resaltado
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)

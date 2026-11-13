@@ -11,6 +11,7 @@ import { LocalVault } from './localvault.js';
 import { makeZip } from './zip.js';
 import { rewriteLinks, linkChanges } from './links.js';
 import * as Ed from './editor.js';
+import { searchNotes, tagCounts } from './search.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
 import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
@@ -42,6 +43,7 @@ const ICONS = {
   chevronLeft: 'M15 6l-6 6 6 6',
   example: 'M9 4h6l-1 5 4 9a2 2 0 0 1-2 3H8a2 2 0 0 1-2-3l4-9z M8 15h8',
   download: 'M12 4v11 M7 10l5 5 5-5 M5 20h14',
+  tag: 'M4 4h7l9 9-7 7-9-9z M8 8h.01',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
@@ -548,6 +550,9 @@ function wipe() {
   cancelAnimationFrame(hlFrame);
   $('editor-hl').replaceChildren();
   $('editor-mirror').replaceChildren();
+  $('search-input').value = '';
+  $('search-results').replaceChildren();
+  $('tag-list').replaceChildren();
   closeSuggest();
   $('title').value = '';
   $('reading').replaceChildren();
@@ -1795,6 +1800,102 @@ async function importFolder(files) {
 }
 
 // --- Paneles ---
+// --- Panel izquierdo: archivos, búsqueda y etiquetas ---
+let leftTab = 'files';
+function showLeftTab(tab) {
+  leftTab = tab;
+  document.querySelectorAll('.left-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  document.querySelectorAll('#left [data-pane]').forEach((el) => { el.hidden = el.dataset.pane !== tab; });
+  if (tab === 'tags') renderTags();
+  if (tab === 'search') runSearch();
+}
+
+function openSearch(text) {
+  const app = $('app');
+  if (isMobile()) {
+    if (!app.classList.contains('mobile-left')) togglePanel('left');
+  } else if (app.classList.contains('left-closed')) togglePanel('left');
+  if (text != null) $('search-input').value = text;
+  showLeftTab('search');
+  const input = $('search-input');
+  input.focus();
+  input.select();
+}
+
+let searchTimer = null;
+let searchSeq = 0;
+async function runSearch() {
+  const query = $('search-input').value;
+  const seq = ++searchSeq;
+  const box = $('search-results');
+  const info = $('search-info');
+  if (!query.trim()) {
+    box.replaceChildren();
+    info.hidden = false;
+    return;
+  }
+  info.hidden = true;
+  if (!S.indexReady || S.notesIdx.size < S.vault.notes().length) box.replaceChildren(h('p', { class: 'search-empty' }, 'Descifrando notas…'));
+  await saveNow();
+  await ensureIndex();
+  if (seq !== searchSeq || !S.vault) return;
+  syncIndex();
+  const t0 = performance.now();
+  const results = searchNotes(indexedNotes(), query);
+  const ms = Math.round(performance.now() - t0);
+  const total = results.reduce((a, r) => a + r.count, 0);
+  const head = h('p', { class: 'search-count' }, results.length
+    ? `${results.length} nota${results.length === 1 ? '' : 's'}${total ? ` · ${total} coincidencia${total === 1 ? '' : 's'}` : ''} · ${ms} ms`
+    : 'Sin resultados');
+  box.replaceChildren(head, ...results.map((r) => h('div', { class: 'search-result', role: 'listitem' },
+    h('button', { class: 'search-note', type: 'button', title: r.note.path, onclick: () => openResult(r.note.id) },
+      h('span', { class: 'search-name' }, r.note.name),
+      r.note.folder ? h('span', { class: 'search-folder' }, r.note.folder) : null),
+    ...r.matches.map((m) => h('button', { class: 'search-line', type: 'button', onclick: () => openResult(r.note.id, m) }, ...marked(m))),
+  )));
+}
+
+// Texto del fragmento con <mark> en lo encontrado (siempre como texto, nunca HTML).
+function marked(m) {
+  const out = [];
+  let at = 0;
+  for (const [a, b] of m.marks) {
+    if (a < at) continue;
+    if (a > at) out.push(m.text.slice(at, a));
+    out.push(h('mark', {}, m.text.slice(a, b)));
+    at = b;
+  }
+  out.push(m.text.slice(at));
+  return out;
+}
+
+async function openResult(id, match) {
+  closeMobilePanels();
+  if (S.current !== id) await openNote(id);
+  if (!match || S.current !== id) return;
+  if (S.mode === 'read') setMode('edit');
+  const ed = $('editor');
+  ed.focus();
+  ed.setSelectionRange(match.offset, match.offset + match.length);
+  const lineHeight = parseFloat(getComputedStyle(ed).lineHeight) || 26;
+  const c = caretBox(match.offset);
+  $('view').scrollTop = Math.max(0, ed.offsetTop + c.top - lineHeight * 4);
+}
+
+async function renderTags() {
+  const list = $('tag-list');
+  if (!S.vault) return;
+  if (!S.indexReady) list.replaceChildren(h('p', { class: 'search-empty' }, 'Descifrando notas…'));
+  await ensureIndex();
+  if (!S.vault || leftTab !== 'tags') return;
+  syncIndex();
+  const tags = tagCounts(indexedNotes());
+  list.replaceChildren(...(tags.length
+    ? tags.map(({ tag, count }) => h('button', { class: 'tag-row', type: 'button', role: 'listitem', onclick: () => openSearch(`tag:#${tag}`) },
+      h('span', { class: 'tag-name' }, `#${tag}`), h('span', { class: 'tag-count' }, String(count))))
+    : [h('p', { class: 'search-empty' }, 'Todavía no hay etiquetas. Escribe #algo en una nota.')]));
+}
+
 function closeMobilePanels() {
   $('app').classList.remove('mobile-left', 'mobile-right');
   $('backdrop').hidden = true;
@@ -1825,6 +1926,7 @@ function noteMenu(x, y) {
   if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()]);
   items.push(
     ['search', 'Abrir nota (Ctrl+O)', () => quickSwitcher()],
+    ['search', 'Buscar en todas las notas (Ctrl+Mayús+F)', () => openSearch()],
     ['filePlus', 'Nueva nota', () => newNote()],
     ['template', 'Nueva nota desde plantilla…', () => newFromTemplate()],
     null,
@@ -1877,6 +1979,22 @@ function setupUi() {
   if (localStorage.getItem('snowlog.rightClosed')) app.classList.add('right-closed');
   $('backdrop').addEventListener('click', closeMobilePanels);
 
+  const tabIcons = { files: 'files', search: 'search', tags: 'tag' };
+  document.querySelectorAll('.left-tab').forEach((b) => {
+    b.innerHTML = icon(tabIcons[b.dataset.tab]);
+    b.addEventListener('click', () => showLeftTab(b.dataset.tab));
+  });
+  $('search-input').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 150);
+  });
+  $('search-input').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      $('search-results').querySelector('.search-line, .search-note')?.click();
+    }
+  });
+
   const editor = $('editor');
   editor.addEventListener('input', () => {
     scheduleSave();
@@ -1922,6 +2040,7 @@ function setupUi() {
     const mod = ev.ctrlKey || ev.metaKey;
     if (!mod || ev.altKey) return;
     const k = ev.key.toLowerCase();
+    if (k === 'f' && ev.shiftKey) { ev.preventDefault(); openSearch(); return; }
     if (k === 'e') { ev.preventDefault(); ACTIONS['toggle-mode'](); }
     else if (k === 'o' || k === 'p') { ev.preventDefault(); quickSwitcher(); }
     else if (k === 'n') { ev.preventDefault(); newNote(); }

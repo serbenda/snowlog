@@ -35,8 +35,8 @@ La hoja de ruta completa, con el motivo de cada punto, está en [ROADMAP.md](ROA
 - [x] Editor: resaltado de Markdown mientras escribes, Intro continúa listas y tareas, Tab y Mayús+Tab sangran.
 - [x] Editor: `[[` sugiere notas; un enlace a una nota que no existe permite crearla.
 - [x] Editor: Ctrl+B, Ctrl+I, Ctrl+K (enlace) y Ctrl+Intro (marcar tarea).
-- [ ] Búsqueda de texto completo con contexto, en menos de 300 ms con 1.000 notas.
-- [ ] Panel de etiquetas con recuento; pulsar una etiqueta filtra.
+- [x] Búsqueda de texto completo con contexto, en menos de 300 ms con 1.000 notas.
+- [x] Panel de etiquetas con recuento; pulsar una etiqueta filtra.
 - [ ] Imágenes y PDF: pegar o arrastrar, `![[adjunto]]`; cifrados en online, ficheros normales en portátil.
 - [ ] Un cambio hecho en otro dispositivo nunca se pierde: se detecta y se conservan las dos versiones.
 

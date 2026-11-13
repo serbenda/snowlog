@@ -126,6 +126,41 @@ button { cursor: pointer; }
 }
 .sidebar-actions { display: flex; gap: 2px; }
 
+/* ---------- Pestañas del panel izquierdo, búsqueda y etiquetas ---------- */
+.left-tabs { display: flex; gap: 2px; padding: 6px 8px 0; flex: none; }
+.left-tab { color: var(--text-muted); }
+.left-tab[aria-selected="true"] { background: var(--active); color: var(--text-normal); }
+.left-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.search-input {
+  margin: 10px 10px 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-normal);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-help { margin: 4px 14px; font-size: 12px; line-height: 1.5; color: var(--text-faint); }
+.search-help code { white-space: nowrap; font-family: var(--font-mono); font-size: 11px; background: var(--code-bg); padding: 0 3px; border-radius: 3px; }
+.search-results, .tag-list { flex: 1; overflow: auto; padding: 2px 6px 24px; }
+.search-count, .search-empty { margin: 6px 8px; font-size: 12px; color: var(--text-faint); }
+.search-result { margin-bottom: 6px; }
+.search-note, .search-line, .tag-row {
+  display: flex; width: 100%; border: 0; background: none; color: var(--text-normal);
+  text-align: left; border-radius: 5px; padding: 4px 8px; font: inherit; cursor: pointer;
+}
+.search-note { flex-direction: column; gap: 1px; font-size: 14px; font-weight: 600; }
+.search-folder { font-size: 11px; font-weight: 400; color: var(--text-faint); }
+.search-line { display: block; font-size: 13px; color: var(--text-muted); line-height: 1.45; padding-left: 16px; overflow-wrap: anywhere; }
+.search-line mark { background: var(--mark-bg); color: var(--text-normal); border-radius: 2px; padding: 0 1px; }
+.search-note:hover, .search-line:hover, .tag-row:hover { background: var(--hover); }
+.tag-row { justify-content: space-between; align-items: center; font-size: 14px; min-height: 28px; }
+.tag-name { color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-count { font-size: 12px; color: var(--text-faint); background: var(--hover); border-radius: 9px; padding: 0 7px; }
+
 /* ---------- Árbol de archivos ---------- */
 .tree { flex: 1; overflow: auto; padding: 2px 6px 24px; outline: none; }
 .tree.drop-root { background: var(--active); }
