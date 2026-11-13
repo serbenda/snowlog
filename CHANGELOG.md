@@ -6,6 +6,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- Primera entrada en un dispositivo nuevo mucho más rápida: las notas se descargan en bloques de 100 (GraphQL de GitHub) en lugar de una a una. Con 1.000 notas y 150 ms de latencia, el índice completo pasa de 17,5 s a 2,9 s. Si GraphQL no está disponible, se sigue como antes.
 - **Tests en el navegador** (`npm run test:e2e`, y en la CI en cada push y PR): crear bóveda, escribir, bloquear y volver a entrar sin nada en claro en el repo; que el HTML de una nota no se ejecute y la CSP no se queje; ejemplos, búsqueda y renombrar con enlaces; y la versión portátil desde el disco sin ninguna conexión. Usan Chrome directamente por el protocolo de DevTools, sin dependencias.
 - **Pasar notas entre la versión portátil y la online:** «Importar copia (.snowlog o .zip)…» acepta la copia cifrada de la online y el .zip de la portátil (o de «Exportar sin cifrar»). Se puede importar en una carpeta aparte o tal cual, con sus carpetas y adjuntos.
 - Versión portátil en Firefox y Safari (y en cualquier navegador que no deje elegir carpetas): «Guardar dentro del navegador» guarda las notas en IndexedDB (o en localStorage si no hay) y siguen ahí al volver a abrir el fichero.
@@ -68,6 +69,8 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - Los enlaces y etiquetas escritos dentro de `código` ya no cuentan como enlaces ni etiquetas.
 
 ### Corregido
+- El menú ⋯ se abre debajo de su botón sin taparlo (antes, con el menú abierto no se podía volver a pulsar).
+- Tableros en el móvil: una columna por pantalla, con desplazamiento que se ajusta a cada columna.
 - El menú ⋯ ya no se sale de la pantalla (tiene su propio desplazamiento) y se cierra al usar un atajo de teclado.
 - Con muchas notas, el explorador ya no estira la página entera: cada panel tiene su propio desplazamiento.
 - La pantalla de acceso ya no muestra el texto «null» cuando el login con GitHub está activo.

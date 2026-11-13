@@ -338,3 +338,34 @@ test('los ajustes se guardan cifrados en el índice y se ven desde otro disposit
   await other.loadIndex();
   assert.deepEqual(other.getSettings(), { dailyFolder: 'Bitácora secreta', lockAfterMinutes: 5 });
 });
+
+test('prefetch: descarga muchas notas en pocas peticiones y deja la caché lista', async () => {
+  const { memoryCache } = await import('../public/js/cache.js');
+  const items = Array.from({ length: 230 }, (_, i) => ({ path: `Lote grande/N${i}`, text: `texto ${i}` }));
+  const created = await vault.importNotes(items, { batchSize: 300 });
+  const store = memoryCache();
+  const fresh = new Vault(newRepo(), vault.dek, { store });
+  await fresh.loadIndex();
+  let rest = 0;
+  globalThis.fetch = async (url, opts) => {
+    if (url.includes('/contents/n/')) rest += 1;
+    return fake.fetch(url, opts);
+  };
+  try {
+    const before = fake.graphqlCalls();
+    const n = await fresh.prefetch(created.map((c) => c.id));
+    assert.equal(n, 230);
+    assert.equal(fake.graphqlCalls() - before, 3, '230 notas = 3 peticiones');
+    assert.equal(await fresh.read(created[229].id), 'texto 229');
+    assert.equal(rest, 0, 'ya no hace falta pedirlas una a una');
+    assert.equal(await fresh.prefetch(created.map((c) => c.id)), 0, 'lo que ya está no se vuelve a pedir');
+    // Si GraphQL falla, no pasa nada: se leen una a una.
+    const other = new Vault(newRepo(), vault.dek);
+    await other.loadIndex();
+    globalThis.fetch = async (url, opts) => (url.endsWith('/graphql') ? new Response('{}', { status: 502 }) : fake.fetch(url, opts));
+    assert.equal(await other.prefetch([created[0].id]), 0);
+    assert.equal(await other.read(created[0].id), 'texto 0');
+  } finally {
+    globalThis.fetch = fake.fetch;
+  }
+});

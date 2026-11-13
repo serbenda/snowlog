@@ -185,6 +185,10 @@ button { cursor: pointer; }
   border-radius: 10px; padding: 12px; font: inherit; cursor: pointer;
 }
 .kanban-new-lane:hover { background: var(--hover); }
+@media (max-width: 700px) {
+  .kanban { scroll-snap-type: x mandatory; }
+  .kanban-lane { flex-basis: 84vw; scroll-snap-align: start; }
+}
 @media (hover: none) {
   .kanban-card-actions { position: static; display: flex; grid-column: 1 / -1; justify-content: flex-end; box-shadow: none; border: 0; background: none; }
 }

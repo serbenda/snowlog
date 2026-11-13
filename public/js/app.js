@@ -869,6 +869,8 @@ function ensureIndex() {
       const ids = vault.notes().map((n) => n.id);
       let i = 0;
       S.indexProgress = { done: 0, total: ids.length };
+      // Online: lo que falta se pide en bloques de 100 (GraphQL); lo que quede, uno a uno.
+      if (vault.prefetch) await vault.prefetch(ids);
       const worker = async () => {
         while (i < ids.length && S.vault === vault) {
           const id = ids[i++];
@@ -1159,11 +1161,18 @@ function openMenu(x, y, items) {
       onclick: () => { closeMenu(); fn(); },
     }, label);
   }));
+  menu.style.maxHeight = '';
   menu.hidden = false;
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
-  // Debajo de donde se abrió; si no cabe, lo más abajo posible (y con su propio scroll si es muy largo).
-  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+  // Debajo de donde se abrió, sin tapar el botón: si no cabe entero, con su propio scroll.
+  const below = innerHeight - y - 8;
+  if (r.height <= below || below >= 240) {
+    menu.style.top = `${y}px`;
+    menu.style.maxHeight = `${below}px`;
+  } else {
+    menu.style.top = `${Math.max(8, innerHeight - r.height - 8)}px`;
+  }
   menu.querySelector('.menu-item')?.focus();
 }
 function closeMenu() {

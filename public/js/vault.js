@@ -175,6 +175,37 @@ export class Vault {
     return { content, cached: false };
   }
 
+  // Descarga de golpe las notas que no están en memoria ni en la caché local (para el índice completo).
+  // Con GraphQL son 10 peticiones para 1.000 notas en lugar de 1.000. Si falla, no pasa nada:
+  // read() las pedirá una a una.
+  async prefetch(ids) {
+    const want = [];
+    for (const id of ids) {
+      if (this.cache.has(id) || !this.index.notes[id]) continue;
+      const hit = this.store && await this.store.get(notePath(id));
+      if (hit && hit.v === this.versionOf(id)) continue;
+      want.push(id);
+    }
+    if (!want.length || this.offline || !this.repo.readMany) return 0;
+    let texts;
+    try {
+      texts = await this.repo.readMany(want.map(notePath));
+    } catch {
+      return 0;
+    }
+    let n = 0;
+    for (const id of want) {
+      const content = texts.get(notePath(id));
+      if (content == null) continue;
+      try {
+        this.remember(id, await C.decryptText(this.dek, content, id));
+        if (this.store) await this.store.put(notePath(id), { v: this.versionOf(id), content });
+        n += 1;
+      } catch { /* se leerá con read() */ }
+    }
+    return n;
+  }
+
   async indexChange() {
     return { path: INDEX_FILE, content: await C.encryptText(this.dek, JSON.stringify(this.index), 'index') };
   }

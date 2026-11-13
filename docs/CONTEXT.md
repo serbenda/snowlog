@@ -65,8 +65,9 @@ aunque se robe no puede modificar el código de la web.
 - Un commit por guardado (4 s sin escribir o 30 s como mucho), con un reintento si otro dispositivo escribió antes.
 - Caché cifrada (`cache.js`, IndexedDB `snowlog-cache`): guarda el texto cifrado de `n/` y `a/` tal cual está en
   el repo, con la versión del índice (`updated`). Si coincide, no se descarga; si no descifra (dañada o
-  manipulada), se vuelve a pedir. Medido con 1.000 notas: entrar 0,3 s; índice listo 0,6 s con caché y 3,8 s sin
-  ella contra un GitHub simulado sin latencia (con GitHub real, unos 15 s en segundo plano la primera vez).
+  manipulada), se vuelve a pedir. Lo que falta se baja en bloques de 100 con GraphQL (`readMany`/`prefetch`);
+  si GraphQL falla, uno a uno. Medido con 1.000 notas y 150 ms de latencia: entrar 0,3 s; índice completo 2,9 s
+  en un dispositivo nuevo (antes 17,5 s) y 1,2 s con la caché.
 - Sin conexión: `sw.js` guarda solo la web (mismo origen; nunca GitHub ni el login), red primero y caché si
   falla. Las notas salen de la caché cifrada. Si un commit falla por red (`TypeError`), `Vault` pasa a
   `offline` y los guardados y notas nuevas van a `outbox` (cifrada con la DEK en IndexedDB, junto con el índice
