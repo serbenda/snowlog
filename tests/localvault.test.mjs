@@ -113,3 +113,16 @@ test('adjuntos en local: ficheros normales, a la papelera al borrar y dentro del
   await v.deleteFolder('Docs');
   assert.equal(v.findFile('factura.pdf'), null);
 });
+
+test('si el fichero cambió fuera (carpeta sincronizada), se guarda una copia', async () => {
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  const id = v.findByTitle('Inicio').id;
+  await v.read(id);
+  root.put('Inicio.md', 'cambiado en el otro ordenador');
+  const res = await v.saveNote(id, 'cambiado aquí');
+  assert.ok(res.conflict);
+  assert.equal(root.text('Inicio.md'), 'cambiado aquí');
+  assert.equal(root.text(`${res.conflict.path}.md`), 'cambiado en el otro ordenador');
+  assert.deepEqual(await v.saveNote(id, 'sin conflicto'), {});
+});

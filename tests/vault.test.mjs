@@ -169,3 +169,50 @@ test('adjuntos: se cifran, se leen desde otro dispositivo y se mueven con su car
   assert.equal(vault.files().length, 0);
   assert.ok(![...fake.files().keys()].some((p) => p.includes(a.id)));
 });
+
+test('si la misma nota cambia en dos dispositivos, se conservan las dos versiones', async () => {
+  const id = await vault.createNote('Compartida', 'versión inicial');
+  const movil = new Vault(newRepo(), vault.dek);
+  await movil.loadIndex();
+  assert.equal(await movil.read(id), 'versión inicial');
+  // El portátil guarda primero; el móvil, que no lo sabe, guarda después.
+  assert.deepEqual(await vault.saveNote(id, 'desde el portátil'), {});
+  const res = await movil.saveNote(id, 'desde el móvil');
+  assert.ok(res.conflict, 'debe detectar el conflicto');
+  assert.match(res.conflict.path, /^Compartida \(otro dispositivo \d{4}-\d\d-\d\d \d{4}\)$/);
+  const check = new Vault(newRepo(), vault.dek);
+  await check.loadIndex();
+  assert.equal(await check.read(id), 'desde el móvil');
+  assert.equal(await check.read(res.conflict.id), 'desde el portátil');
+  // Ya sincronizados: guardar otra vez no crea más copias.
+  assert.deepEqual(await movil.saveNote(id, 'otra vez'), {});
+  // Y el portátil, al guardar con su versión vieja, también conserva la del móvil.
+  const res2 = await vault.saveNote(id, 'portátil de nuevo');
+  assert.ok(res2.conflict);
+  const check2 = new Vault(newRepo(), vault.dek);
+  await check2.loadIndex();
+  assert.equal(await check2.read(res2.conflict.id), 'otra vez');
+});
+
+test('si otro dispositivo borró la nota, guardarla la recupera', async () => {
+  const id = await vault.createNote('Se borra fuera', 'texto');
+  const otro = new Vault(newRepo(), vault.dek);
+  await otro.loadIndex();
+  await otro.deleteNote(id);
+  await vault.saveNote(id, 'texto que no se pierde');
+  const check = new Vault(newRepo(), vault.dek);
+  await check.loadIndex();
+  assert.equal(check.findByTitle('Se borra fuera').id, id);
+  assert.equal(await check.read(id), 'texto que no se pierde');
+});
+
+test('cambios en notas distintas no se consideran conflicto', async () => {
+  const a = await vault.createNote('Nota A', 'a');
+  const b = await vault.createNote('Nota B', 'b');
+  const otro = new Vault(newRepo(), vault.dek);
+  await otro.loadIndex();
+  await otro.read(b);
+  await vault.saveNote(a, 'a2');
+  assert.deepEqual(await otro.saveNote(b, 'b2'), {});
+  assert.equal(otro.notes().filter((n) => n.path.includes('otro dispositivo')).length, 2, 'solo las copias de la prueba anterior');
+});

@@ -38,7 +38,7 @@ La hoja de ruta completa, con el motivo de cada punto, está en [ROADMAP.md](ROA
 - [x] Búsqueda de texto completo con contexto, en menos de 300 ms con 1.000 notas.
 - [x] Panel de etiquetas con recuento; pulsar una etiqueta filtra.
 - [x] Imágenes y PDF: pegar o arrastrar, `![[adjunto]]`; cifrados en online, ficheros normales en portátil.
-- [ ] Un cambio hecho en otro dispositivo nunca se pierde: se detecta y se conservan las dos versiones.
+- [x] Un cambio hecho en otro dispositivo nunca se pierde: se detecta y se conservan las dos versiones.
 
 ### Fase 2: Confianza
 - [ ] Historial de una nota con vista de cada versión y botón de restaurar.

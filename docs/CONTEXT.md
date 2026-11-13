@@ -56,6 +56,9 @@ aunque se robe no puede modificar el código de la web.
 - Sin framework ni build: módulos ES servidos tal cual. Menos superficie de ataque.
 - Markdown propio en `markdown.js` en lugar de una librería: escapa todo antes de dar formato.
 - Un commit por guardado (con retardo de 2,5 s), con un reintento si otro dispositivo escribió antes.
+- Conflictos: cada nota recuerda la fecha `updated` con la que se leyó (`Vault.base`). Si al guardar el índice
+  trae otra, la versión remota se guarda como copia «(otro dispositivo …)» en el mismo commit; gana la de aquí
+  porque es la que se está viendo. En local se compara el fichero con lo que se leyó.
 - Bloqueo automático a los 10 minutos sin actividad.
 - Editor sin librerías (`editor.js`): el cuadro de texto se queda transparente y un `<pre>` detrás muestra el
   mismo texto coloreado. El resaltado solo cambia colores, nunca tamaños, para que coincidan al píxel. Las
@@ -88,7 +91,7 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 ## Siguiente
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
-[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1** (hecho: enlaces al renombrar, editor, búsqueda, etiquetas y adjuntos; sigue conflictos entre dispositivos).
+[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1** (hecha: enlaces al renombrar, editor, búsqueda, etiquetas, adjuntos y conflictos). Siguiente: **Fase 2**.
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

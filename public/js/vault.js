@@ -49,6 +49,12 @@ const WELCOME = `Tu cuaderno personal, cifrado de extremo a extremo.
 > En el repo solo hay ficheros ilegibles. Sin tu frase de paso, nadie puede leer esto.
 `;
 
+// Nombre de la copia que guarda la versión de otro dispositivo.
+export function conflictName(name, date = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${name} (otro dispositivo ${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}${p(date.getMinutes())})`;
+}
+
 export function normalizePath(path) {
   return path
     .split('/')
@@ -80,6 +86,14 @@ export class Vault {
     this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
     this.fileCache = new Map();
+    // Fecha `updated` de cada nota cuando se leyó o guardó aquí: si al guardar el índice
+    // trae otra, es que la nota cambió en otro dispositivo mientras tanto.
+    this.base = new Map();
+  }
+
+  remember(id, text) {
+    this.cache.set(id, text);
+    this.base.set(id, this.index.notes[id]?.updated);
   }
 
   static async fetchVaultFile(repo) {
@@ -105,6 +119,10 @@ export class Vault {
     const text = await this.repo.readText(INDEX_FILE);
     if (text) this.index = JSON.parse(await C.decryptText(this.dek, text, 'index'));
     if (!this.index.folders) this.index.folders = [];
+    // Lo que otro dispositivo cambió se vuelve a leer del repo (la versión de aquí ya no es la última).
+    for (const id of [...this.cache.keys()]) {
+      if (this.index.notes[id]?.updated !== this.base.get(id)) this.cache.delete(id);
+    }
     if (!this.index.files) this.index.files = {};
   }
 
@@ -176,7 +194,7 @@ export class Vault {
     if (this.cache.has(id)) return this.cache.get(id);
     const text = await this.repo.readText(notePath(id));
     const plain = text ? await C.decryptText(this.dek, text, id) : '';
-    this.cache.set(id, plain);
+    this.remember(id, plain);
     return plain;
   }
 
@@ -194,7 +212,7 @@ export class Vault {
       },
       async () => [{ path: notePath(id), content: await C.encryptText(this.dek, text, id) }],
     );
-    this.cache.set(id, text);
+    this.remember(id, text);
     return id;
   }
 
@@ -235,7 +253,7 @@ export class Vault {
           content: await C.encryptText(this.dek, n.text, n.id),
         }))),
       );
-      for (const n of batch) this.cache.set(n.id, n.text);
+      for (const n of batch) this.remember(n.id, n.text);
       if (onProgress) onProgress(Math.min(i + batchSize, planned.length), planned.length);
     }
     return planned.map(({ id, path }) => ({ id, path }));
@@ -252,18 +270,58 @@ export class Vault {
       },
       async () => Promise.all(items.map(async ({ id, text }) => ({ path: notePath(id), content: await C.encryptText(this.dek, text, id) }))),
     );
-    for (const { id, text } of items) this.cache.set(id, text);
+    for (const { id, text } of items) this.remember(id, text);
   }
 
+  // Guarda la nota. Si otro dispositivo la cambió desde que se leyó aquí, no se pierde nada:
+  // esta versión queda en la nota y la otra se guarda como copia al lado.
+  // Devuelve { conflict: { id, path } } cuando ha hecho falta la copia.
   async saveNote(id, text) {
+    const mine = { ...this.index.notes[id] };
+    let conflict = null;
     await this.apply(
       'Snowlog: guardar nota',
       (idx) => {
-        if (idx.notes[id]) idx.notes[id].updated = new Date().toISOString();
+        const now = new Date().toISOString();
+        if (!idx.notes[id]) {
+          // La borraron en otro dispositivo: se recupera con esta versión.
+          idx.notes[id] = { ...mine, path: this.freePathIn(idx, parentPath(mine.path), baseName(mine.path)) };
+          this.addFolderChain(idx, parentPath(idx.notes[id].path));
+        }
+        idx.notes[id].updated = now;
+        if (conflict) {
+          conflict.path = this.freePathIn(idx, parentPath(idx.notes[id].path), conflictName(baseName(idx.notes[id].path)));
+          idx.notes[conflict.id] = { path: conflict.path, created: now, updated: now };
+        }
       },
-      async () => [{ path: notePath(id), content: await C.encryptText(this.dek, text, id) }],
+      async () => {
+        conflict = null;
+        const changes = [{ path: notePath(id), content: await C.encryptText(this.dek, text, id) }];
+        const remote = this.index.notes[id];
+        if (remote && this.base.has(id) && remote.updated !== this.base.get(id)) {
+          const theirs = await this.repo.readText(notePath(id));
+          const plain = theirs ? await C.decryptText(this.dek, theirs, id) : '';
+          if (plain !== text) {
+            conflict = { id: C.randomId(), text: plain };
+            changes.push({ path: notePath(conflict.id), content: await C.encryptText(this.dek, plain, conflict.id) });
+          }
+        }
+        return changes;
+      },
     );
-    this.cache.set(id, text);
+    this.remember(id, text);
+    if (!conflict) return {};
+    this.remember(conflict.id, conflict.text);
+    return { conflict: { id: conflict.id, path: conflict.path } };
+  }
+
+  // Como freePath, pero sobre un índice concreto (el recargado dentro de apply).
+  freePathIn(idx, folder, name) {
+    const taken = new Set(Object.values(idx.notes).map((n) => n.path.toLowerCase()));
+    for (let n = 0; ; n += 1) {
+      const p = normalizePath(`${folder}/${name}${n ? ` ${n}` : ''}`);
+      if (!taken.has(p.toLowerCase())) return p;
+    }
   }
 
   async renameNote(id, newPath) {

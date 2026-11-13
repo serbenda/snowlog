@@ -6,7 +6,7 @@
 // Tiene la misma interfaz que Vault (vault.js), así que la app no distingue una de otra.
 
 import { randomId } from './crypto.js';
-import { Vault, normalizePath, parentPath, baseName, validName, isAttachmentName, extOf, ATTACHMENT_TYPES } from './vault.js';
+import { Vault, normalizePath, parentPath, baseName, validName, isAttachmentName, extOf, ATTACHMENT_TYPES, conflictName } from './vault.js';
 
 const HIDDEN = /^\./; // .obsidian, .git, .trash… no se tocan
 const TRASH = '.trash';
@@ -144,10 +144,24 @@ export class LocalVault {
     return id;
   }
 
+  // Si la carpeta se sincroniza (OneDrive, Dropbox…) y el fichero cambió fuera desde que se
+  // leyó aquí, esa otra versión se guarda como copia al lado antes de escribir esta.
   async saveNote(id, text) {
+    let conflict = null;
+    const before = this.cache.get(id);
+    let disk = null;
+    try {
+      disk = await readFile(this.root, this.file(id));
+    } catch { /* borrado fuera: se vuelve a crear */ }
+    if (before != null && disk != null && disk !== before && disk !== text) {
+      const note = this.index.notes[id];
+      const path = this.freePath(parentPath(note.path), conflictName(baseName(note.path)));
+      conflict = { id: await this.createNote(path, disk), path };
+    }
     await writeFile(this.root, this.file(id), text);
     this.index.notes[id].updated = iso();
     this.cache.set(id, text);
+    return conflict ? { conflict } : {};
   }
 
   async saveMany(items) {

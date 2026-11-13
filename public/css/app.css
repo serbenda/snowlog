@@ -683,3 +683,4 @@ button { cursor: pointer; }
 /* Selector de plantilla */
 .switcher .pick-title { margin: 0; padding: 14px 16px; font-size: 15px; border-bottom: 1px solid var(--border); }
 .reading.cs-dashboard > .properties { display: none; }
+.notice .link-btn { display: inline; padding: 0; font-size: inherit; text-align: left; text-decoration: underline; }

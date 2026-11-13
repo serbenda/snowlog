@@ -1423,6 +1423,18 @@ function jumpTo(head, index) {
   $('view').scrollTop = ed.offsetTop + head.line * lineHeight - 40;
 }
 
+// La nota cambió también en otro sitio: se guardó esta versión y la otra quedó en una copia.
+function reportConflict(conflict) {
+  if (S.vault?.index.notes[conflict.id]) expandTo(conflict.path);
+  renderTree();
+  const n = h('div', { class: 'notice' },
+    'Esta nota también se cambió en otro dispositivo. Se ha guardado tu versión y la otra está en ',
+    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); openNote(conflict.id); } }, `«${baseName(conflict.path)}»`),
+    '.');
+  $('notices').append(n);
+  setTimeout(() => n.remove(), 20000);
+}
+
 function setStatus(kind) {
   const el = $('st-sync');
   const text = {
@@ -1449,7 +1461,8 @@ function saveNow() {
   setStatus('saving');
   S.saving = S.saving
     .then(() => vault.saveNote(id, text))
-    .then(() => {
+    .then((res) => {
+      if (res?.conflict) reportConflict(res.conflict);
       if (!S.dirty && S.current === id) setStatus('saved');
       syncIndex();
       renderCalendar();
@@ -1557,7 +1570,8 @@ async function toggleTask(box) {
     } else {
       const text = toggleTaskLine(await S.vault.read(target), line, done);
       if (text == null) throw new Error('La tarea ha cambiado; recarga la nota.');
-      await S.vault.saveNote(target, text);
+      const res = await S.vault.saveNote(target, text);
+      if (res?.conflict) reportConflict(res.conflict);
       syncIndex();
     }
     box.closest('li')?.classList.toggle('done', done);
