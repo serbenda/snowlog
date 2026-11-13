@@ -44,9 +44,9 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/examples.js   proyecto de ejemplo (Cargar ejemplos)
   js/localvault.js bóveda local: .md en una carpeta (File System Access) o en el navegador (OPFS)
   js/zip.js        exportar .zip sin dependencias
-scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)
+scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)
 tests/             node --test; incluye un GitHub falso en memoria
 docs/              contexto, Definition of Done y puesta en marcha
