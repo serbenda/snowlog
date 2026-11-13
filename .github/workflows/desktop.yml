@@ -73,25 +73,18 @@ jobs:
           esac
           ls -la salida
 
-      # Prueba de humo en una pantalla virtual: la app arranca, sigue abierta y pinta algo.
-      - name: Abrir la app (Linux)
+      # Prueba de humo (Linux, pantalla virtual): la app abre su ventana y la web de dentro arranca.
+      # Se hace por WebDriver con tauri-driver, que pregunta a la página en vez de mirar píxeles.
+      - name: Abrir la app y comprobar la web (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y xvfb imagemagick x11-utils
-          chmod +x salida/*.AppImage
-          export APPIMAGE_EXTRACT_AND_RUN=1
-          # Sin tarjeta gráfica: que WebKit pinte por software
-          export WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1
+          sudo apt-get install -y xvfb webkit2gtk-driver
+          cargo install tauri-driver --version 2.1.0 --locked
+          export WEBKIT_DISABLE_DMABUF_RENDERER=1
           xvfb-run -a -s "-screen 0 1280x820x24" bash -c '
-            salida/*.AppImage & pid=$!
-            sleep 20
-            kill -0 "$pid" || { echo "La app se ha cerrado al arrancar"; exit 1; }
-            xwininfo -root -tree | grep -E "\"[^\"]+\"" | head -5
-            import -window root captura.png
-            kill "$pid"
-            convert captura.png -format "%[fx:standard_deviation]" info: > variacion.txt'
-          echo "Variación de la captura: $(cat variacion.txt)"
-          awk '{ exit !($1 > 0.02) }' variacion.txt || { echo "La ventana sale vacía"; exit 1; }
+            tauri-driver > driver.log 2>&1 &
+            node desktop/prueba.mjs "$PWD/desktop/src-tauri/target/release/snowlog" "$0" || { cat driver.log; exit 1; }' \
+            '!document.getElementById("lock").hidden || !document.getElementById("app").hidden'
 
       - uses: actions/upload-artifact@v4
         with:
