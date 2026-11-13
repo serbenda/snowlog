@@ -25,6 +25,7 @@ const SHELL = [
   'js/links.js',
   'js/localvault.js',
   'js/markdown.js',
+  'js/merge.js',
   'js/noteindex.js',
   'js/query.js',
   'js/search.js',

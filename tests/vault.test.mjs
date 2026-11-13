@@ -369,3 +369,18 @@ test('prefetch: descarga muchas notas en pocas peticiones y deja la caché lista
     globalThis.fetch = fake.fetch;
   }
 });
+
+test('si dos dispositivos cambian partes distintas de una nota, se juntan sin copia', async () => {
+  const id = await vault.createNote('Fusión/Lista', '# Compra\n- leche\n- pan\n\n## Notas\nnada');
+  const movil = new Vault(newRepo(), vault.dek);
+  await movil.loadIndex();
+  await movil.read(id);
+  await vault.saveNote(id, '# Compra\n- leche sin lactosa\n- pan\n\n## Notas\nnada');
+  const res = await movil.saveNote(id, '# Compra\n- leche\n- pan\n\n## Notas\nllamar al fontanero');
+  assert.equal(res.conflict, undefined);
+  assert.equal(res.merged, '# Compra\n- leche sin lactosa\n- pan\n\n## Notas\nllamar al fontanero');
+  const check = new Vault(newRepo(), vault.dek);
+  await check.loadIndex();
+  assert.equal(await check.read(id), res.merged);
+  assert.equal(check.notes().filter((n) => n.path.startsWith('Fusión/')).length, 1, 'sin copias');
+});

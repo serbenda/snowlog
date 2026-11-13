@@ -7,6 +7,7 @@
 //   a/<id>.enc            un adjunto cifrado (imagen, PDF…); su nombre y tipo van en el índice
 
 import * as C from './crypto.js';
+import { merge3 } from './merge.js';
 
 export const VAULT_FILE = '.snowlog/vault.json';
 export const INDEX_FILE = '.snowlog/index.enc';
@@ -98,11 +99,14 @@ export class Vault {
     // Fecha `updated` de cada nota cuando se leyó o guardó aquí: si al guardar el índice
     // trae otra, es que la nota cambió en otro dispositivo mientras tanto.
     this.base = new Map();
+    // Texto de esa misma versión: la base para juntar cambios de dos dispositivos.
+    this.baseText = new Map();
   }
 
   remember(id, text) {
     this.cache.set(id, text);
     this.base.set(id, this.index.notes[id]?.updated);
+    this.baseText.set(id, text);
   }
 
   static async fetchVaultFile(repo) {
@@ -411,6 +415,7 @@ export class Vault {
       path: meta.path,
       created: meta.created,
       base: prev ? prev.base : (isNew ? null : this.base.get(id) ?? null),
+      baseText: prev ? prev.baseText : (isNew ? null : this.baseText.get(id) ?? null),
       isNew: prev ? prev.isNew : isNew,
     });
     this.cache.set(id, text);
@@ -450,22 +455,26 @@ export class Vault {
     await this.loadIndex();
     if (this.offline) throw new Error('offline');
     const conflicts = [];
+    const merged = [];
     let synced = 0;
     for (const [id, e] of pending) {
       if (e.base) this.base.set(id, e.base);
       else this.base.delete(id);
+      if (e.baseText != null) this.baseText.set(id, e.baseText);
       const res = await this.saveOnline(id, e.text, { path: e.path, created: e.created, updated: e.base });
       this.outbox.delete(id);
       await this.saveOutbox();
       synced += 1;
       if (res.conflict) conflicts.push(res.conflict);
+      if (res.merged != null) merged.push(id);
     }
-    return { synced, conflicts };
+    return { synced, conflicts, merged };
   }
 
   async saveOnline(id, text, meta) {
     const mine = meta || { ...this.index.notes[id] };
     let conflict = null;
+    let finalText = text;
     await this.apply(
       'Snowlog: guardar nota',
       (idx) => {
@@ -483,23 +492,32 @@ export class Vault {
       },
       async () => {
         conflict = null;
-        const changes = [{ path: notePath(id), content: await C.encryptText(this.dek, text, id) }];
+        finalText = text;
+        const extra = [];
         const remote = this.index.notes[id];
         if (remote && this.base.has(id) && remote.updated !== this.base.get(id)) {
           const theirs = await this.repo.readText(notePath(id));
           const plain = theirs ? await C.decryptText(this.dek, theirs, id) : '';
           if (plain !== text) {
-            conflict = { id: C.randomId(), text: plain };
-            changes.push({ path: notePath(conflict.id), content: await C.encryptText(this.dek, plain, conflict.id) });
+            // Primero se intenta juntar los dos cambios; si chocan, la otra versión va a una copia.
+            const baseText = this.baseText.get(id);
+            const m = baseText != null ? merge3(baseText, text, plain) : { conflict: true };
+            if (!m.conflict) {
+              finalText = m.text;
+            } else {
+              conflict = { id: C.randomId(), text: plain };
+              extra.push({ path: notePath(conflict.id), content: await C.encryptText(this.dek, plain, conflict.id) });
+            }
           }
         }
-        return changes;
+        return [{ path: notePath(id), content: await C.encryptText(this.dek, finalText, id) }, ...extra];
       },
     );
-    this.remember(id, text);
-    if (!conflict) return {};
+    this.remember(id, finalText);
+    const out = finalText !== text ? { merged: finalText } : {};
+    if (!conflict) return out;
     this.remember(conflict.id, conflict.text);
-    return { conflict: { id: conflict.id, path: conflict.path } };
+    return { ...out, conflict: { id: conflict.id, path: conflict.path } };
   }
 
   // Como freePath, pero sobre un índice concreto (el recargado dentro de apply).

@@ -184,3 +184,18 @@ test('detecta lo que cambia en la carpeta desde fuera, sin perder los ids', asyn
   assert.equal(await v.read(inicio), 'cambiado con otro editor');
   assert.equal(v.findByTitle('Reforma').id, reforma, 'los ids se conservan');
 });
+
+test('cambios de fuera en otras líneas se juntan con los de aquí', async () => {
+  const root = sampleFolder();
+  root.put('Lista.md', 'uno\ndos\ntres');
+  const v = await new LocalVault(root).load();
+  const id = v.findByTitle('Lista').id;
+  await v.read(id);
+  root.put('Lista.md', 'uno\ndos\ntres\ncuatro (de OneDrive)');
+  root.children.get('Lista.md').mtime = Date.now() + 5;
+  await v.rescan(); // la ve cambiada mientras aquí se sigue escribiendo
+  const res = await v.saveNote(id, 'UNO\ndos\ntres');
+  assert.equal(res.conflict, undefined);
+  assert.equal(res.merged, 'UNO\ndos\ntres\ncuatro (de OneDrive)');
+  assert.equal(root.text('Lista.md'), 'UNO\ndos\ntres\ncuatro (de OneDrive)');
+});

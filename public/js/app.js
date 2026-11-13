@@ -15,6 +15,7 @@ import { searchNotes, tagCounts, fold } from './search.js';
 import { makeBackup, openBackup, parseBackup } from './backup.js';
 import { openCache } from './cache.js';
 import * as K from './kanban.js';
+import { merge3 } from './merge.js';
 import { openKvDir, browserBackend } from './kvdir.js';
 import { buildGraph, localGraph, initLayout, step as graphStep } from './graph.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
@@ -1783,6 +1784,30 @@ function trySync() {
   return syncing;
 }
 
+// Al guardar se han juntado los cambios de aquí con los de otro dispositivo: el editor pasa a mostrar
+// el resultado (y si mientras tanto se ha seguido escribiendo, también se junta con eso).
+function applyMerged(id, sent, merged) {
+  if (S.current !== id) return;
+  const ed = $('editor');
+  const now = ed.value;
+  let next = merged;
+  if (now !== sent) {
+    const m = merge3(sent, now, merged);
+    if (m.conflict) return; // lo que se está escribiendo choca: se resolverá al guardar
+    next = m.text;
+    S.dirty = true;
+    scheduleSave();
+  }
+  const pos = ed.selectionStart;
+  ed.value = next;
+  if (document.activeElement === ed) ed.setSelectionRange(Math.min(pos, next.length), Math.min(pos, next.length));
+  autosize();
+  if (S.mode === 'read') setMode('read');
+  clearTimeout(sideTimer);
+  sideTimer = setTimeout(refreshSide, 300);
+  notice('Se han juntado tus cambios con los que se hicieron en otro sitio.');
+}
+
 function reportConflict(conflict) {
   if (S.vault?.index.notes[conflict.id]) expandTo(conflict.path);
   renderTree();
@@ -1825,6 +1850,7 @@ function saveNow() {
   S.saving = S.saving
     .then(() => vault.saveNote(id, text))
     .then((res) => {
+      if (res?.merged != null) applyMerged(id, text, res.merged);
       if (res?.conflict) reportConflict(res.conflict);
       if (!S.dirty && S.current === id) setStatus(res?.queued ? 'queued' : 'saved');
       updatePlace();

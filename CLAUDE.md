@@ -48,6 +48,7 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/backup.js     copia de seguridad cifrada (.snowlog)
   js/cache.js      caché local (IndexedDB) de ficheros cifrados del repo
   js/links.js      reescribir [[enlaces]] al renombrar o mover
+  js/merge.js      fusión a tres bandas por líneas (conflictos entre dispositivos)
   js/search.js     búsqueda de texto completo y recuento de etiquetas
   js/kanban.js     tableros Kanban sobre Markdown (leer, cambiar y escribir)
   js/graph.js      grafo de notas y disposición por fuerzas

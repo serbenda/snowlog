@@ -79,7 +79,8 @@ aunque se robe no puede modificar el código de la web.
 - Historial: online, `GET /commits?path=n/<id>.enc` y cada versión se descifra al elegirla; restaurar es un
   guardado más. Local: copias en `.history/<ruta>/<fecha>.md` (oculta, no se carga como nota), que siguen a la
   nota al renombrarla.
-- Conflictos: cada nota recuerda la fecha `updated` con la que se leyó (`Vault.base`). Si al guardar el índice
+- Conflictos: primero se intenta fusionar a tres bandas por líneas (`merge.js`, base = texto leído aquí,
+  `baseText`); solo si chocan las mismas líneas se guarda la copia. Cada nota recuerda la fecha `updated` con la que se leyó (`Vault.base`). Si al guardar el índice
   trae otra, la versión remota se guarda como copia «(otro dispositivo …)» en el mismo commit; gana la de aquí
   porque es la que se está viendo. En local se compara el fichero con lo que se leyó.
 - Bloqueo automático a los 10 minutos sin actividad.

@@ -6,6 +6,7 @@
 // Tiene la misma interfaz que Vault (vault.js), así que la app no distingue una de otra.
 
 import { randomId } from './crypto.js';
+import { merge3 } from './merge.js';
 import { Vault, normalizePath, parentPath, baseName, validName, isAttachmentName, extOf, ATTACHMENT_TYPES, conflictName } from './vault.js';
 
 const HIDDEN = /^\./; // .obsidian, .git, .trash… no se tocan
@@ -104,12 +105,15 @@ export class LocalVault {
     this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
     this.fileCache = new Map();
+    // Texto tal como se leyó o guardó aquí: la base para juntar cambios hechos fuera.
+    this.baseText = new Map();
   }
 
   // Lee la carpeta: notas (.md) y subcarpetas, sin entrar en las ocultas.
   async load() {
     await this.scan(false);
     this.cache.clear();
+    this.baseText.clear();
     this.fileCache.clear();
     return this;
   }
@@ -171,7 +175,10 @@ export class LocalVault {
     } catch { /* sin ajustes propios */ }
     this.index = { v: 1, notes, folders, files, settings };
     const removed = keep ? Object.keys(old.notes || {}).filter((id) => !notes[id]) : [];
-    for (const id of removed) this.cache.delete(id);
+    for (const id of removed) {
+      this.cache.delete(id);
+      this.baseText.delete(id);
+    }
     const addedIds = Object.entries(notes).filter(([, n]) => added.includes(n.path)).map(([id]) => id);
     return { added: addedIds, removed, changed };
   }
@@ -182,6 +189,7 @@ export class LocalVault {
     if (this.cache.has(id)) return this.cache.get(id);
     const text = await readFile(this.root, this.file(id));
     this.cache.set(id, text);
+    this.baseText.set(id, text);
     return text;
   }
 
@@ -195,6 +203,7 @@ export class LocalVault {
     this.index.notes[id] = { path: p, created: now, updated: now, mtime };
     this.addFolderChain(this.index, parentPath(p));
     this.cache.set(id, text);
+    this.baseText.set(id, text);
     return id;
   }
 
@@ -202,21 +211,31 @@ export class LocalVault {
   // leyó aquí, esa otra versión se guarda como copia al lado antes de escribir esta.
   async saveNote(id, text) {
     let conflict = null;
-    const before = this.cache.get(id);
+    let merged = null;
+    const before = this.baseText.has(id) ? this.baseText.get(id) : this.cache.get(id);
     let disk = null;
     try {
       disk = await readFile(this.root, this.file(id));
     } catch { /* borrado fuera: se vuelve a crear */ }
     if (disk != null && disk !== text) await this.snapshot(this.index.notes[id].path, disk);
     if (before != null && disk != null && disk !== before && disk !== text) {
-      const note = this.index.notes[id];
-      const path = this.freePath(parentPath(note.path), conflictName(baseName(note.path)));
-      conflict = { id: await this.createNote(path, disk), path };
+      // Cambió fuera: se juntan los dos cambios si no chocan; si chocan, lo de fuera va a una copia.
+      const m = merge3(before, text, disk);
+      if (!m.conflict) {
+        merged = m.text;
+      } else {
+        const note = this.index.notes[id];
+        const path = this.freePath(parentPath(note.path), conflictName(baseName(note.path)));
+        conflict = { id: await this.createNote(path, disk), path };
+      }
     }
-    this.index.notes[id].mtime = await writeFile(this.root, this.file(id), text);
+    const final = merged ?? text;
+    this.index.notes[id].mtime = await writeFile(this.root, this.file(id), final);
     this.index.notes[id].updated = iso();
-    this.cache.set(id, text);
-    return conflict ? { conflict } : {};
+    this.cache.set(id, final);
+    this.baseText.set(id, final);
+    const out = final !== text ? { merged: final } : {};
+    return conflict ? { ...out, conflict } : out;
   }
 
   async saveMany(items) {
