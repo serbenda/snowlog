@@ -93,3 +93,23 @@ test('saveMany en local escribe cada fichero', async () => {
   await v.saveMany([{ id, text: 'nuevo' }]);
   assert.equal(root.text('Inicio.md'), 'nuevo');
 });
+
+test('adjuntos en local: ficheros normales, a la papelera al borrar y dentro del .zip', async () => {
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  assert.deepEqual(v.files().map((f) => f.path), ['Proyectos/Casa/plano.png']);
+  const pdf = new TextEncoder().encode('%PDF-1.4 hola');
+  const { id, path } = await v.addFile('Proyectos/Casa', 'plano.png', new Uint8Array([1]));
+  assert.equal(path, 'Proyectos/Casa/plano 1.png');
+  const doc = await v.addFile('Adjuntos', 'factura.pdf', pdf);
+  assert.ok(root.list().includes('Adjuntos/factura.pdf'));
+  assert.deepEqual(await v.readFile(doc.id), pdf);
+  await v.deleteFile(id);
+  assert.ok(root.list().includes('.trash/Proyectos/Casa/plano 1.png'));
+  await v.renameFolder('Adjuntos', 'Docs');
+  assert.equal(v.findFile('factura.pdf').path, 'Docs/factura.pdf');
+  const all = await v.exportAll();
+  assert.ok(all.some((f) => f.path === 'Docs/factura.pdf' && f.data));
+  await v.deleteFolder('Docs');
+  assert.equal(v.findFile('factura.pdf'), null);
+});

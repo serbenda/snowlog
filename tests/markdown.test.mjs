@@ -109,3 +109,11 @@ test('listas anidadas con 4 espacios o tabuladores', () => {
   assert.equal(four, '<ul><li>A<ul><li>a1</li><li>a2</li></ul></li><li>B<ul><li>b1</li></ul></li></ul>');
   assert.equal(render('- a\n      - b\n  - c\n- d'), '<ul><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ul>');
 });
+
+test('![[adjunto]] deja un hueco seguro para la imagen o el PDF', () => {
+  const html = render('![[foto de casa.png]] y ![[plano.pdf|300]] y ![[Otra nota]] ![[x" onerror="alert(1).png]]');
+  assert.ok(html.includes('<span class="embed" data-embed="foto de casa.png">foto de casa.png</span>'), html);
+  assert.ok(html.includes('data-embed="plano.pdf" data-width="300"'), html);
+  assert.ok(html.includes('class="internal-link" href="#" data-target="Otra nota"'), html);
+  assert.ok(!html.includes('" onerror="'), html);
+});

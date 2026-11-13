@@ -19,6 +19,7 @@ function safeUrl(url) {
   return /^(https?:\/\/|mailto:|#)/i.test(u) ? u : null;
 }
 
+const EMBED_RE = /\.(png|jpe?g|gif|webp|avif|bmp|pdf)$/i;
 const TAG_RE = /(^|[\s(])#([\p{L}_][\p{L}\p{N}_/-]*)/gu;
 
 export function inline(raw) {
@@ -28,6 +29,14 @@ export function inline(raw) {
 
   // Código en línea: su contenido no se formatea.
   s = s.replace(/`([^`]+)`/g, (_, code) => keep(`<code>${code}</code>`));
+
+  // ![[foto.png]] y ![[foto.png|300]]: hueco que la app rellena con el adjunto descifrado.
+  s = s.replace(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, target, alias) => {
+    const name = target.trim();
+    if (!EMBED_RE.test(name)) return m.slice(1);
+    const width = /^\d{1,4}$/.test((alias || '').trim()) ? ` data-width="${alias.trim()}"` : '';
+    return keep(`<span class="embed" data-embed="${name}"${width}>${name}</span>`);
+  });
 
   // [[Nota]] y [[Nota|alias]]
   s = s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => keep(

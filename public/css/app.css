@@ -126,6 +126,32 @@ button { cursor: pointer; }
 }
 .sidebar-actions { display: flex; gap: 2px; }
 
+/* ---------- Adjuntos ---------- */
+.tree-row.is-file .label { color: var(--text-muted); }
+.file-ext {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 4px; flex: none;
+}
+.embed-img { display: block; max-width: 100%; height: auto; border-radius: 6px; margin: 8px 0; cursor: zoom-in; }
+.embed-missing, .embed-loading {
+  display: inline-block; font-size: 13px; color: var(--text-faint); background: var(--code-bg);
+  border-radius: 5px; padding: 2px 8px;
+}
+.embed-missing { color: var(--danger); }
+.embed-loading { min-height: 60px; min-width: 160px; }
+.embed-file {
+  display: flex; align-items: center; gap: 12px; max-width: 420px; margin: 8px 0; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg-secondary);
+}
+.embed-file-ext {
+  flex: none; font-size: 11px; font-weight: 700; color: var(--accent-text); background: var(--danger);
+  border-radius: 4px; padding: 6px 6px;
+}
+.embed-file-name { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.embed-file-name small { color: var(--text-faint); font-size: 12px; }
+.embed-open { flex: none; color: var(--accent); font-weight: 600; text-decoration: none; padding: 4px 8px; border-radius: 5px; }
+.embed-open:hover { background: var(--hover); }
+
 /* ---------- Pestañas del panel izquierdo, búsqueda y etiquetas ---------- */
 .left-tabs { display: flex; gap: 2px; padding: 6px 8px 0; flex: none; }
 .left-tab { color: var(--text-muted); }

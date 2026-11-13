@@ -145,3 +145,27 @@ test('saveMany guarda varias notas en un solo commit', async () => {
   assert.equal(await fresh.read(a), 'a2');
   assert.equal(await fresh.read(b), 'b2');
 });
+
+test('adjuntos: se cifran, se leen desde otro dispositivo y se mueven con su carpeta', async () => {
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+  const a = await vault.addFile('Fotos de viaje', 'playa secreta.png', png);
+  assert.equal(a.path, 'Fotos de viaje/playa secreta.png');
+  const b = await vault.addFile('Fotos de viaje', 'playa secreta.png', png);
+  assert.equal(b.path, 'Fotos de viaje/playa secreta 1.png');
+  await assert.rejects(vault.addFile('', 'virus.exe', png), /bad_type/);
+  await assert.rejects(vault.addFile('', 'enorme.pdf', new Uint8Array(21 * 1024 * 1024)), /too_big/);
+  for (const [path, content] of fake.files()) {
+    assert.ok(!path.includes('playa') && !content.includes('playa') && !content.includes('Fotos'), path);
+  }
+  const other = new Vault(newRepo(), vault.dek);
+  await other.loadIndex();
+  assert.equal(other.findFile('PLAYA SECRETA.png').id, a.id);
+  assert.deepEqual(await other.readFile(a.id), png);
+  await vault.renameFolder('Fotos de viaje', 'Archivo/Fotos');
+  assert.equal(vault.findFile('playa secreta.png').path, 'Archivo/Fotos/playa secreta.png');
+  await vault.deleteFile(b.id);
+  assert.ok(![...fake.files().keys()].some((p) => p.includes(b.id)));
+  await vault.deleteFolder('Archivo');
+  assert.equal(vault.files().length, 0);
+  assert.ok(![...fake.files().keys()].some((p) => p.includes(a.id)));
+});

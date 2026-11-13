@@ -6,7 +6,7 @@
 // Tiene la misma interfaz que Vault (vault.js), así que la app no distingue una de otra.
 
 import { randomId } from './crypto.js';
-import { Vault, normalizePath, parentPath, baseName, validName } from './vault.js';
+import { Vault, normalizePath, parentPath, baseName, validName, isAttachmentName, extOf, ATTACHMENT_TYPES } from './vault.js';
 
 const HIDDEN = /^\./; // .obsidian, .git, .trash… no se tocan
 const TRASH = '.trash';
@@ -50,6 +50,15 @@ async function copyTree(from, to) {
   }
 }
 
+async function fileExists(root, path) {
+  try {
+    await (await getDir(root, parentPath(path))).getFileHandle(baseName(path));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function exists(root, path) {
   try {
     await getDir(root, path);
@@ -80,14 +89,16 @@ export class LocalVault {
     this.label = label || root.name || 'Snowlog';
     this.kind = kind; // 'folder' (carpeta del ordenador) | 'browser' (almacenamiento del navegador)
     this.local = true;
-    this.index = { v: 1, notes: {}, folders: [] };
+    this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
+    this.fileCache = new Map();
   }
 
   // Lee la carpeta: notas (.md) y subcarpetas, sin entrar en las ocultas.
   async load() {
     const notes = {};
     const folders = [];
+    const files = {};
     const walk = async (dir, prefix) => {
       for await (const [name, h] of dir.entries()) {
         if (HIDDEN.test(name)) continue;
@@ -98,12 +109,16 @@ export class LocalVault {
         } else if (/\.md$/i.test(name)) {
           const file = await h.getFile();
           notes[randomId()] = { path: path.replace(/\.md$/i, ''), created: iso(file.lastModified), updated: iso(file.lastModified) };
+        } else if (isAttachmentName(name)) {
+          const file = await h.getFile();
+          files[randomId()] = { path, type: ATTACHMENT_TYPES[extOf(name)], size: file.size, created: iso(file.lastModified) };
         }
       }
     };
     await walk(this.root, '');
-    this.index = { v: 1, notes, folders };
+    this.index = { v: 1, notes, folders, files };
     this.cache.clear();
+    this.fileCache.clear();
     return this;
   }
 
@@ -183,6 +198,7 @@ export class LocalVault {
     const moved = (q) => (q === from ? to : q.startsWith(`${from}/`) ? to + q.slice(from.length) : q);
     this.index.folders = this.index.folders.map(moved);
     for (const n of Object.values(this.index.notes)) n.path = moved(n.path);
+    for (const f of Object.values(this.index.files)) f.path = moved(f.path);
     this.addFolderChain(this.index, to);
   }
 
@@ -197,7 +213,50 @@ export class LocalVault {
       delete this.index.notes[n.id];
       this.cache.delete(n.id);
     }
+    for (const x of this.files()) {
+      if (x.path.startsWith(`${f}/`)) {
+        delete this.index.files[x.id];
+        this.fileCache.delete(x.id);
+      }
+    }
     this.index.folders = this.index.folders.filter((x) => x !== f && !x.startsWith(`${f}/`));
+  }
+
+  // Adjuntos: ficheros normales dentro de la carpeta.
+  async addFile(folder, name, bytes) {
+    const clean = name.replace(/[\\/:*?"<>|#^[\]]/g, '-').trim() || 'adjunto';
+    this.checkAttachment(clean, bytes);
+    let path = this.freeFilePath(normalizePath(folder), clean);
+    validName(path);
+    // También puede haber en la carpeta un fichero que no estaba en el índice.
+    for (let n = 1; await fileExists(this.root, path); n += 1) {
+      const ext = extOf(clean);
+      path = normalizePath(`${folder}/${clean.slice(0, -(ext.length + 1))} ${n}.${ext}`);
+    }
+    await writeFile(this.root, path, bytes);
+    const id = randomId();
+    this.index.files[id] = { path, type: ATTACHMENT_TYPES[extOf(path)], size: bytes.length, created: iso() };
+    this.addFolderChain(this.index, parentPath(path));
+    this.fileCache.set(id, bytes);
+    return { id, path };
+  }
+
+  async readFile(id) {
+    if (this.fileCache.has(id)) return this.fileCache.get(id);
+    const dir = await getDir(this.root, parentPath(this.index.files[id].path));
+    const bytes = new Uint8Array(await (await (await dir.getFileHandle(baseName(this.index.files[id].path))).getFile()).arrayBuffer());
+    this.fileCache.set(id, bytes);
+    return bytes;
+  }
+
+  async deleteFile(id) {
+    const { path } = this.index.files[id];
+    const bytes = await this.readFile(id);
+    const ext = extOf(path);
+    await writeFile(this.root, await freeTrashPath(this.root, path.slice(0, -(ext.length + 1)), `.${ext}`), bytes);
+    await removeEntry(this.root, path);
+    delete this.index.files[id];
+    this.fileCache.delete(id);
   }
 
   async importNotes(items, { onProgress, folders = [] } = {}) {
@@ -229,11 +288,12 @@ export class LocalVault {
   async exportAll() {
     const out = [];
     for (const n of this.notes()) out.push({ path: `${n.path}.md`, text: await this.read(n.id) });
+    for (const f of this.files()) out.push({ path: f.path, data: await this.readFile(f.id) });
     return out;
   }
 }
 
 // Métodos que no dependen de dónde se guardan las notas: se reutilizan tal cual.
-for (const m of ['notes', 'findByPath', 'findByTitle', 'freePath', 'ensureFree', 'addFolderChain', 'notesUnder']) {
+for (const m of ['notes', 'findByPath', 'findByTitle', 'freePath', 'ensureFree', 'addFolderChain', 'notesUnder', 'files', 'findFile', 'freeFilePath', 'checkAttachment']) {
   LocalVault.prototype[m] = Vault.prototype[m];
 }

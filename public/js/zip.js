@@ -23,7 +23,7 @@ function dosTime(d) {
   return { time, date };
 }
 
-// files: [{ path, text }]. Devuelve un Uint8Array con el .zip.
+// files: [{ path, text }] o [{ path, data: Uint8Array }]. Devuelve un Uint8Array con el .zip.
 export function makeZip(files, now = new Date()) {
   const enc = new TextEncoder();
   const { time, date } = dosTime(now);
@@ -32,7 +32,7 @@ export function makeZip(files, now = new Date()) {
   let offset = 0;
   for (const f of files) {
     const name = enc.encode(f.path);
-    const data = enc.encode(f.text);
+    const data = f.data || enc.encode(f.text);
     const crc = crc32(data);
     const local = new Uint8Array(30 + name.length);
     const lv = new DataView(local.buffer);

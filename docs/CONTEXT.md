@@ -38,7 +38,7 @@ Web estática en GitHub Pages que lee y escribe, con la API de GitHub, un repo p
 | Repo | Visibilidad | Contenido |
 | --- | --- | --- |
 | `serbenda/snowlog` | público | código de la app, Worker, tests, docs |
-| `serbenda/snowlog-notes` | privado | `.snowlog/vault.json`, `.snowlog/index.enc`, `n/<id>.enc` |
+| `serbenda/snowlog-notes` | privado | `.snowlog/vault.json`, `.snowlog/index.enc`, `n/<id>.enc`, `a/<id>.enc` (adjuntos) |
 
 Se mantienen separados a propósito: el token de la app solo puede escribir en las notas, así que
 aunque se robe no puede modificar el código de la web.
@@ -60,6 +60,10 @@ aunque se robe no puede modificar el código de la web.
 - Editor sin librerías (`editor.js`): el cuadro de texto se queda transparente y un `<pre>` detrás muestra el
   mismo texto coloreado. El resaltado solo cambia colores, nunca tamaños, para que coincidan al píxel. Las
   ediciones van por `execCommand('insertText')` para conservar el deshacer. Al bloquear se vacía el `<pre>`.
+- Adjuntos: nombre, tipo y tamaño en el índice cifrado (`index.files`); el contenido en `a/<id>.enc` con el id
+  como AAD. Solo imágenes y PDF (nada de SVG ni HTML, que podrían ejecutar código). Las imágenes se muestran
+  como `data:` (la CSP ya lo permitía) y los PDF se abren en otra pestaña con una URL `blob:` que se revoca
+  al bloquear.
 - Búsqueda (`search.js`) sobre el índice en memoria: el texto se pliega (sin acentos ni mayúsculas, misma
   longitud) una vez por versión de nota; 1.000 notas en pocos milisegundos. Los resultados se pintan como texto,
   nunca como HTML, y se vacían al bloquear.
@@ -84,7 +88,7 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 ## Siguiente
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
-[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1** (hecho: enlaces al renombrar, editor, búsqueda y etiquetas; sigue adjuntos).
+[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1** (hecho: enlaces al renombrar, editor, búsqueda, etiquetas y adjuntos; sigue conflictos entre dispositivos).
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

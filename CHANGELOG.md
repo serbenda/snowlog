@@ -6,6 +6,8 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- Adjuntos: pegar o arrastrar imágenes y PDF en el editor (o «Adjuntar imagen o PDF…» en el menú). Se guardan en `Adjuntos/` y se insertan como `![[nombre]]`; en lectura se ve la imagen (`![[foto.png|300]]` fija el ancho) o una ficha del PDF para abrirlo. En la versión online van cifrados (`a/<id>.enc`); en la portátil son ficheros normales. Máximo 20 MB por adjunto.
+- Los adjuntos aparecen en el explorador (abrir, insertar en la nota, eliminar), se mueven con su carpeta y entran en la copia .zip.
 - Búsqueda en todas las notas (Ctrl+Mayús+F): sin acentos ni mayúsculas, con el fragmento de cada coincidencia resaltado; admite `"frase"`, `-palabra`, `tag:#etiqueta` y `path:carpeta`. Pulsar un resultado abre la nota con el texto seleccionado.
 - Panel de etiquetas con el número de notas de cada una; pulsar una etiqueta busca sus notas.
 - Panel izquierdo con pestañas: Archivos, Buscar y Etiquetas.

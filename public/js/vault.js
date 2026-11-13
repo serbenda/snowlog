@@ -4,12 +4,23 @@
 //   .snowlog/vault.json   parámetros públicos y la clave de datos envuelta (sin secretos en claro)
 //   .snowlog/index.enc    índice cifrado: rutas y fechas de las notas, carpetas
 //   n/<id>.enc            una nota cifrada; <id> es aleatorio y no revela el título
+//   a/<id>.enc            un adjunto cifrado (imagen, PDF…); su nombre y tipo van en el índice
 
 import * as C from './crypto.js';
 
 export const VAULT_FILE = '.snowlog/vault.json';
 export const INDEX_FILE = '.snowlog/index.enc';
 const notePath = (id) => `n/${id}.enc`;
+const filePath = (id) => `a/${id}.enc`;
+
+// Adjuntos que se pueden pegar o arrastrar, con su tipo.
+export const ATTACHMENT_TYPES = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  avif: 'image/avif', bmp: 'image/bmp', pdf: 'application/pdf',
+};
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const extOf = (name) => (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';
+export const isAttachmentName = (name) => Object.hasOwn(ATTACHMENT_TYPES, extOf(name));
 
 const WELCOME = `Tu cuaderno personal, cifrado de extremo a extremo.
 
@@ -66,8 +77,9 @@ export class Vault {
   constructor(repo, dek) {
     this.repo = repo;
     this.dek = dek;
-    this.index = { v: 1, notes: {}, folders: [] };
+    this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
+    this.fileCache = new Map();
   }
 
   static async fetchVaultFile(repo) {
@@ -93,6 +105,7 @@ export class Vault {
     const text = await this.repo.readText(INDEX_FILE);
     if (text) this.index = JSON.parse(await C.decryptText(this.dek, text, 'index'));
     if (!this.index.folders) this.index.folders = [];
+    if (!this.index.files) this.index.files = {};
   }
 
   async indexChange() {
@@ -297,8 +310,69 @@ export class Vault {
     await this.apply('Snowlog: renombrar carpeta', (idx) => {
       idx.folders = idx.folders.map(moved);
       for (const n of Object.values(idx.notes)) n.path = moved(n.path);
+      for (const f of Object.values(idx.files || {})) f.path = moved(f.path);
       this.addFolderChain(idx, to);
     });
+  }
+
+  // --- Adjuntos ---
+  files() {
+    return Object.entries(this.index.files || {}).map(([id, f]) => ({ id, ...f }));
+  }
+
+  // ![[foto.png]] o ![[Carpeta/foto.png]]: primero la ruta exacta, luego el nombre.
+  findFile(name) {
+    const t = normalizePath(name).toLowerCase();
+    const all = this.files();
+    return all.find((f) => f.path.toLowerCase() === t) || all.find((f) => baseName(f.path).toLowerCase() === baseName(t)) || null;
+  }
+
+  // Nombre libre para un adjunto: "foto.png", "foto 1.png"…
+  freeFilePath(folder, name) {
+    const ext = extOf(name);
+    const stem = ext ? name.slice(0, -(ext.length + 1)) : name;
+    const taken = new Set(this.files().map((f) => f.path.toLowerCase()));
+    for (let n = 0; ; n += 1) {
+      const p = normalizePath(`${folder}/${stem}${n ? ` ${n}` : ''}${ext ? `.${ext}` : ''}`);
+      if (!taken.has(p.toLowerCase())) return p;
+    }
+  }
+
+  checkAttachment(name, bytes) {
+    if (!isAttachmentName(name)) throw new Error('bad_type');
+    if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error('too_big');
+  }
+
+  // Guarda un adjunto cifrado. Devuelve { id, path } (el nombre puede cambiar si ya existía).
+  async addFile(folder, name, bytes) {
+    const clean = name.replace(/[\\/:*?"<>|#^[\]]/g, '-').trim() || 'adjunto';
+    this.checkAttachment(clean, bytes);
+    const path = this.freeFilePath(normalizePath(folder), clean);
+    validName(path);
+    const id = C.randomId();
+    const now = new Date().toISOString();
+    const content = C.toB64(await C.encryptBytes(this.dek, bytes, id));
+    await this.apply(`Snowlog: añadir adjunto`, (idx) => {
+      if (!idx.files) idx.files = {};
+      idx.files[id] = { path, type: ATTACHMENT_TYPES[extOf(path)], size: bytes.length, created: now };
+      this.addFolderChain(idx, parentPath(path));
+    }, async () => [{ path: filePath(id), content }]);
+    this.fileCache.set(id, bytes);
+    return { id, path };
+  }
+
+  async readFile(id) {
+    if (this.fileCache.has(id)) return this.fileCache.get(id);
+    const b64 = await this.repo.readText(filePath(id));
+    if (b64 == null) throw new Error('missing');
+    const bytes = await C.decryptBytes(this.dek, C.fromB64(b64.trim()), id);
+    this.fileCache.set(id, bytes);
+    return bytes;
+  }
+
+  async deleteFile(id) {
+    await this.apply('Snowlog: eliminar adjunto', (idx) => { delete idx.files[id]; }, async () => [{ path: filePath(id), delete: true }]);
+    this.fileCache.delete(id);
   }
 
   notesUnder(folder) {
@@ -309,15 +383,18 @@ export class Vault {
   async deleteFolder(folder) {
     const f = normalizePath(folder);
     const ids = this.notesUnder(f).map((n) => n.id);
+    const fids = this.files().filter((x) => x.path.startsWith(`${f}/`)).map((x) => x.id);
     await this.apply(
       'Snowlog: eliminar carpeta',
       (idx) => {
         idx.folders = idx.folders.filter((x) => x !== f && !x.startsWith(`${f}/`));
         for (const id of ids) delete idx.notes[id];
+        for (const id of fids) delete idx.files[id];
       },
-      async () => ids.map((id) => ({ path: notePath(id), delete: true })),
+      async () => [...ids.map((id) => ({ path: notePath(id), delete: true })), ...fids.map((id) => ({ path: filePath(id), delete: true }))],
     );
     for (const id of ids) this.cache.delete(id);
+    for (const id of fids) this.fileCache.delete(id);
   }
 
   // Guarda en el repo un vault.json actualizado (tras recuperar con el código).

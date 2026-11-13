@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import * as C from './crypto.js';
 import * as Auth from './auth.js';
 import { GitHubRepo } from './github.js';
-import { Vault, baseName, parentPath, normalizePath } from './vault.js';
+import { Vault, baseName, parentPath, normalizePath, extOf } from './vault.js';
 import { render, outline, wordCount, escapeHtml } from './markdown.js';
 import { planImport, formatBytes } from './import.js';
 import { exampleSpace } from './examples.js';
@@ -101,6 +101,8 @@ function errText(e) {
     no_worker: 'Falta configurar el servicio de login (authWorker).',
     session_expired: 'La sesión de GitHub ha caducado. Vuelve a entrar.',
     vault_exists: 'Ya hay una bóveda en el repo.',
+    bad_type: 'Solo se pueden adjuntar imágenes (png, jpg, gif, webp, avif, bmp) y PDF.',
+    too_big: 'El adjunto es demasiado grande (máximo 20 MB).',
   };
   if (map[m]) return map[m];
   if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') return 'El navegador no ha dado permiso para usar la carpeta.';
@@ -315,6 +317,7 @@ async function exportZip() {
   try {
     const files = [];
     for (const n of S.vault.notes()) files.push({ path: `${n.path}.md`, text: await S.vault.read(n.id) });
+    for (const f of S.vault.files()) files.push({ path: f.path, data: await S.vault.readFile(f.id) });
     const blob = new Blob([makeZip(files)], { type: 'application/zip' });
     const a = h('a', { href: URL.createObjectURL(blob), download: `snowlog-${isoDate(new Date())}.zip` });
     document.body.append(a);
@@ -550,6 +553,7 @@ function wipe() {
   cancelAnimationFrame(hlFrame);
   $('editor-hl').replaceChildren();
   $('editor-mirror').replaceChildren();
+  revokeBlobs();
   $('search-input').value = '';
   $('search-results').replaceChildren();
   $('tag-list').replaceChildren();
@@ -704,6 +708,7 @@ function buildTree() {
   };
   for (const f of S.vault.index.folders) folderNode(f);
   for (const n of S.vault.notes()) folderNode(parentPath(n.path)).notes.push(n);
+  for (const f of S.vault.files()) folderNode(parentPath(f.path)).notes.push({ ...f, file: true });
   return root;
 }
 
@@ -736,6 +741,14 @@ function renderTree() {
     }
     const notes = node.notes.slice().sort((a, b) => collator.compare(baseName(a.path), baseName(b.path)));
     for (const n of notes) {
+      if (n.file) {
+        const row = h('div', { class: 'tree-row is-file', role: 'treeitem', tabindex: '0', 'data-file': n.id },
+          h('span', { class: 'spacer' }), h('span', { class: 'label' }, baseName(n.path).replace(/\.[^.]+$/, '')),
+          h('span', { class: 'file-ext' }, extOf(n.path)), moreButton());
+        row.style.setProperty('--depth', depth);
+        parent.append(row);
+        continue;
+      }
       const row = h('div', {
         class: `tree-row is-note${n.id === S.current ? ' active' : ''}`,
         role: 'treeitem',
@@ -782,6 +795,7 @@ function setupTree() {
       return rowMenu(row, r.left, r.bottom);
     }
     if (row.dataset.folder) toggleFolder(row.dataset.folder);
+    else if (row.dataset.file) openAttachment(row.dataset.file);
     else openNote(row.dataset.note);
   });
   tree.addEventListener('keydown', (ev) => {
@@ -854,6 +868,16 @@ function setupTree() {
 }
 
 function rowMenu(row, x, y) {
+  if (row.dataset.file) {
+    const id = row.dataset.file;
+    openMenu(x, y, [
+      ['read', 'Abrir', () => openAttachment(id)],
+      ['import', 'Insertar en la nota', () => insertEmbed(S.vault.index.files[id].path)],
+      null,
+      ['trash', 'Eliminar', () => deleteAttachment(id), 'danger'],
+    ]);
+    return;
+  }
   if (row.dataset.note) {
     const id = row.dataset.note;
     openMenu(x, y, [
@@ -1217,6 +1241,7 @@ function setMode(mode) {
     view.innerHTML = render(text, { frontmatter: true });
     applyCssClasses(view, text);
     enableOwnTasks(view, text);
+    fillEmbeds(view);
     runQueries();
   }
   const btn = $('mode-btn');
@@ -1800,6 +1825,125 @@ async function importFolder(files) {
 }
 
 // --- Paneles ---
+// --- Adjuntos (imágenes y PDF) ---
+const fmtSize = (n) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+let blobUrls = [];
+
+function blobUrl(bytes, type) {
+  const url = URL.createObjectURL(new Blob([bytes], { type }));
+  blobUrls.push(url);
+  return url;
+}
+
+function revokeBlobs() {
+  for (const u of blobUrls) URL.revokeObjectURL(u);
+  blobUrls = [];
+}
+
+// Rellena los huecos ![[adjunto]] del modo lectura con la imagen o el PDF descifrados.
+async function fillEmbeds(view) {
+  const vault = S.vault;
+  for (const slot of view.querySelectorAll('span.embed')) {
+    const name = slot.dataset.embed;
+    const f = vault.findFile(name);
+    if (!f) {
+      slot.className = 'embed embed-missing';
+      slot.textContent = `No encuentro el adjunto «${name}»`;
+      continue;
+    }
+    slot.className = 'embed embed-loading';
+    try {
+      const bytes = await vault.readFile(f.id);
+      if (S.vault !== vault || !slot.isConnected) return;
+      if (f.type === 'application/pdf') {
+        slot.replaceWith(h('span', { class: 'embed-file' },
+          h('span', { class: 'embed-file-ext' }, 'PDF'),
+          h('span', { class: 'embed-file-name' }, baseName(f.path), h('small', {}, fmtSize(f.size))),
+          h('a', { class: 'embed-open', href: blobUrl(bytes, f.type), target: '_blank', rel: 'noopener' }, 'Abrir')));
+      } else {
+        const img = h('img', { class: 'embed-img', alt: baseName(f.path), src: `data:${f.type};base64,${C.toB64(bytes)}` });
+        if (slot.dataset.width) img.style.width = `${slot.dataset.width}px`;
+        img.addEventListener('click', () => openAttachment(f.id));
+        slot.replaceWith(img);
+      }
+    } catch (e) {
+      slot.className = 'embed embed-missing';
+      slot.textContent = `No se pudo abrir «${name}»: ${errText(e)}`;
+    }
+  }
+}
+
+// Abre el adjunto en una pestaña nueva del navegador.
+async function openAttachment(id) {
+  const f = S.vault.index.files[id];
+  if (!f) return;
+  const tab = window.open('', '_blank');
+  try {
+    const url = blobUrl(await S.vault.readFile(id), f.type);
+    if (tab) tab.location.href = url;
+    else window.location.assign(url);
+  } catch (e) {
+    tab?.close();
+    notice(errText(e), 'error');
+  }
+}
+
+// Enlace corto si el nombre es único; si no, con la ruta.
+function embedTarget(path) {
+  const name = baseName(path);
+  const same = S.vault.files().filter((f) => baseName(f.path).toLowerCase() === name.toLowerCase());
+  return same.length > 1 ? path : name;
+}
+
+function insertEmbed(path) {
+  if (!S.current) return;
+  if (S.mode !== 'edit') setMode('edit');
+  const ed = $('editor');
+  const s = ed.selectionStart;
+  const before = ed.value.slice(0, s);
+  const text = `${before && !before.endsWith('\n') ? '\n' : ''}![[${embedTarget(path)}]]\n`;
+  applyEdit({ start: s, end: ed.selectionEnd, insert: text, selStart: s + text.length, selEnd: s + text.length });
+}
+
+function pastedName(file) {
+  const ext = extOf(file.name) || ({ 'image/jpeg': 'jpg', 'application/pdf': 'pdf' }[file.type] || file.type.split('/')[1] || 'bin');
+  // Las capturas pegadas llegan como "image.png": se les da un nombre con fecha y hora.
+  if (!file.name || /^image\.\w+$/i.test(file.name)) {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `Pegado ${isoDate(d)} ${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
+  }
+  return file.name;
+}
+
+async function attachFiles(files) {
+  if (!S.vault || !S.current || !files.length) return;
+  const vault = S.vault;
+  const folder = WS.attachmentsFolder || '';
+  for (const file of files) {
+    $('st-sync').textContent = S.local ? 'Guardando adjunto…' : 'Cifrando y subiendo adjunto…';
+    try {
+      const { path } = await vault.addFile(folder, pastedName(file), new Uint8Array(await file.arrayBuffer()));
+      if (S.vault !== vault) return;
+      expandTo(path);
+      insertEmbed(path);
+    } catch (e) {
+      notice(`No se pudo adjuntar «${file.name || 'imagen'}»: ${errText(e)}`, 'error');
+    }
+  }
+  setStatus(S.dirty ? 'pending' : 'saved');
+  renderTree();
+}
+
+async function deleteAttachment(id) {
+  const f = S.vault.index.files[id];
+  if (!f) return;
+  const ok = await confirmModal('Eliminar adjunto', `¿Eliminar «${baseName(f.path)}»? Las notas que lo muestran dejarán de verlo.`, 'Eliminar', true);
+  if (!ok) return;
+  await run(() => S.vault.deleteFile(id));
+  renderTree();
+}
+
 // --- Panel izquierdo: archivos, búsqueda y etiquetas ---
 let leftTab = 'files';
 function showLeftTab(tab) {
@@ -1923,7 +2067,7 @@ function noteMenu(x, y) {
     const id = S.current;
     items.push(['rename', 'Renombrar', () => renameNotePrompt(id)], ['move', 'Mover a…', () => moveNotePrompt(id)]);
   }
-  if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()]);
+  if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()], ['import', 'Adjuntar imagen o PDF…', () => $('attach-input').click()]);
   items.push(
     ['search', 'Abrir nota (Ctrl+O)', () => quickSwitcher()],
     ['search', 'Buscar en todas las notas (Ctrl+Mayús+F)', () => openSearch()],
@@ -2003,6 +2147,32 @@ function setupUi() {
     sideTimer = setTimeout(refreshSide, 300);
   });
   editor.addEventListener('keydown', editorKeydown);
+  editor.addEventListener('paste', (ev) => {
+    const files = [...(ev.clipboardData?.files || [])];
+    if (!files.length) return;
+    ev.preventDefault();
+    attachFiles(files);
+  });
+  editor.addEventListener('dragover', (ev) => {
+    if (ev.dataTransfer?.types.includes('Files')) ev.preventDefault();
+  });
+  editor.addEventListener('drop', (ev) => {
+    const files = [...(ev.dataTransfer?.files || [])];
+    if (!files.length) return;
+    ev.preventDefault();
+    attachFiles(files);
+  });
+  // Un fichero soltado fuera del editor no debe sacar al navegador de Snowlog.
+  for (const type of ['dragover', 'drop']) {
+    window.addEventListener(type, (ev) => {
+      if (ev.dataTransfer?.types.includes('Files') && !ev.defaultPrevented) ev.preventDefault();
+    });
+  }
+  $('attach-input').addEventListener('change', (ev) => {
+    const files = [...ev.target.files];
+    ev.target.value = '';
+    attachFiles(files);
+  });
   editor.addEventListener('input', updateSuggest);
   editor.addEventListener('click', updateSuggest);
   editor.addEventListener('blur', () => setTimeout(closeSuggest, 150));
