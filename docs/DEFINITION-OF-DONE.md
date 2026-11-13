@@ -52,7 +52,7 @@ La hoja de ruta completa, con el motivo de cada punto, está en [ROADMAP.md](ROA
 ### Fase 3: Pulido
 - [x] Ajustes dentro de la app (carpetas, plantillas, panel, bloqueo) en lugar de `config.js`.
 - [x] Paleta de comandos (Ctrl+P), marcadores y vista previa al pasar sobre un enlace.
-- [ ] Kanban sobre Markdown y vista de grafo.
+- [x] Kanban sobre Markdown y vista de grafo.
 - [ ] Portátil en Safari y Firefox; detectar cambios hechos desde fuera de la app.
 - [ ] Pasar notas entre la versión portátil y la online (exportar de una, importar en la otra).
 - [ ] Tests de navegador en la CI para los recorridos principales.

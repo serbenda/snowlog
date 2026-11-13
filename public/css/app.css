@@ -149,6 +149,55 @@ button { cursor: pointer; }
 .security-options { display: flex; flex-direction: column; gap: 8px; }
 .security-options .btn { text-align: left; }
 
+/* ---------- Kanban ---------- */
+.note:has(> .reading.kanban-view:not([hidden])) { max-width: none; }
+.kanban-intro { max-width: var(--line-w); margin-bottom: 12px; }
+.kanban { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 12px; }
+.kanban-lane {
+  flex: 0 0 272px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px; display: flex; flex-direction: column; gap: 8px; max-height: calc(100dvh - 220px);
+}
+.kanban-lane-head { display: flex; align-items: center; gap: 6px; padding: 2px 4px; }
+.kanban-lane-title { flex: 1; font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.kanban-count { font-size: 12px; color: var(--text-faint); background: var(--hover); border-radius: 9px; padding: 0 7px; }
+.kanban-cards { display: flex; flex-direction: column; gap: 6px; min-height: 36px; overflow-y: auto; border-radius: 6px; }
+.kanban-cards.drop { background: var(--active); }
+.kanban-card {
+  position: relative;
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: start;
+  background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  font-size: 14px; line-height: 1.45; cursor: grab;
+}
+.kanban-card.dragging { opacity: 0.4; }
+.kanban-card.done .kanban-text { color: var(--text-faint); text-decoration: line-through; }
+.kanban-check { margin-top: 3px; }
+.kanban-text { overflow-wrap: anywhere; }
+.kanban-text p { margin: 0; }
+.kanban-card-actions {
+  position: absolute; top: 4px; right: 4px; display: none; gap: 2px;
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow);
+}
+.kanban-card:hover .kanban-card-actions, .kanban-card:focus-within .kanban-card-actions { display: flex; }
+.kanban-card-actions .icon-btn { width: 26px; height: 26px; font-size: 15px; }
+.kanban-add { font-size: 13px; padding: 6px 8px; }
+.kanban-new-lane {
+  flex: 0 0 160px; border: 1px dashed var(--border); background: none; color: var(--text-muted);
+  border-radius: 10px; padding: 12px; font: inherit; cursor: pointer;
+}
+.kanban-new-lane:hover { background: var(--hover); }
+@media (hover: none) {
+  .kanban-card-actions { position: static; display: flex; grid-column: 1 / -1; justify-content: flex-end; box-shadow: none; border: 0; background: none; }
+}
+
+/* ---------- Grafo ---------- */
+.modal.graph { width: min(1200px, 100%); height: calc(88vh - 32px); display: flex; flex-direction: column; padding: 12px; }
+.graph-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.graph-bar h2 { margin: 0 !important; }
+.graph-bar .check { margin: 0; }
+.graph-bar .graph-depth { width: auto; padding: 4px 8px; }
+.graph-info { flex: 1; font-size: 12px; color: var(--text-faint); }
+.graph-canvas { flex: 1; min-height: 0; width: 100%; border-radius: 8px; background: var(--bg-primary); border: 1px solid var(--border); touch-action: none; cursor: grab; }
+
 /* ---------- Paleta, marcadores y vista previa ---------- */
 .command-item { flex-direction: row !important; justify-content: space-between; align-items: center; gap: 12px; }
 .command-item kbd, .switcher-hint kbd {

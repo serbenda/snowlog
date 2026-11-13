@@ -6,6 +6,8 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- **Tableros Kanban** sobre Markdown normal (`## Columna` y `- [ ] tarjeta`, con `kanban-plugin: basic` o `kanban: true` en las propiedades): arrastrar tarjetas entre columnas, añadir, editar, marcar y borrar tarjetas, y crear, renombrar, mover y borrar columnas. «Nuevo tablero Kanban» en el menú y en la paleta. El texto sigue siendo editable con Ctrl+E.
+- **Vista de grafo** (Ctrl+G o el botón del ribbon): notas y enlaces con disposición por fuerzas, zoom, arrastrar, resaltar vecinas al pasar el ratón y abrir una nota al pulsarla. «Grafo de esta nota» muestra solo la nota y sus vecinas (1 a 3 saltos); se pueden ocultar las notas sin enlaces.
 - **Paleta de comandos** (Ctrl+P o el botón `>_`): todas las acciones por nombre, sin acentos ni mayúsculas, con las últimas usadas primero. Ctrl+O sigue abriendo notas.
 - **Marcadores:** «Añadir a marcadores» en el menú de la nota o del explorador, y pestaña Marcadores en el panel izquierdo. Siguen a la nota al renombrarla o moverla y se comparten entre dispositivos (van en los ajustes cifrados).
 - **Vista previa** de la nota al pasar el ratón por un `[[enlace]]` en el modo lectura.

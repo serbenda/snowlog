@@ -4,7 +4,7 @@ import * as C from './crypto.js';
 import * as Auth from './auth.js';
 import { GitHubRepo } from './github.js';
 import { Vault, baseName, parentPath, normalizePath, extOf } from './vault.js';
-import { render, outline, wordCount, escapeHtml } from './markdown.js';
+import { render, inline, outline, wordCount, escapeHtml } from './markdown.js';
 import { planImport, formatBytes } from './import.js';
 import { exampleSpace } from './examples.js';
 import { LocalVault } from './localvault.js';
@@ -14,6 +14,8 @@ import * as Ed from './editor.js';
 import { searchNotes, tagCounts, fold } from './search.js';
 import { makeBackup, openBackup, parseBackup } from './backup.js';
 import { openCache } from './cache.js';
+import * as K from './kanban.js';
+import { buildGraph, localGraph, initLayout, step as graphStep } from './graph.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
 import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
@@ -48,6 +50,8 @@ const ICONS = {
   tag: 'M4 4h7l9 9-7 7-9-9z M8 8h.01',
   history: 'M4 12a8 8 0 1 0 2.3-5.6 M4 4v4h4 M12 8v4l3 2',
   bookmark: 'M7 4h10v16l-5-4-5 4z',
+  kanban: 'M4 5h4v14H4z M10 5h4v9h-4z M16 5h4v6h-4z',
+  graph: 'M6 7a2 2 0 1 0 0-.1z M18 6a2 2 0 1 0 0-.1z M12 18a2 2 0 1 0 0-.1z M7.5 7.8l3.4 8.6 M16.6 7.4l-3.6 8.9 M8 6.3h8',
   command: 'M4 6l5 6-5 6 M12 18h8',
   settings: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1',
   settings: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1',
@@ -1432,12 +1436,20 @@ function setMode(mode) {
   if (reading) {
     const text = $('editor').value;
     const view = $('reading');
+    if (K.isBoard(text)) {
+      renderBoard(view, text);
+      return finishMode(reading);
+    }
     view.innerHTML = trusted(render(text, { frontmatter: true }));
     applyCssClasses(view, text);
     enableOwnTasks(view, text);
     fillEmbeds(view);
     runQueries();
   }
+  finishMode(reading);
+}
+
+function finishMode(reading) {
   const btn = $('mode-btn');
   btn.innerHTML = trusted(icon(reading ? 'edit' : 'read'));
   btn.setAttribute('aria-label', reading ? 'Cambiar a edición (Ctrl+E)' : 'Cambiar a lectura (Ctrl+E)');
@@ -2088,6 +2100,329 @@ async function importFolder(files) {
 }
 
 // --- Paneles ---
+// --- Tableros Kanban (Markdown con columnas ## y tarjetas - [ ]) ---
+// Cada cambio en el tablero reescribe el texto de la nota y se guarda como cualquier edición.
+function setBoard(board) {
+  const text = K.serializeBoard(board);
+  $('editor').value = text;
+  scheduleSave();
+  clearTimeout(sideTimer);
+  sideTimer = setTimeout(refreshSide, 300);
+  renderBoard($('reading'), text);
+}
+
+function renderBoard(view, text) {
+  const board = K.parseBoard(text);
+  view.className = 'reading markdown kanban-view';
+  const intro = board.pre.join('\n').replace(/^---\n[\s\S]*?\n---\n?/, '').trim();
+  let drag = null;
+  const dropIndex = (cardsEl, y) => {
+    const cards = [...cardsEl.querySelectorAll('.kanban-card')];
+    const i = cards.findIndex((c) => { const r = c.getBoundingClientRect(); return y < r.top + r.height / 2; });
+    return i < 0 ? cards.length : i;
+  };
+  const lanes = board.lanes.map((lane, li) => {
+    const cardsEl = h('div', { class: 'kanban-cards', role: 'list' }, ...lane.cards.map((c, ci) => {
+      const box = h('input', { type: 'checkbox', class: 'kanban-check', 'aria-label': 'Hecha', checked: c.done });
+      box.addEventListener('change', () => setBoard(K.toggleCard(board, li, ci)));
+      const textEl = h('div', { class: 'kanban-text', html: inline(c.text) });
+      const card = h('div', { class: `kanban-card${c.done ? ' done' : ''}`, role: 'listitem', draggable: 'true' },
+        box, textEl,
+        h('div', { class: 'kanban-card-actions' },
+          li > 0 ? h('button', { class: 'icon-btn', type: 'button', title: 'A la columna anterior', 'aria-label': 'A la columna anterior', onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li - 1, index: 1e9 })) }, '‹') : null,
+          li < board.lanes.length - 1 ? h('button', { class: 'icon-btn', type: 'button', title: 'A la columna siguiente', 'aria-label': 'A la columna siguiente', onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li + 1, index: 1e9 })) }, '›') : null,
+          h('button', { class: 'icon-btn', type: 'button', title: 'Editar', 'aria-label': 'Editar tarjeta', onclick: async () => {
+            const t = await promptModal('Editar tarjeta', 'Texto', c.text, 'Guardar');
+            if (t != null && t.trim()) setBoard(K.editCard(board, li, ci, t));
+          } }, '✎'),
+          h('button', { class: 'icon-btn', type: 'button', title: 'Eliminar', 'aria-label': 'Eliminar tarjeta', onclick: () => setBoard(K.deleteCard(board, li, ci)) }, '×')));
+      card.addEventListener('dragstart', (ev) => {
+        drag = { lane: li, index: ci };
+        ev.dataTransfer.effectAllowed = 'move';
+        ev.dataTransfer.setData('text/plain', c.text);
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', () => card.classList.remove('dragging'));
+      return card;
+    }));
+    cardsEl.addEventListener('dragover', (ev) => { if (drag) { ev.preventDefault(); cardsEl.classList.add('drop'); } });
+    cardsEl.addEventListener('dragleave', () => cardsEl.classList.remove('drop'));
+    cardsEl.addEventListener('drop', (ev) => {
+      if (!drag) return;
+      ev.preventDefault();
+      const to = { lane: li, index: dropIndex(cardsEl, ev.clientY) };
+      const from = drag;
+      drag = null;
+      setBoard(K.moveCard(board, from, to));
+    });
+    const add = h('input', { class: 'input kanban-add', placeholder: '+ Añadir tarjeta', 'aria-label': `Añadir tarjeta a ${lane.title}` });
+    add.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && add.value.trim()) {
+        ev.preventDefault();
+        setBoard(K.addCard(board, li, add.value));
+        $('reading').querySelectorAll('.kanban-add')[li]?.focus();
+      }
+    });
+    const done = lane.cards.filter((c) => c.done).length;
+    return h('section', { class: 'kanban-lane', 'aria-label': lane.title },
+      h('header', { class: 'kanban-lane-head' },
+        h('span', { class: 'kanban-lane-title', html: inline(lane.title) }),
+        h('span', { class: 'kanban-count' }, done ? `${done}/${lane.cards.length}` : String(lane.cards.length)),
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Opciones de ${lane.title}`, html: icon('more'), onclick: (ev) => {
+          const r = ev.currentTarget.getBoundingClientRect();
+          openMenu(r.left, r.bottom, [
+            ['rename', 'Renombrar columna', async () => {
+              const t = await promptModal('Renombrar columna', 'Nombre', lane.title, 'Renombrar');
+              if (t != null && t.trim()) setBoard(K.renameLane(board, li, t));
+            }],
+            li > 0 && ['chevronLeft', 'Mover a la izquierda', () => setBoard(K.moveLane(board, li, li - 1))],
+            li < board.lanes.length - 1 && ['chevron', 'Mover a la derecha', () => setBoard(K.moveLane(board, li, li + 1))],
+            null,
+            ['trash', 'Eliminar columna', async () => {
+              if (lane.cards.length && !(await confirmModal('Eliminar columna', `Se borrarán también sus ${lane.cards.length} tarjetas.`, 'Eliminar'))) return;
+              setBoard(K.deleteLane(board, li));
+            }, 'danger'],
+          ].filter((x) => x !== false));
+        } })),
+      cardsEl, add);
+  });
+  const newLane = h('button', { class: 'kanban-new-lane', type: 'button', onclick: async () => {
+    const t = await promptModal('Nueva columna', 'Nombre', '', 'Crear');
+    if (t != null && t.trim()) setBoard(K.addLane(board, t));
+  } }, '+ Columna');
+  const parts = [];
+  if (intro) {
+    const introEl = h('div', { class: 'kanban-intro' });
+    introEl.innerHTML = trusted(render(intro));
+    parts.push(introEl);
+  }
+  parts.push(h('div', { class: 'kanban' }, ...lanes, newLane));
+  view.replaceChildren(...parts);
+}
+
+async function newBoard() {
+  await saveNow();
+  const path = S.vault.freePath(currentFolder(), 'Tablero');
+  const id = await run(() => S.vault.createNote(path, K.NEW_BOARD));
+  if (!id) return;
+  expandTo(path);
+  S.mode = 'read';
+  await openNote(id);
+}
+
+// --- Vista de grafo ---
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+async function graphView(focusId = null) {
+  if (!S.vault) return;
+  await saveNow();
+  modal((close) => {
+    const canvas = h('canvas', { class: 'graph-canvas', 'aria-label': 'Grafo de notas' });
+    const info = h('span', { class: 'graph-info' }, 'Preparando…');
+    const localBox = h('input', { type: 'checkbox', id: 'graph-local', checked: !!focusId });
+    const depthSel = h('select', { class: 'input graph-depth', 'aria-label': 'Saltos' }, ...[1, 2, 3].map((d) => h('option', { value: String(d) }, `${d} salto${d > 1 ? 's' : ''}`)));
+    const orphans = h('input', { type: 'checkbox', id: 'graph-orphans', checked: true });
+    const box = h('div', { class: 'modal graph', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Vista de grafo' },
+      h('div', { class: 'graph-bar' },
+        h('h2', {}, 'Grafo'),
+        S.current ? h('label', { class: 'check', for: 'graph-local' }, localBox, 'Solo esta nota') : null,
+        S.current ? depthSel : null,
+        h('label', { class: 'check', for: 'graph-orphans' }, orphans, 'Notas sin enlaces'),
+        info,
+        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cerrar')),
+      canvas);
+    let g = { nodes: [], links: [] };
+    let full = null;
+    let raf = 0;
+    let alive = true;
+    let energy = Infinity;
+    let view = { x: 0, y: 0, k: 1 };
+    let hover = -1;
+    let dragNode = -1;
+    let pan = null;
+    let moved = false;
+    const ctx = canvas.getContext('2d');
+    const size = () => {
+      const r = canvas.getBoundingClientRect();
+      const dpr = devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(r.width * dpr));
+      canvas.height = Math.max(1, Math.round(r.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return r;
+    };
+    const toWorld = (px, py) => {
+      const r = canvas.getBoundingClientRect();
+      return { x: (px - r.left - r.width / 2 - view.x) / view.k, y: (py - r.top - r.height / 2 - view.y) / view.k };
+    };
+    const nodeAt = (px, py) => {
+      const p = toWorld(px, py);
+      let best = -1;
+      let bd = Infinity;
+      g.nodes.forEach((n, i) => {
+        const d = Math.hypot(n.x - p.x, n.y - p.y);
+        const rad = 4 + Math.sqrt(n.deg) * 2 + 4 / view.k;
+        if (d < rad && d < bd) { best = i; bd = d; }
+      });
+      return best;
+    };
+    const neighbors = (i) => {
+      const set = new Set([i]);
+      for (const l of g.links) {
+        if (l.s === i) set.add(l.t);
+        if (l.t === i) set.add(l.s);
+      }
+      return set;
+    };
+    const draw = () => {
+      const r = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, r.width, r.height);
+      ctx.save();
+      ctx.translate(r.width / 2 + view.x, r.height / 2 + view.y);
+      ctx.scale(view.k, view.k);
+      const lit = hover >= 0 ? neighbors(hover) : null;
+      const accent = cssVar('--accent');
+      const faint = cssVar('--text-faint');
+      const text = cssVar('--text-normal');
+      ctx.lineWidth = 1.2 / view.k;
+      for (const l of g.links) {
+        const a = g.nodes[l.s];
+        const b = g.nodes[l.t];
+        ctx.strokeStyle = lit && (l.s === hover || l.t === hover) ? accent : faint;
+        ctx.globalAlpha = lit && !(l.s === hover || l.t === hover) ? 0.15 : 0.45;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.font = `${12 / view.k}px ${cssVar('--font-ui')}`;
+      ctx.textAlign = 'center';
+      g.nodes.forEach((n, i) => {
+        const rad = 4 + Math.sqrt(n.deg) * 2;
+        const isCur = n.id === S.current;
+        ctx.globalAlpha = lit && !lit.has(i) ? 0.3 : 1;
+        ctx.fillStyle = isCur || i === hover ? accent : faint;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
+        ctx.fill();
+        if (view.k > 0.7 || i === hover || isCur || (lit && lit.has(i)) || n.deg > 5) {
+          ctx.fillStyle = text;
+          ctx.fillText(n.name, n.x, n.y + rad + 13 / view.k);
+        }
+      });
+      ctx.restore();
+    };
+    let fitted = false;
+    let touched = false;
+    // Encaja el grafo en la pantalla cuando se ha quedado quieto (si no lo ha movido la persona).
+    const fit = () => {
+      if (!g.nodes.length) return;
+      const r = canvas.getBoundingClientRect();
+      const xs = g.nodes.map((n) => n.x);
+      const ys = g.nodes.map((n) => n.y);
+      const w = Math.max(...xs) - Math.min(...xs) + 120;
+      const hh = Math.max(...ys) - Math.min(...ys) + 120;
+      view.k = Math.max(0.1, Math.min(2, Math.min(r.width / w, r.height / hh)));
+      view.x = -((Math.max(...xs) + Math.min(...xs)) / 2) * view.k;
+      view.y = -((Math.max(...ys) + Math.min(...ys)) / 2) * view.k;
+    };
+    const loop = () => {
+      if (!alive) return;
+      if (energy > 0.02 || dragNode >= 0) energy = graphStep(g, { fixed: dragNode });
+      if (!touched && (!fitted || energy > 0.02)) {
+        fit();
+        fitted = energy <= 0.02;
+      }
+      draw();
+      raf = requestAnimationFrame(loop);
+    };
+    const rebuild = () => {
+      let next = full;
+      if (S.current && localBox.checked) next = localGraph(full, S.current, Number(depthSel.value));
+      if (!orphans.checked) {
+        const keep = next.nodes.map((n, i) => (n.deg > 0 || n.id === S.current ? i : -1)).filter((i) => i >= 0);
+        const map = new Map(keep.map((o, i) => [o, i]));
+        next = { nodes: keep.map((i) => next.nodes[i]), links: next.links.filter((l) => map.has(l.s) && map.has(l.t)).map((l) => ({ s: map.get(l.s), t: map.get(l.t) })) };
+      }
+      g = initLayout(structuredClone(next));
+      energy = Infinity;
+      fitted = false;
+      touched = false;
+      view = { x: 0, y: 0, k: g.nodes.length > 200 ? 0.5 : 1 };
+      info.textContent = `${g.nodes.length} nota${g.nodes.length === 1 ? '' : 's'} · ${g.links.length} enlace${g.links.length === 1 ? '' : 's'}`;
+    };
+    for (const el of [localBox, depthSel, orphans]) el.addEventListener('change', rebuild);
+    canvas.addEventListener('pointerdown', (ev) => {
+      canvas.setPointerCapture(ev.pointerId);
+      touched = true;
+      moved = false;
+      dragNode = nodeAt(ev.clientX, ev.clientY);
+      pan = dragNode < 0 ? { x: ev.clientX - view.x, y: ev.clientY - view.y } : null;
+    });
+    canvas.addEventListener('pointermove', (ev) => {
+      if (dragNode >= 0) {
+        const p = toWorld(ev.clientX, ev.clientY);
+        Object.assign(g.nodes[dragNode], { x: p.x, y: p.y });
+        moved = true;
+        energy = Infinity;
+      } else if (pan) {
+        view.x = ev.clientX - pan.x;
+        view.y = ev.clientY - pan.y;
+        moved = true;
+      } else {
+        hover = nodeAt(ev.clientX, ev.clientY);
+        canvas.style.cursor = hover >= 0 ? 'pointer' : 'grab';
+      }
+    });
+    canvas.addEventListener('pointerup', (ev) => {
+      const hit = nodeAt(ev.clientX, ev.clientY);
+      const wasDrag = moved;
+      dragNode = -1;
+      pan = null;
+      if (!wasDrag && hit >= 0) {
+        const id = g.nodes[hit].id;
+        close(null);
+        openNote(id);
+      }
+    });
+    canvas.addEventListener('wheel', (ev) => {
+      ev.preventDefault();
+      touched = true;
+      const r = canvas.getBoundingClientRect();
+      const k = Math.max(0.1, Math.min(4, view.k * Math.exp(-ev.deltaY * 0.0015)));
+      const cx = ev.clientX - r.left - r.width / 2;
+      const cy = ev.clientY - r.top - r.height / 2;
+      view.x = cx - ((cx - view.x) * k) / view.k;
+      view.y = cy - ((cy - view.y) * k) / view.k;
+      view.k = k;
+    }, { passive: false });
+    const ro = new ResizeObserver(() => size());
+    ro.observe(canvas);
+    // Se para todo al cerrar el diálogo (o al bloquear, que vacía los diálogos).
+    const stop = new MutationObserver(() => {
+      if (!box.isConnected) {
+        alive = false;
+        cancelAnimationFrame(raf);
+        ro.disconnect();
+        stop.disconnect();
+      }
+    });
+    stop.observe($('modal-root'), { childList: true });
+    (async () => {
+      await ensureIndex().catch(() => {});
+      syncIndex();
+      if (!alive) return;
+      full = buildGraph(indexedNotes());
+      rebuild();
+      size();
+      loop();
+    })();
+    return box;
+  });
+}
+
 // --- Marcadores (rutas de notas, en los ajustes de la bóveda: se comparten entre dispositivos) ---
 const bookmarks = () => (Array.isArray(WS.bookmarks) ? WS.bookmarks : []);
 const isBookmarked = (id) => !!S.vault?.index.notes[id] && bookmarks().includes(S.vault.index.notes[id].path);
@@ -2152,6 +2487,9 @@ function commands() {
     cur && ['move', 'Mover nota', '', () => moveNotePrompt(cur)],
     cur && ['history', 'Historial de versiones', '', () => historyModal(cur)],
     cur && ['delete', 'Eliminar nota', '', () => deleteNote(cur)],
+    ['graph', 'Vista de grafo', 'Ctrl+G', () => graphView()],
+    cur && ['graph-local', 'Grafo de esta nota', '', () => graphView(cur)],
+    ['board', 'Nuevo tablero Kanban', '', () => newBoard()],
     ['files', 'Ver archivos', '', () => showLeftPane('files')],
     ['tags', 'Ver etiquetas', '', () => showLeftPane('tags')],
     ['bookmarks', 'Ver marcadores', '', () => showLeftPane('bookmarks')],
@@ -2782,6 +3120,8 @@ function noteMenu(x, y) {
     ['search', 'Buscar en todas las notas (Ctrl+Mayús+F)', () => openSearch()],
     ['filePlus', 'Nueva nota', () => newNote()],
     ['template', 'Nueva nota desde plantilla…', () => newFromTemplate()],
+    ['kanban', 'Nuevo tablero Kanban', () => newBoard()],
+    ['graph', 'Vista de grafo (Ctrl+G)', () => graphView()],
     null,
     ['today', 'Nota de hoy (Ctrl+D)', () => openDaily()],
     ['home', 'Panel principal', () => openHome()],
@@ -2804,6 +3144,7 @@ function noteMenu(x, y) {
 
 // --- Acciones y atajos ---
 const ACTIONS = {
+  graph: () => graphView(),
   palette: () => commandPalette(),
   settings: () => settingsModal(),
   'toggle-left': () => togglePanel('left'),
@@ -2823,7 +3164,7 @@ const ACTIONS = {
 
 const BUTTON_ICONS = {
   'toggle-left': 'files', switcher: 'search', 'new-note': 'filePlus', 'new-folder': 'folderPlus', 'collapse-all': 'collapse', import: 'import', today: 'today', home: 'home',
-  lock: 'lock', logout: 'logout', settings: 'settings', palette: 'command', 'note-menu': 'more', 'toggle-right': 'sidebarRight', 'toggle-mode': 'read',
+  lock: 'lock', logout: 'logout', settings: 'settings', palette: 'command', graph: 'graph', 'note-menu': 'more', 'toggle-right': 'sidebarRight', 'toggle-mode': 'read',
 };
 
 function setupUi() {
@@ -2935,6 +3276,7 @@ function setupUi() {
     if (k === 'e') { ev.preventDefault(); ACTIONS['toggle-mode'](); }
     else if (k === 'o') { ev.preventDefault(); quickSwitcher(); }
     else if (k === 'p') { ev.preventDefault(); commandPalette(); }
+    else if (k === 'g') { ev.preventDefault(); graphView(); }
     else if (k === 'n') { ev.preventDefault(); newNote(); }
     else if (k === 's') { ev.preventDefault(); saveNow(); }
     else if (k === 'd') { ev.preventDefault(); openDaily(); }

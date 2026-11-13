@@ -48,6 +48,8 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/cache.js      caché local (IndexedDB) de ficheros cifrados del repo
   js/links.js      reescribir [[enlaces]] al renombrar o mover
   js/search.js     búsqueda de texto completo y recuento de etiquetas
+  js/kanban.js     tableros Kanban sobre Markdown (leer, cambiar y escribir)
+  js/graph.js      grafo de notas y disposición por fuerzas
   js/editor.js     ayudas del editor: listas, sangría, atajos, autocompletar [[ y resaltado
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)
