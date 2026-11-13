@@ -6,6 +6,8 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- La versión online funciona sin conexión: la web se guarda en el navegador (service worker) y se abre sin red; se pueden leer las notas ya descargadas, editarlas y crear notas nuevas. Lo escrito queda cifrado en este dispositivo y se sube solo al volver la red, con la detección de conflictos de siempre. La barra de estado avisa: «Sin conexión · 2 cambios por subir». Renombrar, borrar, mover o adjuntar sin conexión avisa de que hace falta red (salvo renombrar una nota creada sin conexión).
+- Se puede instalar como aplicación desde el navegador (manifiesto web).
 - Caché local cifrada (IndexedDB) de las notas y adjuntos de la versión online: solo se descargan los que han cambiado. Con 1.000 notas, entrar tarda menos de medio segundo y la búsqueda está lista en menos de 1 s; en un dispositivo nuevo, la primera vez se descargan todas en segundo plano (10 a la vez) mientras ya puedes trabajar. «Cerrar sesión» y «Olvidar este dispositivo» la borran.
 - La búsqueda dice cuántas notas encajan aunque solo muestre las 200 primeras, y cuántas lleva descifradas mientras prepara el índice.
 - Copias de seguridad: «Copia de seguridad cifrada» descarga un fichero `.snowlog` con todas las notas y adjuntos cifrados, que se abre con la frase de paso o con el código de recuperación, sin GitHub. «Abrir copia de seguridad…» la importa en una carpeta aparte o la descarga como .zip sin cifrar; también funciona en la versión portátil, sin red. En local, la copia es el .zip de siempre.

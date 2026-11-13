@@ -250,7 +250,7 @@ test('caché local cifrada: no vuelve a bajar lo que no ha cambiado y sigue al d
     await first.read(a);
     await first.read(b);
     assert.equal(gets, 2);
-    for (const [, v] of store.map) assert.ok(!v.content.includes('a1') && !v.content.includes('b1'), 'la caché va cifrada');
+    for (const [, v] of store.map) assert.match(v.content, /^[A-Za-z0-9+/=\s]+$/, 'la caché solo guarda texto cifrado (base64)');
     gets = 0;
     const second = new Vault(newRepo(), vault.dek, { store });
     await second.loadIndex();
@@ -279,4 +279,54 @@ test('caché local cifrada: no vuelve a bajar lo que no ha cambiado y sigue al d
   } finally {
     globalThis.fetch = fake.fetch;
   }
+});
+
+test('sin conexión: se sigue escribiendo y al volver la red se sube todo, con conflictos si los hay', async () => {
+  const { memoryCache } = await import('../public/js/cache.js');
+  const store = memoryCache();
+  const comun = await vault.createNote('Offline/Común', 'base');
+  const sola = await vault.createNote('Offline/Solo aquí', 'base');
+  const portatil = new Vault(newRepo(), vault.dek, { store });
+  await portatil.loadIndex();
+  await portatil.read(comun);
+  await portatil.read(sola);
+
+  const sinRed = async () => { throw new TypeError('Failed to fetch'); };
+  globalThis.fetch = sinRed;
+  try {
+    assert.deepEqual(await portatil.saveNote(sola, 'escrito en el avión'), { queued: true });
+    assert.ok(portatil.offline);
+    assert.deepEqual(await portatil.saveNote(comun, 'mi versión del avión'), { queued: true });
+    const nueva = await portatil.createNote('Offline/Sin título', 'idea');
+    await portatil.renameNote(nueva, 'Offline/Idea del avión'); // nota nueva sin subir: se renombra aquí
+    await assert.rejects(portatil.renameNote(sola, 'Otro nombre'), /offline/);
+    for (const [, v] of store.map) assert.ok(!JSON.stringify(v).includes('avión'), 'lo pendiente va cifrado');
+
+    // Recargar la app sin red: se abre con el índice y lo pendiente guardados en la caché.
+    const recargado = new Vault(newRepo(), vault.dek, { store });
+    await recargado.loadIndex();
+    assert.ok(recargado.offline);
+    assert.equal(recargado.outbox.size, 3);
+    assert.equal(await recargado.read(sola), 'escrito en el avión');
+    assert.equal(recargado.findByTitle('Idea del avión').id, nueva);
+    await assert.rejects(recargado.sync(), /offline/);
+  } finally {
+    globalThis.fetch = fake.fetch;
+  }
+  // Mientras tanto, otro dispositivo cambió la nota común.
+  await vault.saveNote(comun, 'versión del móvil');
+
+  const otraVez = new Vault(newRepo(), vault.dek, { store });
+  await otraVez.loadIndex();
+  const res = await otraVez.sync();
+  assert.equal(res.synced, 3);
+  assert.equal(res.conflicts.length, 1);
+  assert.equal(otraVez.outbox.size, 0);
+  assert.equal(await store.get('outbox'), undefined);
+  const check = new Vault(newRepo(), vault.dek);
+  await check.loadIndex();
+  assert.equal(await check.read(sola), 'escrito en el avión');
+  assert.equal(await check.read(comun), 'mi versión del avión');
+  assert.equal(await check.read(res.conflicts[0].id), 'versión del móvil');
+  assert.equal(await check.read(check.findByTitle('Idea del avión').id), 'idea');
 });

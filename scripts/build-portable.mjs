@@ -77,6 +77,7 @@ const swap = (re, value) => {
 };
 swap(/<meta http-equiv="Content-Security-Policy" content="[^"]*">/, `<meta http-equiv="Content-Security-Policy" content="${csp}">`);
 swap(/<link rel="icon" href="icon\.svg"[^>]*>/, `<link rel="icon" href="${iconUri}" type="image/svg+xml">`);
+swap(/\n<link rel="manifest" href="manifest\.webmanifest">/, ''); // sin service worker ni instalación
 swap(/<link rel="stylesheet" href="css\/app\.css">/, () => `<style>${css}</style>`);
 swap(/<script type="module" src="js\/app\.js"><\/script>\n?/, '');
 swap(/<title>Snowlog<\/title>/, '<title>Snowlog portátil</title>');

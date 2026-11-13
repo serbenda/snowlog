@@ -55,6 +55,9 @@ export function conflictName(name, date = new Date()) {
   return `${name} (otro dispositivo ${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}${p(date.getMinutes())})`;
 }
 
+// fetch falla con TypeError cuando no hay red (no cuando GitHub responde con un error).
+export const isNetworkError = (e) => e instanceof TypeError || e?.name === 'TypeError';
+
 export function normalizePath(path) {
   return path
     .split('/')
@@ -85,6 +88,10 @@ export class Vault {
     this.repo = repo;
     this.dek = dek;
     this.store = store;
+    // Sin conexión: los guardados y las notas nuevas esperan en `outbox` (cifrada en la caché)
+    // hasta que vuelva la red y se llame a sync().
+    this.offline = false;
+    this.outbox = new Map();
     this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
     this.fileCache = new Map();
@@ -118,7 +125,19 @@ export class Vault {
   }
 
   async loadIndex() {
-    const text = await this.repo.readText(INDEX_FILE);
+    let text;
+    try {
+      text = await this.repo.readText(INDEX_FILE);
+      this.offline = false;
+      if (text && this.store) await this.store.put('index', { content: text });
+    } catch (e) {
+      // Sin red: el último índice conocido (con los cambios hechos aquí sin conexión).
+      const hit = isNetworkError(e) && this.store && await this.store.get('index');
+      if (!hit) throw e;
+      text = hit.content;
+      this.offline = true;
+    }
+    await this.loadOutbox();
     if (text) this.index = JSON.parse(await C.decryptText(this.dek, text, 'index'));
     if (!this.index.folders) this.index.folders = [];
     // Lo que otro dispositivo cambió se vuelve a leer del repo (la versión de aquí ya no es la última).
@@ -163,6 +182,7 @@ export class Vault {
   // Aplica un cambio al índice (y ficheros) en un solo commit. Si otro dispositivo
   // escribió antes, recarga el índice, repite el cambio y reintenta una vez.
   async apply(message, mutate, files = async () => []) {
+    if (this.offline) throw new Error('offline');
     for (let attempt = 0; attempt < 2; attempt++) {
       const snapshot = structuredClone(this.index);
       try {
@@ -170,9 +190,14 @@ export class Vault {
         const result = mutate(this.index);
         await this.repo.commit([...fileChanges, await this.indexChange()], message);
         await this.cacheChanges(fileChanges);
+        if (this.store) await this.store.put('index', { content: (await this.indexChange()).content });
         return result;
       } catch (e) {
         this.index = snapshot;
+        if (isNetworkError(e)) {
+          this.offline = true;
+          throw new Error('offline');
+        }
         if (e.status === 409 && attempt === 0) {
           await this.repo.fetchHead();
           await this.loadIndex();
@@ -244,6 +269,24 @@ export class Vault {
     this.ensureFree(p);
     const id = C.randomId();
     const now = new Date().toISOString();
+    if (this.offline) return this.createOffline(id, p, text, now);
+    try {
+      await this.createOnline(id, p, text, now);
+    } catch (e) {
+      if (e.message !== 'offline') throw e;
+      return this.createOffline(id, p, text, now);
+    }
+    return id;
+  }
+
+  async createOffline(id, p, text, now) {
+    this.index.notes[id] = { path: p, created: now, updated: now };
+    this.addFolderChain(this.index, parentPath(p));
+    await this.queue(id, text, true);
+    return id;
+  }
+
+  async createOnline(id, p, text, now) {
     await this.apply(
       'Snowlog: nueva nota',
       (idx) => {
@@ -317,7 +360,80 @@ export class Vault {
   // esta versión queda en la nota y la otra se guarda como copia al lado.
   // Devuelve { conflict: { id, path } } cuando ha hecho falta la copia.
   async saveNote(id, text) {
-    const mine = { ...this.index.notes[id] };
+    if (this.offline) return this.queue(id, text);
+    try {
+      return await this.saveOnline(id, text);
+    } catch (e) {
+      if (e.message !== 'offline') throw e;
+      return this.queue(id, text);
+    }
+  }
+
+  // --- Sin conexión ---
+  // Guarda el cambio aquí (memoria y caché cifrada) para subirlo con sync().
+  async queue(id, text, isNew = false) {
+    const meta = this.index.notes[id];
+    const prev = this.outbox.get(id);
+    meta.updated = new Date().toISOString();
+    this.outbox.set(id, {
+      text,
+      path: meta.path,
+      created: meta.created,
+      base: prev ? prev.base : (isNew ? null : this.base.get(id) ?? null),
+      isNew: prev ? prev.isNew : isNew,
+    });
+    this.cache.set(id, text);
+    if (this.store) {
+      await this.store.put(notePath(id), { v: meta.updated, content: await C.encryptText(this.dek, text, id) });
+      await this.store.put('index', { content: (await this.indexChange()).content });
+      await this.saveOutbox();
+    }
+    return { queued: true };
+  }
+
+  async saveOutbox() {
+    if (!this.store) return;
+    if (!this.outbox.size) return this.store.delete('outbox');
+    return this.store.put('outbox', { content: await C.encryptText(this.dek, JSON.stringify([...this.outbox]), 'outbox') });
+  }
+
+  async loadOutbox() {
+    const hit = this.store && await this.store.get('outbox');
+    if (!hit) return;
+    try {
+      this.outbox = new Map(JSON.parse(await C.decryptText(this.dek, hit.content, 'outbox')));
+    } catch { /* de otra clave o dañada: se ignora */ }
+  }
+
+  // Vuelve a conectar (recarga el índice) y sube lo pendiente. Cada nota se guarda como un guardado normal, con la detección de
+  // conflictos respecto a la versión que había antes de quedarse sin red.
+  // Devuelve { synced, conflicts: [{ id, path }] }. Si la red vuelve a fallar, lanza 'offline'.
+  async sync() {
+    try {
+      await this.repo.fetchHead();
+    } catch (e) {
+      if (isNetworkError(e)) throw new Error('offline');
+      throw e;
+    }
+    const pending = [...this.outbox];
+    await this.loadIndex();
+    if (this.offline) throw new Error('offline');
+    const conflicts = [];
+    let synced = 0;
+    for (const [id, e] of pending) {
+      if (e.base) this.base.set(id, e.base);
+      else this.base.delete(id);
+      const res = await this.saveOnline(id, e.text, { path: e.path, created: e.created, updated: e.base });
+      this.outbox.delete(id);
+      await this.saveOutbox();
+      synced += 1;
+      if (res.conflict) conflicts.push(res.conflict);
+    }
+    return { synced, conflicts };
+  }
+
+  async saveOnline(id, text, meta) {
+    const mine = meta || { ...this.index.notes[id] };
     let conflict = null;
     await this.apply(
       'Snowlog: guardar nota',
@@ -368,6 +484,18 @@ export class Vault {
     const p = normalizePath(newPath);
     validName(p);
     this.ensureFree(p, id);
+    // Una nota creada sin conexión aún no está en el repo: se renombra solo aquí.
+    const pending = this.outbox.get(id);
+    if (pending?.isNew) {
+      this.index.notes[id].path = p;
+      this.addFolderChain(this.index, parentPath(p));
+      pending.path = p;
+      if (this.store) {
+        await this.store.put('index', { content: (await this.indexChange()).content });
+        await this.saveOutbox();
+      }
+      return;
+    }
     await this.apply('Snowlog: renombrar nota', (idx) => {
       if (!idx.notes[id]) throw new Error('missing');
       idx.notes[id].path = p;

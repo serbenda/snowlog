@@ -105,6 +105,7 @@ function errText(e) {
     no_worker: 'Falta configurar el servicio de login (authWorker).',
     session_expired: 'La sesión de GitHub ha caducado. Vuelve a entrar.',
     vault_exists: 'Ya hay una bóveda en el repo.',
+    offline: 'Sin conexión: esto se podrá hacer cuando vuelva la red. Lo que escribes en las notas sí se guarda.',
     bad_backup: 'Ese fichero no es una copia de seguridad de Snowlog o está dañado.',
     bad_zip: 'El contenido de la copia está dañado.',
     bad_type: 'Solo se pueden adjuntar imágenes (png, jpg, gif, webp, avif, bmp) y PDF.',
@@ -586,9 +587,12 @@ async function afterUnlock(fresh) {
       try {
         await renewToken();
       } catch (e) {
-        S.dek = null;
-        S.cred = null;
-        return showLogin(errText(e));
+        // Sin red se entra igual con lo guardado en este dispositivo; el token se renueva al volver.
+        if (!(e instanceof TypeError)) {
+          S.dek = null;
+          S.cred = null;
+          return showLogin(errText(e));
+        }
       }
     }
     // Actualiza la copia local de vault.json por si cambió en otro dispositivo.
@@ -606,6 +610,7 @@ async function afterUnlock(fresh) {
   S.vault = new Vault(S.repo, S.dek, { store: noteCache() });
   await S.vault.loadIndex();
   enterApp();
+  if (S.vault.outbox.size && !S.vault.offline) trySync();
 }
 
 function showRecover(vaultFile, fresh) {
@@ -741,9 +746,7 @@ function enterApp() {
   S.notesIdx.clear();
   S.indexReady = null;
   S.calMonth = null;
-  $('st-place').textContent = S.local
-    ? (S.vault.kind === 'browser' ? 'En este navegador' : `Carpeta «${S.vault.label}»`)
-    : 'GitHub · cifrado';
+  updatePlace();
   for (const [action, label] of [['lock', S.local ? 'Cerrar carpeta' : 'Bloquear'], ['logout', S.local ? 'Olvidar esta carpeta' : 'Cerrar sesión']]) {
     const b = document.querySelector(`.ribbon [data-action=${action}]`);
     if (b) { b.title = label; b.setAttribute('aria-label', label); }
@@ -777,7 +780,12 @@ function ensureIndex() {
       const worker = async () => {
         while (i < ids.length && S.vault === vault) {
           const id = ids[i++];
-          await vault.read(id);
+          try {
+            await vault.read(id);
+          } catch (e) {
+            // Sin conexión, las notas que no están en la caché se quedan fuera del índice por ahora.
+            if (!vault.offline && !(e instanceof TypeError)) throw e;
+          }
           S.indexProgress.done += 1;
         }
       };
@@ -1550,6 +1558,56 @@ function jumpTo(head, index) {
 }
 
 // La nota cambió también en otro sitio: se guardó esta versión y la otra quedó en una copia.
+// Dónde están las notas, y si falta conexión, cuántos cambios esperan a subirse.
+function updatePlace() {
+  const el = $('st-place');
+  if (!S.vault) return;
+  if (S.local) {
+    el.textContent = S.vault.kind === 'browser' ? 'En este navegador' : `Carpeta «${S.vault.label}»`;
+    el.className = '';
+    return;
+  }
+  const n = S.vault.outbox.size;
+  el.textContent = S.vault.offline
+    ? `Sin conexión${n ? ` · ${n} cambio${n === 1 ? '' : 's'} por subir` : ''}`
+    : (n ? `Subiendo ${n} cambio${n === 1 ? '' : 's'}…` : 'GitHub · cifrado');
+  el.className = S.vault.offline ? 'offline' : '';
+}
+
+// Cuando vuelve la red: recarga el índice y sube lo que se escribió sin conexión.
+let syncing = null;
+function trySync() {
+  if (!S.vault || S.local || syncing) return syncing;
+  const vault = S.vault;
+  syncing = (async () => {
+    try {
+      await saveNow();
+      const res = await vault.sync();
+      if (S.vault !== vault) return;
+      for (const c of res.conflicts) reportConflict(c);
+      if (res.synced) notice(`Conexión recuperada: ${res.synced} cambio${res.synced === 1 ? '' : 's'} subido${res.synced === 1 ? '' : 's'}.`);
+      if (S.current && !S.dirty && vault.index.notes[S.current]) {
+        const text = await vault.read(S.current);
+        if (!S.dirty && S.vault === vault && $('editor').value !== text) {
+          $('editor').value = text;
+          autosize();
+          if (S.mode === 'read') setMode('read');
+        }
+      }
+      renderTree();
+      syncIndex();
+      S.indexReady = null;
+      ensureIndex().catch(() => {});
+    } catch (e) {
+      if (e.message !== 'offline') notice(`No se pudo sincronizar: ${errText(e)}`, 'error');
+    } finally {
+      syncing = null;
+      updatePlace();
+    }
+  })();
+  return syncing;
+}
+
 function reportConflict(conflict) {
   if (S.vault?.index.notes[conflict.id]) expandTo(conflict.path);
   renderTree();
@@ -1564,7 +1622,7 @@ function reportConflict(conflict) {
 function setStatus(kind) {
   const el = $('st-sync');
   const text = {
-    loading: 'Descifrando…', pending: 'Sin guardar', saving: 'Cifrando y guardando…', saved: 'Guardado', error: 'Error al guardar', '': '',
+    loading: 'Descifrando…', queued: 'Guardado aquí (sin conexión)', pending: 'Sin guardar', saving: 'Cifrando y guardando…', saved: 'Guardado', error: 'Error al guardar', '': '',
   }[kind];
   el.textContent = text;
   el.className = kind === 'error' ? 'error' : '';
@@ -1593,7 +1651,8 @@ function saveNow() {
     .then(() => vault.saveNote(id, text))
     .then((res) => {
       if (res?.conflict) reportConflict(res.conflict);
-      if (!S.dirty && S.current === id) setStatus('saved');
+      if (!S.dirty && S.current === id) setStatus(res?.queued ? 'queued' : 'saved');
+      updatePlace();
       syncIndex();
       renderCalendar();
     })
@@ -2547,6 +2606,9 @@ function setupUi() {
     else if (k === 'd') { ev.preventDefault(); openDaily(); }
   });
 
+  addEventListener('online', () => trySync());
+  addEventListener('offline', () => { if (S.vault && !S.local) { S.vault.offline = true; updatePlace(); } });
+  setInterval(() => { if (S.vault?.offline && navigator.onLine) trySync(); }, 30000);
   // Al cambiar de pestaña o de app (móvil) se guarda enseguida.
   document.addEventListener('visibilitychange', () => { if (document.hidden && S.dirty) saveNow(); });
   addEventListener('beforeunload', (ev) => {
@@ -2565,7 +2627,15 @@ function setupUi() {
 }
 
 // ---------------------------------------------------------------------------
+// La web se guarda para abrirse sin conexión (solo en la versión online servida por https o localhost).
+function registerServiceWorker() {
+  if (CONFIG.mode !== 'online' || !('serviceWorker' in navigator)) return;
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
 async function boot() {
+  registerServiceWorker();
   setupUi();
   trackActivity();
   if (CONFIG.mode === 'portable') {

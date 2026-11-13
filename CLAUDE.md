@@ -51,6 +51,7 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/editor.js     ayudas del editor: listas, sangría, atajos, autocompletar [[ y resaltado
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)
+  sw.js            service worker: guarda la web para abrirla sin conexión (nunca datos de GitHub)
 scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)
 tests/             node --test; incluye un GitHub falso en memoria

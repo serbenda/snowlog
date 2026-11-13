@@ -64,6 +64,11 @@ aunque se robe no puede modificar el código de la web.
   el repo, con la versión del índice (`updated`). Si coincide, no se descarga; si no descifra (dañada o
   manipulada), se vuelve a pedir. Medido con 1.000 notas: entrar 0,3 s; índice listo 0,6 s con caché y 3,8 s sin
   ella contra un GitHub simulado sin latencia (con GitHub real, unos 15 s en segundo plano la primera vez).
+- Sin conexión: `sw.js` guarda solo la web (mismo origen; nunca GitHub ni el login), red primero y caché si
+  falla. Las notas salen de la caché cifrada. Si un commit falla por red (`TypeError`), `Vault` pasa a
+  `offline` y los guardados y notas nuevas van a `outbox` (cifrada con la DEK en IndexedDB, junto con el índice
+  local). `sync()` (evento `online` o cada 30 s) recarga el índice y sube cada nota con `saveOnline`, así que los
+  conflictos se tratan igual. Si al abrir no se puede renovar el token por falta de red, se entra igual.
 - Copias (`backup.js`): `.snowlog` = JSON con `vault.json` (claves envueltas) y un .zip cifrado con la DEK
   (AAD `snowlog-backup`). Se abre con `unlockWithAny` (frase o código). El navegador no deja guardar ficheros
   solo, así que «periódica» es un recordatorio: en `localStorage` solo se guarda la fecha de la última copia.
@@ -106,7 +111,7 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
 [DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). **Fase 1** hecha (enlaces al renombrar, editor, búsqueda, etiquetas, adjuntos y conflictos). En curso: **Fase 2**
-(hecho: historial, cambiar la frase de paso, copias de seguridad y rendimiento).
+(hecho: historial, cambiar la frase de paso, copias de seguridad, rendimiento y sin conexión).
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 
