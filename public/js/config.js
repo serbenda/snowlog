@@ -15,11 +15,12 @@ export const CONFIG = {
   authWorker: 'https://snowlog-auth.serbenda.workers.dev',
 
   // Organización del día a día (como una bóveda de Obsidian con panel y nota diaria).
+  // Son los valores por defecto: cada bóveda puede cambiarlos en «Ajustes» dentro de la app.
   workspace: {
     home: 'Inicio', // nota del panel principal
     dailyFolder: 'Diario', // carpeta de las notas diarias (AAAA-MM-DD)
-    templatesFolder: 'Plantillas',
-    attachmentsFolder: 'Adjuntos', // carpeta de plantillas (no aparecen en las consultas)
+    templatesFolder: 'Plantillas', // carpeta de plantillas (no aparecen en las consultas)
+    attachmentsFolder: 'Adjuntos', // donde van las imágenes y PDF que se pegan
     dailyTemplate: 'Plantillas/Nota diaria',
     openDailyOnStart: true, // abrir la nota de hoy al entrar, si existe la carpeta del diario
   },

@@ -541,6 +541,15 @@ export class Vault {
     });
   }
 
+  // --- Ajustes de la bóveda (van cifrados dentro del índice, así se comparten entre dispositivos) ---
+  getSettings() {
+    return { ...(this.index.settings || {}) };
+  }
+
+  async saveSettings(settings) {
+    await this.apply('Snowlog: ajustes', (idx) => { idx.settings = { ...settings }; });
+  }
+
   // --- Historial ---
   // Versiones de una nota, de la más reciente a la más antigua: [{ ref, date }].
   // La primera es la actual. Git guarda cada versión cifrada; aquí solo se listan.

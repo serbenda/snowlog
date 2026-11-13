@@ -6,6 +6,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- **Ajustes** dentro de la app (botón de engranaje o menú ⋯): panel principal, carpeta y plantilla del diario, abrir la nota de hoy al entrar, carpetas de plantillas y adjuntos, minutos hasta el bloqueo, días del recordatorio de copia y tema (automático, claro u oscuro). En online se guardan cifrados en la bóveda y valen en todos los dispositivos; en local, en `.snowlog/ajustes.json` dentro de la carpeta. `config.js` queda como valores por defecto.
 - `docs/SEGURIDAD.md`: qué protege Snowlog y frente a quién, qué queda en el dispositivo, CSP, hallazgos de la revisión y riesgos aceptados.
 - La versión online funciona sin conexión: la web se guarda en el navegador (service worker) y se abre sin red; se pueden leer las notas ya descargadas, editarlas y crear notas nuevas. Lo escrito queda cifrado en este dispositivo y se sube solo al volver la red, con la detección de conflictos de siempre. La barra de estado avisa: «Sin conexión · 2 cambios por subir». Renombrar, borrar, mover o adjuntar sin conexión avisa de que hace falta red (salvo renombrar una nota creada sin conexión).
 - Se puede instalar como aplicación desde el navegador (manifiesto web).
@@ -58,6 +59,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - Los enlaces y etiquetas escritos dentro de `código` ya no cuentan como enlaces ni etiquetas.
 
 ### Corregido
+- Con muchas notas, el explorador ya no estira la página entera: cada panel tiene su propio desplazamiento.
 - La pantalla de acceso ya no muestra el texto «null» cuando el login con GitHub está activo.
 
 ## [0.1.0] - 2026-11-09

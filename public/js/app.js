@@ -47,6 +47,8 @@ const ICONS = {
   download: 'M12 4v11 M7 10l5 5 5-5 M5 20h14',
   tag: 'M4 4h7l9 9-7 7-9-9z M8 8h.01',
   history: 'M4 12a8 8 0 1 0 2.3-5.6 M4 4v4h4 M12 8v4l3 2',
+  settings: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1',
+  settings: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1',
   key: 'M14 10a4 4 0 1 0-1.2 2.8L20 20 M17 17l2-2',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
@@ -97,7 +99,19 @@ const S = {
   indexReady: null,
   calMonth: null,
 };
-const WS = CONFIG.workspace || {};
+// Ajustes vigentes: los de config.js como base y encima los de la bóveda («Ajustes» en la app).
+const DEFAULTS = { ...(CONFIG.workspace || {}), lockAfterMinutes: CONFIG.lockAfterMinutes, backupReminderDays: CONFIG.backupReminderDays };
+const WS = { ...DEFAULTS };
+function applySettings() {
+  for (const k of Object.keys(WS)) delete WS[k];
+  Object.assign(WS, DEFAULTS, S.vault?.getSettings?.() || {});
+}
+
+// Tema de este dispositivo: automático (el del sistema), claro u oscuro.
+function applyTheme(theme = (() => { try { return localStorage.getItem('snowlog.theme') || 'auto'; } catch { return 'auto'; } })()) {
+  if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+}
 
 const isMobile = () => matchMedia('(max-width: 760px)').matches;
 
@@ -357,7 +371,7 @@ function saveBackupState(st) {
 }
 
 function backupReminder() {
-  const days = CONFIG.backupReminderDays;
+  const days = Number(WS.backupReminderDays) || 0;
   if (!days || !S.vault || !S.vault.notes().length) return;
   const st = backupState();
   const now = Date.now();
@@ -751,13 +765,14 @@ function trackActivity() {
   const mark = () => { S.lastActivity = Date.now(); };
   for (const ev of ['keydown', 'pointerdown', 'wheel', 'touchstart']) addEventListener(ev, mark, { passive: true });
   setInterval(() => {
-    if (S.vault && !S.local && Date.now() - S.lastActivity > CONFIG.lockAfterMinutes * 60000) lock();
+    if (S.vault && !S.local && Date.now() - S.lastActivity > (Number(WS.lockAfterMinutes) || 10) * 60000) lock();
   }, 15000);
 }
 
 // ---------------------------------------------------------------------------
 // App
 async function enterApp() {
+  applySettings();
   await loadExpanded();
   $('lock').hidden = true;
   $('app').hidden = false;
@@ -2067,6 +2082,93 @@ async function importFolder(files) {
 }
 
 // --- Paneles ---
+// --- Ajustes ---
+async function settingsModal() {
+  if (!S.vault) return;
+  const cur = { ...WS };
+  const folders = [...S.vault.index.folders].sort((a, b) => collator.compare(a, b));
+  const notes = S.vault.notes().map((n) => n.path).sort((a, b) => collator.compare(a, b));
+  const dl = (id, items) => h('datalist', { id }, ...items.map((v) => h('option', { value: v })));
+  const text = (id, label, value, list, hint) => {
+    const input = h('input', { class: 'input', id, value: value ?? '', list, autocomplete: 'off', spellcheck: 'false' });
+    return [h('div', { class: 'field' }, h('label', { for: id }, label), input, hint ? h('small', { class: 'field-hint' }, hint) : null), input];
+  };
+  const num = (id, label, value, min, max, hint) => {
+    const input = h('input', { class: 'input', id, type: 'number', min: String(min), max: String(max), value: String(value ?? '') });
+    return [h('div', { class: 'field' }, h('label', { for: id }, label), input, hint ? h('small', { class: 'field-hint' }, hint) : null), input];
+  };
+  let theme = 'auto';
+  try { theme = localStorage.getItem('snowlog.theme') || 'auto'; } catch { /* sin almacenamiento */ }
+  const result = await modal((close) => {
+    const [fHome, iHome] = text('st-home', 'Panel principal (nota)', cur.home, 'dl-notes');
+    const [fDaily, iDaily] = text('st-daily', 'Carpeta del diario', cur.dailyFolder, 'dl-folders', 'Las notas diarias se llaman AAAA-MM-DD.');
+    const [fTpl, iTpl] = text('st-tpl', 'Plantilla de la nota diaria', cur.dailyTemplate, 'dl-notes');
+    const [fTpls, iTpls] = text('st-tpls', 'Carpeta de plantillas', cur.templatesFolder, 'dl-folders', 'Lo que hay aquí no sale en las consultas.');
+    const [fAtt, iAtt] = text('st-att', 'Carpeta de adjuntos', cur.attachmentsFolder, 'dl-folders');
+    const openDaily = h('input', { type: 'checkbox', id: 'st-open', checked: !!cur.openDailyOnStart });
+    const [fLock, iLock] = num('st-lock', 'Bloquear tras estos minutos sin usarlo', cur.lockAfterMinutes, 1, 240);
+    const [fBk, iBk] = num('st-bk', 'Recordar la copia de seguridad cada (días)', cur.backupReminderDays, 0, 365, '0 = no recordar.');
+    const themeSel = h('select', { class: 'input', id: 'st-theme' },
+      ...[['auto', 'Automático (el del sistema)'], ['light', 'Claro'], ['dark', 'Oscuro']]
+        .map(([v, l]) => h('option', { value: v, selected: v === theme }, l)));
+    themeSel.addEventListener('change', () => applyTheme(themeSel.value));
+    const err = errorLine();
+    const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Guardar');
+    const form = h('form', { class: 'modal settings', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Ajustes' },
+      h('h2', {}, 'Ajustes'),
+      dl('dl-folders', folders), dl('dl-notes', notes),
+      h('h3', {}, 'Día a día'), fHome, fDaily, fTpl,
+      h('label', { class: 'check', for: 'st-open' }, openDaily, 'Abrir la nota de hoy al entrar'),
+      h('h3', {}, 'Carpetas'), fTpls, fAtt,
+      h('h3', {}, 'Seguridad y copias'), S.local ? null : fLock, fBk,
+      h('h3', {}, 'Este dispositivo'), h('div', { class: 'field' }, h('label', { for: 'st-theme' }, 'Tema'), themeSel),
+      h('p', { class: 'field-hint' }, S.local ? 'Los ajustes se guardan en la carpeta (.snowlog/ajustes.json).' : 'Los ajustes se guardan cifrados en tu bóveda y valen en todos tus dispositivos. El tema es solo de este dispositivo.'),
+      err,
+      h('div', { class: 'modal-actions' },
+        h('button', { class: 'btn', type: 'button', onclick: () => { applyTheme(theme); close(null); } }, 'Cancelar'),
+        btn));
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const clean = (v) => normalizePath(v || '');
+      const lockMin = Math.round(Number(iLock.value));
+      const bkDays = Math.round(Number(iBk.value));
+      if (!S.local && !(lockMin >= 1 && lockMin <= 240)) return showError(err, 'El bloqueo tiene que estar entre 1 y 240 minutos.');
+      if (!(bkDays >= 0 && bkDays <= 365)) return showError(err, 'El recordatorio tiene que estar entre 0 y 365 días.');
+      close({
+        theme: themeSel.value,
+        settings: {
+          home: clean(iHome.value),
+          dailyFolder: clean(iDaily.value),
+          dailyTemplate: clean(iTpl.value),
+          templatesFolder: clean(iTpls.value),
+          attachmentsFolder: clean(iAtt.value),
+          openDailyOnStart: openDaily.checked,
+          ...(S.local ? {} : { lockAfterMinutes: lockMin }),
+          backupReminderDays: bkDays,
+        },
+      });
+    });
+    return form;
+  });
+  if (!result) return;
+  try { localStorage.setItem('snowlog.theme', result.theme); } catch { /* sin almacenamiento */ }
+  applyTheme(result.theme);
+  // Solo se guarda lo que difiere de los valores por defecto.
+  const changed = Object.fromEntries(Object.entries(result.settings).filter(([k, v]) => v !== DEFAULTS[k]));
+  const before = JSON.stringify(S.vault.getSettings());
+  if (JSON.stringify(changed) !== before) {
+    try {
+      await S.vault.saveSettings(changed);
+    } catch (e) {
+      notice(`No se pudieron guardar los ajustes: ${errText(e)}`, 'error');
+      return;
+    }
+  }
+  applySettings();
+  renderCalendar();
+  notice('Ajustes guardados.');
+}
+
 // --- Frase de paso y código de recuperación ---
 async function securityModal() {
   if (S.local || !S.vaultFile) return;
@@ -2502,6 +2604,7 @@ function noteMenu(x, y) {
   );
   if (!S.local) items.push(['download', 'Exportar sin cifrar (.zip)', () => exportZip()]);
   items.push(['import', 'Abrir copia de seguridad…', () => $('backup-input').click()]);
+  items.push(['settings', 'Ajustes…', () => settingsModal()]);
   if (S.local) items.push(['collapse', 'Recargar la carpeta', () => reloadLocal()]);
   else items.push(['key', 'Frase de paso y recuperación…', () => securityModal()]);
   if (S.current) items.push(null, ['trash', 'Eliminar nota', () => deleteNote(S.current), 'danger']);
@@ -2513,6 +2616,7 @@ function noteMenu(x, y) {
 
 // --- Acciones y atajos ---
 const ACTIONS = {
+  settings: () => settingsModal(),
   'toggle-left': () => togglePanel('left'),
   'toggle-right': () => togglePanel('right'),
   switcher: () => quickSwitcher(),
@@ -2530,7 +2634,7 @@ const ACTIONS = {
 
 const BUTTON_ICONS = {
   'toggle-left': 'files', switcher: 'search', 'new-note': 'filePlus', 'new-folder': 'folderPlus', 'collapse-all': 'collapse', import: 'import', today: 'today', home: 'home',
-  lock: 'lock', logout: 'logout', 'note-menu': 'more', 'toggle-right': 'sidebarRight', 'toggle-mode': 'read',
+  lock: 'lock', logout: 'logout', settings: 'settings', 'note-menu': 'more', 'toggle-right': 'sidebarRight', 'toggle-mode': 'read',
 };
 
 function setupUi() {
@@ -2674,6 +2778,7 @@ function registerServiceWorker() {
 }
 
 async function boot() {
+  applyTheme();
   // GitHub Pages no permite la cabecera frame-ancestors: si alguien mete Snowlog en un iframe
   // (para engañar con clics encima), no arranca.
   if (window.top !== window.self) {

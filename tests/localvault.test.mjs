@@ -150,3 +150,14 @@ test('historial en local: copias cada 10 minutos, las 50 últimas, y siguen a la
   const again = await new LocalVault(root).load();
   assert.equal(again.notes().length, 3);
 });
+
+test('ajustes en local: un JSON en .snowlog que viaja con la carpeta', async () => {
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  assert.deepEqual(v.getSettings(), {});
+  await v.saveSettings({ dailyFolder: 'Bitácora' });
+  assert.match(root.text('.snowlog/ajustes.json'), /Bitácora/);
+  const again = await new LocalVault(root).load();
+  assert.deepEqual(again.getSettings(), { dailyFolder: 'Bitácora' });
+  assert.ok(!again.index.folders.includes('.snowlog'));
+});

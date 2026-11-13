@@ -13,6 +13,8 @@ const TRASH = '.trash';
 // Historial en local: copias de versiones anteriores en .history/<ruta de la nota>/<fecha>.md,
 // como mucho una cada 10 minutos y las 50 últimas por nota.
 const HISTORY = '.history';
+// Ajustes de la carpeta: un JSON normal dentro de una carpeta oculta (viaja con la carpeta).
+const SETTINGS = '.snowlog/ajustes.json';
 const SNAP_EVERY_MS = 10 * 60 * 1000;
 const SNAP_KEEP = 50;
 const stampOf = (ms) => `${new Date(ms).toISOString().replace(/:/g, '-')}.md`;
@@ -124,7 +126,11 @@ export class LocalVault {
       }
     };
     await walk(this.root, '');
-    this.index = { v: 1, notes, folders, files };
+    let settings = {};
+    try {
+      settings = JSON.parse(await readFile(this.root, SETTINGS));
+    } catch { /* sin ajustes propios */ }
+    this.index = { v: 1, notes, folders, files, settings };
     this.cache.clear();
     this.fileCache.clear();
     return this;
@@ -282,6 +288,15 @@ export class LocalVault {
       }
     }
     this.index.folders = this.index.folders.filter((x) => x !== f && !x.startsWith(`${f}/`));
+  }
+
+  getSettings() {
+    return { ...(this.index.settings || {}) };
+  }
+
+  async saveSettings(settings) {
+    await writeFile(this.root, SETTINGS, `${JSON.stringify(settings, null, 2)}\n`);
+    this.index.settings = { ...settings };
   }
 
   // Adjuntos: ficheros normales dentro de la carpeta.

@@ -106,7 +106,8 @@ Modelado sobre cómo el dueño usa Obsidian (estructura y plugins, nunca sus not
 | Backlinks | Enlaces entrantes en el panel derecho |
 | Snippet `dashboard` | `cssclasses: dashboard` |
 
-Configuración en `CONFIG.workspace` (`config.js`). El índice para consultas y enlaces entrantes se construye
+Valores por defecto en `CONFIG.workspace` (`config.js`); cada bóveda los cambia en «Ajustes» (`index.settings`,
+cifrado; en local `.snowlog/ajustes.json`) y `applySettings()` los mezcla en `WS`. El tema es por dispositivo. El índice para consultas y enlaces entrantes se construye
 en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se borra al bloquear.
 
 ## Siguiente

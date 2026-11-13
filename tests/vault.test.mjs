@@ -330,3 +330,11 @@ test('sin conexión: se sigue escribiendo y al volver la red se sube todo, con c
   assert.equal(await check.read(res.conflicts[0].id), 'versión del móvil');
   assert.equal(await check.read(check.findByTitle('Idea del avión').id), 'idea');
 });
+
+test('los ajustes se guardan cifrados en el índice y se ven desde otro dispositivo', async () => {
+  await vault.saveSettings({ dailyFolder: 'Bitácora secreta', lockAfterMinutes: 5 });
+  for (const [, content] of fake.files()) assert.ok(!content.includes('Bitácora'));
+  const other = new Vault(newRepo(), vault.dek);
+  await other.loadIndex();
+  assert.deepEqual(other.getSettings(), { dailyFolder: 'Bitácora secreta', lockAfterMinutes: 5 });
+});

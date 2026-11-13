@@ -25,7 +25,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     --bg-primary: #ffffff;
     --bg-secondary: #f6f7f9;
     --bg-ribbon: #eef0f3;
@@ -44,6 +44,25 @@
     --shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
     color-scheme: light;
   }
+}
+:root[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f7f9;
+  --bg-ribbon: #eef0f3;
+  --bg-elevated: #ffffff;
+  --border: #e1e4e8;
+  --text-normal: #1f2328;
+  --text-muted: #57606a;
+  --text-faint: #6e7781;
+  --accent: #1f6fa8;
+  --accent-text: #ffffff;
+  --hover: rgba(0, 0, 0, 0.05);
+  --active: rgba(31, 111, 168, 0.12);
+  --danger: #b42318;
+  --code-bg: #f1f3f5;
+  --mark-bg: rgba(255, 210, 60, 0.45);
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -68,6 +87,7 @@ button { cursor: pointer; }
   height: 100dvh;
   display: grid;
   grid-template-columns: 44px var(--left-w) minmax(0, 1fr) var(--right-w);
+  grid-template-rows: minmax(0, 1fr); /* la fila no crece con el contenido: cada panel hace su propio scroll */
   overflow: hidden;
 }
 .app.left-closed { grid-template-columns: 44px 0 minmax(0, 1fr) var(--right-w); }
@@ -130,7 +150,7 @@ button { cursor: pointer; }
 .security-options .btn { text-align: left; }
 
 /* ---------- Historial ---------- */
-.modal.history { width: min(980px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
+.modal.history { width: min(980px, 100%); max-height: calc(88vh - 32px); display: flex; flex-direction: column; }
 .history-body { display: grid; grid-template-columns: 220px 1fr; gap: 14px; min-height: 0; flex: 1; }
 .history-list { overflow: auto; max-height: 60vh; border-right: 1px solid var(--border); padding-right: 8px; }
 .history-list .switcher-item.sel { background: var(--active); }
@@ -620,6 +640,10 @@ button { cursor: pointer; }
   user-select: all;
   overflow-wrap: anywhere;
 }
+.modal.settings { max-height: calc(88vh - 32px); overflow: auto; }
+.modal.settings h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 18px 0 8px; }
+.field-hint { font-size: 12px; color: var(--text-faint); }
+select.input { appearance: auto; }
 .check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 12px 0; }
 .check input { margin-top: 3px; }
 

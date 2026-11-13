@@ -50,7 +50,7 @@ La hoja de ruta completa, con el motivo de cada punto, está en [ROADMAP.md](ROA
   Revisión interna hecha y sus 6 hallazgos resueltos ([SEGURIDAD.md](SEGURIDAD.md)); falta que la haga una persona externa.
 
 ### Fase 3: Pulido
-- [ ] Ajustes dentro de la app (carpetas, plantillas, panel, bloqueo) en lugar de `config.js`.
+- [x] Ajustes dentro de la app (carpetas, plantillas, panel, bloqueo) en lugar de `config.js`.
 - [ ] Paleta de comandos (Ctrl+P), marcadores y vista previa al pasar sobre un enlace.
 - [ ] Kanban sobre Markdown y vista de grafo.
 - [ ] Portátil en Safari y Firefox; detectar cambios hechos desde fuera de la app.
