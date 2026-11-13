@@ -4,12 +4,13 @@ import * as C from './crypto.js';
 import * as Auth from './auth.js';
 import { GitHubRepo } from './github.js';
 import { Vault, baseName, parentPath, normalizePath } from './vault.js';
-import { render, outline, wordCount } from './markdown.js';
+import { render, outline, wordCount, escapeHtml } from './markdown.js';
 import { planImport, formatBytes } from './import.js';
 import { exampleSpace } from './examples.js';
 import { LocalVault } from './localvault.js';
 import { makeZip } from './zip.js';
 import { rewriteLinks, linkChanges } from './links.js';
+import * as Ed from './editor.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
 import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
@@ -544,6 +545,10 @@ function wipe() {
   S.current = null;
   S.dirty = false;
   $('editor').value = '';
+  cancelAnimationFrame(hlFrame);
+  $('editor-hl').replaceChildren();
+  $('editor-mirror').replaceChildren();
+  closeSuggest();
   $('title').value = '';
   $('reading').replaceChildren();
   $('tree').replaceChildren();
@@ -1068,6 +1073,7 @@ async function updateLinks(moves, allPaths) {
     const mine = updates.find((u) => u.id === S.current);
     if (mine && !S.dirty) {
       $('editor').value = mine.text;
+      autosize();
       if (S.mode === 'read') setMode('read');
     }
     syncIndex();
@@ -1197,7 +1203,8 @@ function updateHeader() {
 function setMode(mode) {
   S.mode = mode;
   const reading = mode === 'read';
-  $('editor').hidden = reading;
+  $('editor-wrap').hidden = reading;
+  if (reading) closeSuggest();
   $('reading').hidden = !reading;
   if (reading) {
     const text = $('editor').value;
@@ -1218,6 +1225,141 @@ function autosize() {
   const ed = $('editor');
   ed.style.height = 'auto';
   ed.style.height = `${Math.max(ed.scrollHeight, 200)}px`;
+  paintHighlight();
+}
+
+// Resaltado: un <pre> detrás del cuadro de texto con el mismo texto coloreado.
+// highlight() escapa todo el texto antes de añadir sus <span>.
+let hlFrame = 0;
+function paintHighlight() {
+  cancelAnimationFrame(hlFrame);
+  hlFrame = requestAnimationFrame(() => {
+    $('editor-hl').innerHTML = `${Ed.highlight($('editor').value)}\n`;
+  });
+}
+
+// Aplica una edición de editor.js conservando el deshacer del navegador.
+function applyEdit(e) {
+  const ed = $('editor');
+  ed.focus();
+  ed.setSelectionRange(e.start, e.end);
+  const ok = e.insert
+    ? document.execCommand('insertText', false, e.insert)
+    : (e.start === e.end || document.execCommand('delete'));
+  if (!ok) {
+    ed.setRangeText(e.insert, e.start, e.end, 'end');
+    ed.dispatchEvent(new Event('input'));
+  }
+  ed.setSelectionRange(e.selStart, e.selEnd);
+}
+
+// --- Autocompletar [[enlaces ---
+const SG = { q: null, items: [], sel: 0 };
+
+function closeSuggest() {
+  SG.q = null;
+  $('suggest').hidden = true;
+}
+
+function caretBox(pos) {
+  const ed = $('editor');
+  const mirror = $('editor-mirror');
+  mirror.innerHTML = `${escapeHtml(ed.value.slice(0, pos))}<span id="caret-mark">\u200b</span>`;
+  const mark = mirror.querySelector('#caret-mark');
+  return { left: mark.offsetLeft, top: mark.offsetTop + mark.offsetHeight };
+}
+
+function updateSuggest() {
+  const ed = $('editor');
+  const pos = ed.selectionStart;
+  const q = ed.selectionStart === ed.selectionEnd && Ed.linkQuery(ed.value, pos);
+  if (!q) return closeSuggest();
+  const items = Ed.suggestNotes(S.vault.notes().filter((n) => n.id !== S.current), q.query);
+  const name = q.query.trim();
+  if (name && !items.some((it) => it.name.toLowerCase() === baseName(name).toLowerCase())) items.push({ create: true, name });
+  if (!items.length) return closeSuggest();
+  SG.q = q;
+  SG.items = items;
+  SG.sel = Math.min(SG.sel, items.length - 1);
+  const box = $('suggest');
+  box.replaceChildren(...items.map((it, i) => h('div', {
+    class: `suggest-item${i === SG.sel ? ' selected' : ''}`,
+    role: 'option',
+    'aria-selected': String(i === SG.sel),
+    onpointerdown: (ev) => { ev.preventDefault(); pickSuggest(i); },
+  }, it.create
+    ? [h('span', { class: 'suggest-name' }, `Crear «${it.name}»`)]
+    : [h('span', { class: 'suggest-name' }, it.name), it.path !== it.name ? h('span', { class: 'suggest-path' }, parentPath(it.path)) : null].filter(Boolean))));
+  const c = caretBox(q.start);
+  box.style.left = `${Math.min(c.left, Math.max(0, ed.clientWidth - 280))}px`;
+  box.style.top = `${c.top + 4}px`;
+  box.hidden = false;
+  box.children[SG.sel]?.scrollIntoView({ block: 'nearest' });
+}
+
+async function pickSuggest(i) {
+  const it = SG.items[i];
+  const q = SG.q;
+  if (!it || !q) return;
+  closeSuggest();
+  const ed = $('editor');
+  const pos = ed.selectionStart;
+  const exists = !it.create || S.vault.findByTitle(baseName(it.name)) || S.vault.findByPath(it.name);
+  // Si el nombre es único basta con él; si no, se enlaza con la ruta.
+  const target = it.create ? it.name : (S.vault.notes().filter((n) => baseName(n.path).toLowerCase() === it.name.toLowerCase()).length > 1 ? it.path : it.name);
+  applyEdit(Ed.completeLink(ed.value, pos, q, target));
+  if (exists) return;
+  try {
+    await S.vault.createNote(normalizePath(it.name), '');
+    renderTree();
+    syncIndex();
+    notice(`Nota «${baseName(it.name)}» creada.`);
+  } catch (e) {
+    notice(`No se pudo crear la nota: ${errText(e)}`, 'error');
+  }
+}
+
+function editorKeydown(ev) {
+  const ed = ev.currentTarget;
+  const mod = ev.ctrlKey || ev.metaKey;
+  if (SG.q && !$('suggest').hidden) {
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      SG.sel = (SG.sel + (ev.key === 'ArrowDown' ? 1 : -1) + SG.items.length) % SG.items.length;
+      updateSuggest();
+      return;
+    }
+    if ((ev.key === 'Enter' || ev.key === 'Tab') && !mod && !ev.shiftKey) {
+      ev.preventDefault();
+      pickSuggest(SG.sel);
+      return;
+    }
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeSuggest();
+      return;
+    }
+  }
+  if (ev.isComposing || ev.altKey) return;
+  const { value, selectionStart: s, selectionEnd: e } = ed;
+  let edit = null;
+  if (ev.key === 'Enter' && !mod && !ev.shiftKey) edit = Ed.continueList(value, s, e);
+  else if (ev.key === 'Tab' && !mod) {
+    edit = Ed.indentLines(value, s, e, ev.shiftKey);
+    if (!edit && !ev.shiftKey) edit = { start: s, end: e, insert: '\t', selStart: s + 1, selEnd: s + 1 };
+    ev.preventDefault();
+  } else if (mod && !ev.shiftKey) {
+    const k = ev.key.toLowerCase();
+    if (k === 'b') edit = Ed.toggleWrap(value, s, e, '**');
+    else if (k === 'i') edit = Ed.toggleWrap(value, s, e, '*');
+    else if (k === 'k') edit = Ed.insertLink(value, s, e);
+    else if (ev.key === 'Enter') edit = Ed.toggleTask(value, s);
+  }
+  if (!edit) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  applyEdit(edit);
 }
 
 let sideTimer = null;
@@ -1377,6 +1519,7 @@ async function toggleTask(box) {
       const text = toggleTaskLine($('editor').value, line, done);
       if (text == null) throw new Error('La tarea ha cambiado; recarga la nota.');
       $('editor').value = text;
+      autosize();
       S.dirty = true;
       await saveNow();
       syncIndex();
@@ -1741,12 +1884,10 @@ function setupUi() {
     clearTimeout(sideTimer);
     sideTimer = setTimeout(refreshSide, 300);
   });
-  editor.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Tab' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
-      ev.preventDefault();
-      document.execCommand('insertText', false, '\t');
-    }
-  });
+  editor.addEventListener('keydown', editorKeydown);
+  editor.addEventListener('input', updateSuggest);
+  editor.addEventListener('click', updateSuggest);
+  editor.addEventListener('blur', () => setTimeout(closeSuggest, 150));
 
   const title = $('title');
   title.addEventListener('keydown', (ev) => {

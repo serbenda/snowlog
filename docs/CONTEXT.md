@@ -57,6 +57,10 @@ aunque se robe no puede modificar el código de la web.
 - Markdown propio en `markdown.js` en lugar de una librería: escapa todo antes de dar formato.
 - Un commit por guardado (con retardo de 2,5 s), con un reintento si otro dispositivo escribió antes.
 - Bloqueo automático a los 10 minutos sin actividad.
+- Editor sin librerías (`editor.js`): el cuadro de texto se queda transparente y un `<pre>` detrás muestra el
+  mismo texto coloreado. El resaltado solo cambia colores, nunca tamaños, para que coincidan al píxel. Las
+  ediciones van por `execCommand('insertText')` para conservar el deshacer. Al bloquear se vacía el `<pre>`.
+- Renombrar o mover reescribe los `[[enlaces]]` de todas las notas (`links.js`) en un solo commit (`saveMany`).
 
 ## Cómo se organiza el día a día
 
@@ -77,7 +81,7 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 ## Siguiente
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
-[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1**.
+[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1** (hecho: enlaces al renombrar y editor; sigue búsqueda y etiquetas).
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

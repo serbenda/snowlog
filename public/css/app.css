@@ -187,6 +187,61 @@ button { cursor: pointer; }
   margin: 0 0 16px;
   outline: none;
 }
+.editor-wrap { position: relative; }
+.editor, .editor-hl, .editor-mirror {
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.65;
+  letter-spacing: normal;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.editor-hl, .editor-mirror {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--text-normal);
+  overflow: hidden;
+}
+.editor-mirror { visibility: hidden; }
+.editor-wrap .editor { position: relative; color: transparent; caret-color: var(--text-normal); }
+.editor-wrap .editor::selection { color: transparent; background: var(--active); }
+/* Solo colores: nunca tamaños ni grosores, para que el texto coincida con el del cuadro. */
+.hl-mark, .hl-front { color: var(--text-faint); }
+.hl-heading { color: var(--accent); }
+.hl-heading .hl-mark { color: var(--text-faint); }
+.hl-link { color: var(--accent); }
+.hl-tag { color: var(--accent); }
+.hl-code { color: var(--text-muted); background: var(--code-bg); border-radius: 3px; }
+.hl-strong { color: var(--text-normal); text-shadow: 0.4px 0 0 currentColor; }
+.hl-hilite { background: var(--mark-bg); border-radius: 2px; }
+.hl-del, .hl-done { color: var(--text-faint); text-decoration: line-through; }
+.hl-box { color: var(--accent); }
+.hl-quote { color: var(--text-muted); }
+.hl-callout { color: var(--accent); }
+.hl-table { color: var(--text-muted); }
+.suggest {
+  position: absolute;
+  z-index: 20;
+  width: 280px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 4px;
+  font-size: 14px;
+}
+.suggest-item { padding: 6px 10px; border-radius: 5px; cursor: pointer; display: flex; flex-direction: column; }
+.suggest-item.selected, .suggest-item:hover { background: var(--active); }
+.suggest-name { color: var(--text-normal); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.suggest-path { color: var(--text-faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .editor {
   display: block;
   width: 100%;

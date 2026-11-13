@@ -6,6 +6,9 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- Editor: resaltado de Markdown mientras escribes (solo color, sin mover el texto); Intro continúa listas, tareas y citas, y en un elemento vacío sale de la lista; Tab y Mayús+Tab sangran.
+- Editor: al escribir `[[` aparecen sugerencias de notas; si la nota no existe, se puede crear desde ahí.
+- Atajos: Ctrl+B (negrita), Ctrl+I (cursiva), Ctrl+K (enlace) y Ctrl+Intro (marcar o crear tarea), con deshacer normal.
 - Renombrar o mover una nota o carpeta actualiza los `[[enlaces]]` que apuntan a ella en todas las notas (un solo commit en la versión online).
 - Modo lectura: el frontmatter se muestra como propiedades (con etiquetas, listas y casillas).
 - Tablas Markdown con alineación, celdas vacías y `\|` escapado.

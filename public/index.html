@@ -62,7 +62,12 @@
       </div>
       <div class="note" id="note" hidden>
         <input class="inline-title" id="title" aria-label="Título de la nota" spellcheck="false" autocomplete="off">
-        <textarea class="editor" id="editor" aria-label="Contenido de la nota" spellcheck="true"></textarea>
+        <div class="editor-wrap" id="editor-wrap">
+          <pre class="editor-hl" id="editor-hl" aria-hidden="true"></pre>
+          <textarea class="editor" id="editor" aria-label="Contenido de la nota" spellcheck="true"></textarea>
+          <pre class="editor-mirror" id="editor-mirror" aria-hidden="true"></pre>
+          <div class="suggest" id="suggest" role="listbox" aria-label="Notas para enlazar" hidden></div>
+        </div>
         <article class="reading markdown" id="reading" hidden></article>
       </div>
     </div>
