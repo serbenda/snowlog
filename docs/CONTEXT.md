@@ -76,12 +76,8 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 
 ## Siguiente
 
-1. Búsqueda de texto completo y panel de etiquetas.
-2. Portátil: guardar en el navegador cuando se abre desde disco (IndexedDB) para Safari/Firefox.
-3. Editor con resaltado y autocompletado de `[[enlaces]]`; renombrar actualiza enlaces.
-4. Atajos de listas (mover líneas, sangrar) y edición de tablas.
-5. Kanban y marcadores.
-6. PWA de la versión online.
+Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
+[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1**.
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 
