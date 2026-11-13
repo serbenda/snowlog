@@ -67,6 +67,9 @@ githubClientId: 'Iv23…',
 authWorker: 'https://snowlog-auth.<tu-subdominio>.workers.dev',
 ```
 
+Y pon la misma URL en `connect-src` de la CSP de `public/index.html` (la CSP solo deja conectar con GitHub
+y con ese Worker; `npm test` falla si no coinciden).
+
 Haz la PR a `main` y, al publicarse, el botón *Entrar con GitHub* quedará activo.
 
 ## Si algo va mal

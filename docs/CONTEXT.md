@@ -59,6 +59,8 @@ aunque se robe no puede modificar el código de la web.
 
 - Sin framework ni build: módulos ES servidos tal cual. Menos superficie de ataque.
 - Markdown propio en `markdown.js` en lugar de una librería: escapa todo antes de dar formato.
+- CSP con Trusted Types: todo `innerHTML` pasa por la política `snowlog` (`trusted()` en `app.js`). Si cambia la
+  URL del Worker, hay que cambiarla también en la CSP de `index.html` (un test lo comprueba).
 - Un commit por guardado (4 s sin escribir o 30 s como mucho), con un reintento si otro dispositivo escribió antes.
 - Caché cifrada (`cache.js`, IndexedDB `snowlog-cache`): guarda el texto cifrado de `n/` y `a/` tal cual está en
   el repo, con la versión del índice (`updated`). Si coincide, no se descarga; si no descifra (dañada o
@@ -110,8 +112,7 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 ## Siguiente
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
-[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). **Fase 1** hecha (enlaces al renombrar, editor, búsqueda, etiquetas, adjuntos y conflictos). En curso: **Fase 2**
-(hecho: historial, cambiar la frase de paso, copias de seguridad, rendimiento y sin conexión).
+[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). **Fase 1** hecha (enlaces al renombrar, editor, búsqueda, etiquetas, adjuntos y conflictos). **Fase 2** hecha salvo la revisión de seguridad por una persona externa (la interna está en [SEGURIDAD.md](SEGURIDAD.md)).
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

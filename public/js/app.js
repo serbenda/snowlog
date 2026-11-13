@@ -51,6 +51,18 @@ const ICONS = {
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
+// Trusted Types: la CSP solo deja meter HTML a través de esta política. Solo recibe HTML que ya
+// se ha escapado (markdown.js, editor.js, query.js) o iconos propios; nunca texto de una nota en crudo.
+const TT = globalThis.trustedTypes?.createPolicy('snowlog', {
+  createHTML: (s) => s,
+  // El único script que se carga a mano es el service worker.
+  createScriptURL: (u) => {
+    if (u !== 'sw.js') throw new Error('script_no_permitido');
+    return u;
+  },
+});
+const trusted = (s) => (TT ? TT.createHTML(s) : s);
+
 const $ = (id) => document.getElementById(id);
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -58,7 +70,7 @@ function h(tag, attrs = {}, ...children) {
     if (v === false || v == null) continue;
     if (k === 'class') el.className = v;
     else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k === 'html') el.innerHTML = v;
+    else if (k === 'html') el.innerHTML = trusted(v);
     else el.setAttribute(k, v === true ? '' : v);
   }
   for (const c of children.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : String(c));
@@ -78,7 +90,7 @@ const S = {
   dirty: false,
   saveTimer: null,
   saving: Promise.resolve(),
-  expanded: new Set(JSON.parse(localStorage.getItem('snowlog.expanded') || '[]')),
+  expanded: new Set(),
   lastActivity: Date.now(),
   local: false, // true = notas en una carpeta local o en el navegador (sin GitHub)
   notesIdx: new Map(), // id -> nota analizada (solo en memoria)
@@ -685,6 +697,12 @@ function wipe() {
   $('tag-list').replaceChildren();
   closeSuggest();
   $('title').value = '';
+  $('breadcrumb').replaceChildren();
+  document.title = 'Snowlog';
+  $('modal-root').replaceChildren();
+  $('menu').hidden = true;
+  $('menu').replaceChildren();
+  S.expanded = new Set();
   $('reading').replaceChildren();
   $('tree').replaceChildren();
   $('outline').replaceChildren();
@@ -739,7 +757,8 @@ function trackActivity() {
 
 // ---------------------------------------------------------------------------
 // App
-function enterApp() {
+async function enterApp() {
+  await loadExpanded();
   $('lock').hidden = true;
   $('app').hidden = false;
   S.lastActivity = Date.now();
@@ -906,17 +925,37 @@ function moreButton() {
   return h('button', { class: 'icon-btn row-more', type: 'button', 'aria-label': 'Opciones', tabindex: '-1', html: icon('more') });
 }
 
+// Carpetas abiertas en el explorador. En online sus nombres se guardan cifrados con la DEK
+// (no deben quedar en claro en el navegador); en local ya están en claro en el disco.
+const EXPANDED_KEY = () => (S.local ? 'snowlog.expanded.local' : 'snowlog.expanded.enc');
+async function saveExpanded() {
+  const list = JSON.stringify([...S.expanded]);
+  try {
+    if (S.local) localStorage.setItem(EXPANDED_KEY(), list);
+    else if (S.dek) localStorage.setItem(EXPANDED_KEY(), await C.encryptText(S.dek, list, 'expanded'));
+  } catch { /* sin almacenamiento */ }
+}
+async function loadExpanded() {
+  S.expanded = new Set();
+  try {
+    localStorage.removeItem('snowlog.expanded'); // formato antiguo, en claro
+    const raw = localStorage.getItem(EXPANDED_KEY());
+    if (!raw) return;
+    S.expanded = new Set(JSON.parse(S.local ? raw : await C.decryptText(S.dek, raw, 'expanded')));
+  } catch { /* de otra clave o dañado: se empieza con todo plegado */ }
+}
+
 function toggleFolder(path) {
   if (S.expanded.has(path)) S.expanded.delete(path);
   else S.expanded.add(path);
-  localStorage.setItem('snowlog.expanded', JSON.stringify([...S.expanded]));
+  saveExpanded();
   renderTree();
 }
 
 function expandTo(path) {
   const parts = parentPath(path).split('/').filter(Boolean);
   for (let i = 1; i <= parts.length; i++) S.expanded.add(parts.slice(0, i).join('/'));
-  localStorage.setItem('snowlog.expanded', JSON.stringify([...S.expanded]));
+  saveExpanded();
 }
 
 function setupTree() {
@@ -1372,14 +1411,14 @@ function setMode(mode) {
   if (reading) {
     const text = $('editor').value;
     const view = $('reading');
-    view.innerHTML = render(text, { frontmatter: true });
+    view.innerHTML = trusted(render(text, { frontmatter: true }));
     applyCssClasses(view, text);
     enableOwnTasks(view, text);
     fillEmbeds(view);
     runQueries();
   }
   const btn = $('mode-btn');
-  btn.innerHTML = icon(reading ? 'edit' : 'read');
+  btn.innerHTML = trusted(icon(reading ? 'edit' : 'read'));
   btn.setAttribute('aria-label', reading ? 'Cambiar a edición (Ctrl+E)' : 'Cambiar a lectura (Ctrl+E)');
   btn.title = reading ? 'Editar (Ctrl+E)' : 'Lectura (Ctrl+E)';
   if (!reading) autosize();
@@ -1398,7 +1437,7 @@ let hlFrame = 0;
 function paintHighlight() {
   cancelAnimationFrame(hlFrame);
   hlFrame = requestAnimationFrame(() => {
-    $('editor-hl').innerHTML = `${Ed.highlight($('editor').value)}\n`;
+    $('editor-hl').innerHTML = trusted(`${Ed.highlight($('editor').value)}\n`);
   });
 }
 
@@ -1428,7 +1467,7 @@ function closeSuggest() {
 function caretBox(pos) {
   const ed = $('editor');
   const mirror = $('editor-mirror');
-  mirror.innerHTML = `${escapeHtml(ed.value.slice(0, pos))}<span id="caret-mark">\u200b</span>`;
+  mirror.innerHTML = trusted(`${escapeHtml(ed.value.slice(0, pos))}<span id="caret-mark">\u200b</span>`);
   const mark = mirror.querySelector('#caret-mark');
   return { left: mark.offsetLeft, top: mark.offsetTop + mark.offsetHeight };
 }
@@ -1734,7 +1773,7 @@ function renderQueryBoxes(view) {
   for (const box of view.querySelectorAll('div.query')) {
     try {
       const res = runQuery(parseQuery(box.dataset.source), indexedNotes(), { exclude });
-      box.innerHTML = renderResult(res);
+      box.innerHTML = trusted(renderResult(res));
     } catch (e) {
       box.replaceChildren(h('p', { class: 'query-error' }, `Consulta: ${e.message}`));
     }
@@ -2159,7 +2198,7 @@ async function historyModal(id) {
         if (!texts.has(v.ref)) texts.set(v.ref, await vault.readVersion(id, v.ref));
         if (sel !== i) return;
         const text = texts.get(v.ref);
-        preview.innerHTML = render(text, { frontmatter: true });
+        preview.innerHTML = trusted(render(text, { frontmatter: true }));
         const d = lineDiff(current, text);
         info.textContent = i === 0 || text === current
           ? 'Es la versión actual.'
@@ -2482,7 +2521,7 @@ const ACTIONS = {
   import: () => { if (S.vault) $('import-input').click(); },
   today: () => openDaily(),
   home: () => openHome(),
-  'collapse-all': () => { S.expanded.clear(); localStorage.setItem('snowlog.expanded', '[]'); renderTree(); },
+  'collapse-all': () => { S.expanded.clear(); saveExpanded(); renderTree(); },
   'toggle-mode': () => S.current && setMode(S.mode === 'edit' ? 'read' : 'edit'),
   'note-menu': (btn) => { const r = btn.getBoundingClientRect(); noteMenu(r.right - 200, r.bottom + 4); },
   lock: () => lock(),
@@ -2497,7 +2536,7 @@ const BUTTON_ICONS = {
 function setupUi() {
   document.querySelectorAll('[data-action]').forEach((btn) => {
     if (!btn.classList.contains('link-btn') && BUTTON_ICONS[btn.dataset.action]) {
-      btn.innerHTML = icon(btn.classList.contains('mobile-only') ? 'menu' : BUTTON_ICONS[btn.dataset.action]);
+      btn.innerHTML = trusted(icon(btn.classList.contains('mobile-only') ? 'menu' : BUTTON_ICONS[btn.dataset.action]));
     }
     btn.addEventListener('click', () => ACTIONS[btn.dataset.action]?.(btn));
   });
@@ -2508,7 +2547,7 @@ function setupUi() {
 
   const tabIcons = { files: 'files', search: 'search', tags: 'tag' };
   document.querySelectorAll('.left-tab').forEach((b) => {
-    b.innerHTML = icon(tabIcons[b.dataset.tab]);
+    b.innerHTML = trusted(icon(tabIcons[b.dataset.tab]));
     b.addEventListener('click', () => showLeftTab(b.dataset.tab));
   });
   $('search-input').addEventListener('input', () => {
@@ -2631,10 +2670,16 @@ function setupUi() {
 function registerServiceWorker() {
   if (CONFIG.mode !== 'online' || !('serviceWorker' in navigator)) return;
   if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register(TT ? TT.createScriptURL('sw.js') : 'sw.js').catch(() => {});
 }
 
 async function boot() {
+  // GitHub Pages no permite la cabecera frame-ancestors: si alguien mete Snowlog en un iframe
+  // (para engañar con clics encima), no arranca.
+  if (window.top !== window.self) {
+    document.body.textContent = 'Snowlog no se puede abrir dentro de otra página.';
+    return undefined;
+  }
   registerServiceWorker();
   setupUi();
   trackActivity();

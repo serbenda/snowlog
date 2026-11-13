@@ -68,6 +68,8 @@ const csp = [
   "connect-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
+  "require-trusted-types-for 'script'",
+  'trusted-types snowlog',
 ].join('; ');
 
 let html = read('index.html');

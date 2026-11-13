@@ -47,6 +47,7 @@ La hoja de ruta completa, con el motivo de cada punto, está en [ROADMAP.md](ROA
 - [x] Rendimiento: con 1.000 notas, entrar en menos de 3 s; guardados agrupados para no generar un commit por tecla.
 - [x] Versión online sin conexión (PWA): leer y editar sin red, con cola de cambios y caché cifrada.
 - [ ] Revisión de seguridad independiente del cifrado y de la CSP, con sus hallazgos resueltos.
+  Revisión interna hecha y sus 6 hallazgos resueltos ([SEGURIDAD.md](SEGURIDAD.md)); falta que la haga una persona externa.
 
 ### Fase 3: Pulido
 - [ ] Ajustes dentro de la app (carpetas, plantillas, panel, bloqueo) en lugar de `config.js`.

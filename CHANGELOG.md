@@ -6,6 +6,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- `docs/SEGURIDAD.md`: qué protege Snowlog y frente a quién, qué queda en el dispositivo, CSP, hallazgos de la revisión y riesgos aceptados.
 - La versión online funciona sin conexión: la web se guarda en el navegador (service worker) y se abre sin red; se pueden leer las notas ya descargadas, editarlas y crear notas nuevas. Lo escrito queda cifrado en este dispositivo y se sube solo al volver la red, con la detección de conflictos de siempre. La barra de estado avisa: «Sin conexión · 2 cambios por subir». Renombrar, borrar, mover o adjuntar sin conexión avisa de que hace falta red (salvo renombrar una nota creada sin conexión).
 - Se puede instalar como aplicación desde el navegador (manifiesto web).
 - Caché local cifrada (IndexedDB) de las notas y adjuntos de la versión online: solo se descargan los que han cambiado. Con 1.000 notas, entrar tarda menos de medio segundo y la búsqueda está lista en menos de 1 s; en un dispositivo nuevo, la primera vez se descargan todas en segundo plano (10 a la vez) mientras ya puedes trabajar. «Cerrar sesión» y «Olvidar este dispositivo» la borran.
@@ -48,6 +49,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - «Cargar ejemplos»: un proyecto de ejemplo (Web de recetas) con 4 historias, tablero, reunión, píldora y notas diarias enlazadas, para ver cómo organizarse.
 
 ### Cambiado
+- Seguridad: la CSP solo permite conectar con GitHub y con el Worker configurado (antes, cualquier `*.workers.dev`); Trusted Types obligatorios para todo el HTML que se pinta; Snowlog no arranca dentro de un iframe; al bloquear se vacían también el título de la pestaña, las migas y los diálogos abiertos; las carpetas abiertas se recuerdan cifradas.
 - Guardados agrupados: en online se guarda tras 4 s sin escribir (antes 2,5 s) y como mucho cada 30 s escribiendo sin parar, así hay menos commits y no se pierde nada; al cambiar de pestaña o de app se guarda enseguida. En local, 1 s.
 - Snowlog se publica en `https://snowlog.bendi.dev`; el Worker solo acepta ese origen.
 - En las tareas hechas solo se tacha el texto, no la casilla ni el espacio.
