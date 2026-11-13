@@ -6,6 +6,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- «Frase de paso y recuperación…» en el menú ⋯: cambiar la frase de paso (pide la actual) y generar un código de recuperación nuevo (el anterior deja de servir). Solo se vuelve a envolver la clave; las notas no se recifran. Al cambiarla se aplican las iteraciones de PBKDF2 de la configuración si son más.
 - Historial de versiones de cada nota (menú ⋯ › «Historial de versiones…»): lista de versiones con fecha, vista previa, cuántas líneas cambian frente a la actual y botón para restaurar (restaurar no borra nada del historial). En online se leen de los commits del repo, cifradas; en local se guarda una copia en `.history/` como mucho cada 10 minutos (las 50 últimas por nota).
 - Ningún cambio se pierde entre dispositivos: si la misma nota se cambió en otro sitio desde que la abriste, al guardar se conserva tu versión y la otra queda en una copia «Nota (otro dispositivo AAAA-MM-DD HHMM)», con un aviso que la abre. Si la borraron en otro dispositivo, guardarla la recupera. En la versión portátil pasa lo mismo cuando la carpeta se sincroniza (OneDrive, Dropbox…) y el fichero cambió fuera.
 - Adjuntos: pegar o arrastrar imágenes y PDF en el editor (o «Adjuntar imagen o PDF…» en el menú). Se guardan en `Adjuntos/` y se insertan como `![[nombre]]`; en lectura se ve la imagen (`![[foto.png|300]]` fija el ancho) o una ficha del PDF para abrirlo. En la versión online van cifrados (`a/<id>.enc`); en la portátil son ficheros normales. Máximo 20 MB por adjunto.

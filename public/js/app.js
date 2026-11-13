@@ -1841,6 +1841,89 @@ async function importFolder(files) {
 }
 
 // --- Paneles ---
+// --- Frase de paso y código de recuperación ---
+async function securityModal() {
+  if (S.local || !S.vaultFile) return;
+  const choice = await modal((close) => h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Frase de paso y recuperación' },
+    h('h2', {}, 'Frase de paso y recuperación'),
+    h('p', {}, 'La clave que cifra tus notas no cambia: solo cambia cómo se abre. No hace falta recifrar nada.'),
+    h('div', { class: 'security-options' },
+      h('button', { class: 'btn', type: 'button', onclick: () => close('pass') }, 'Cambiar la frase de paso'),
+      h('button', { class: 'btn', type: 'button', onclick: () => close('recovery') }, 'Generar un código de recuperación nuevo')),
+    h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cerrar'))));
+  if (choice === 'pass') changePassphraseModal();
+  else if (choice === 'recovery') renewRecoveryModal();
+}
+
+function secretForm(title, text, fields, okText, onSubmit) {
+  return modal((close) => {
+    const err = errorLine();
+    const btn = h('button', { class: 'btn primary', type: 'submit' }, okText);
+    const form = h('form', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+      h('h2', {}, title), h('p', {}, text), ...fields.map((f) => f[0]), err,
+      h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cancelar'), btn));
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const done = busy(btn, 'Cifrando…');
+      try {
+        const result = await onSubmit(fields.map((f) => f[1].value));
+        for (const f of fields) f[1].value = '';
+        close(result);
+      } catch (e) {
+        done();
+        showError(err, e);
+      }
+    });
+    return form;
+  });
+}
+
+async function changePassphraseModal() {
+  const ok = await secretForm('Cambiar la frase de paso',
+    'En los demás dispositivos se pedirá la frase nueva la próxima vez que se desbloqueen.',
+    [passField('sp0', 'Frase de paso actual'), passField('sp1', 'Nueva frase de paso (mínimo 12 caracteres)', 'new-password'), passField('sp2', 'Repite la nueva frase', 'new-password')],
+    'Cambiar la frase',
+    async ([old, p1, p2]) => {
+      if (p1.length < 12) throw new Error('Usa al menos 12 caracteres.');
+      if (p1 !== p2) throw new Error('Las dos frases no coinciden.');
+      if (p1 === old) throw new Error('La frase nueva es igual que la actual.');
+      const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
+      const updated = await C.changePassphrase(current, old, p1, CONFIG.kdfIterations);
+      await S.vault.writeVaultFile(updated, 'cambiar frase de paso');
+      S.vaultFile = updated;
+      Auth.cacheVault(updated);
+      return true;
+    });
+  if (ok) notice('Frase de paso cambiada.');
+}
+
+async function renewRecoveryModal() {
+  const code = await secretForm('Código de recuperación nuevo',
+    'El código anterior dejará de servir. Después tendrás que apuntar el nuevo.',
+    [passField('sr0', 'Frase de paso actual')],
+    'Generar código',
+    async ([pass]) => {
+      const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
+      const { vault: updated, recoveryCode } = await C.renewRecoveryCode(current, pass, CONFIG.kdfIterations);
+      await S.vault.writeVaultFile(updated, 'nuevo código de recuperación');
+      S.vaultFile = updated;
+      Auth.cacheVault(updated);
+      return recoveryCode;
+    });
+  if (!code) return;
+  await modal((close) => {
+    const check = h('input', { type: 'checkbox', id: 'saved2' });
+    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => close(true) }, 'Hecho');
+    check.addEventListener('change', () => { btn.disabled = !check.checked; });
+    return h('div', { class: 'modal', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': 'Tu código de recuperación nuevo' },
+      h('h2', {}, 'Tu código de recuperación nuevo'),
+      h('p', {}, 'Apúntalo en papel y guárdalo en un sitio seguro. No se volverá a mostrar.'),
+      h('div', { class: 'recovery-code' }, code),
+      h('label', { class: 'check', for: 'saved2' }, check, 'Lo he guardado en un sitio seguro'),
+      h('div', { class: 'modal-actions' }, btn));
+  });
+}
+
 // --- Historial de versiones ---
 const dateFmt = new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 function whenText(iso) {
@@ -2189,6 +2272,7 @@ function noteMenu(x, y) {
     ['download', 'Exportar copia (.zip)', () => exportZip()],
   );
   if (S.local) items.push(['collapse', 'Recargar la carpeta', () => reloadLocal()]);
+  else items.push(['key', 'Frase de paso y recuperación…', () => securityModal()]);
   if (S.current) items.push(null, ['trash', 'Eliminar nota', () => deleteNote(S.current), 'danger']);
   items.push(null,
     ['lock', S.local ? 'Cerrar carpeta' : 'Bloquear', () => lock()],

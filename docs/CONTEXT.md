@@ -50,6 +50,10 @@ aunque se robe no puede modificar el código de la web.
   recuperación (PBKDF2-SHA256, 600.000 iteraciones).
 - Cada fichero: `base64(IV de 12 bytes || cifrado)`, con su id como dato autenticado (AAD).
 - Las credenciales de GitHub se guardan en `localStorage` cifradas con la DEK.
+- Cambiar la frase o el código de recuperación solo reenvuelve la DEK (`changePassphrase`, `renewRecoveryCode`).
+  **Límite:** los `vault.json` antiguos siguen en el historial de git, así que quien tenga acceso al repo y la
+  frase antigua aún podría sacar la DEK. Para ese caso haría falta rotar la DEK (recifrar todo); está anotado
+  como pendiente en la revisión de seguridad.
 
 ## Decisiones vigentes
 
@@ -94,7 +98,8 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 ## Siguiente
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
-[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). En curso: **Fase 1** (hecha: enlaces al renombrar, editor, búsqueda, etiquetas, adjuntos y conflictos). En curso: **Fase 2** (hecho: historial).
+[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). **Fase 1** hecha (enlaces al renombrar, editor, búsqueda, etiquetas, adjuntos y conflictos). En curso: **Fase 2**
+(hecho: historial y cambiar la frase de paso).
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

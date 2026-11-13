@@ -468,7 +468,14 @@ export class Vault {
   }
 
   // Guarda en el repo un vault.json actualizado (tras recuperar con el código).
-  async writeVaultFile(vaultFile) {
-    await this.repo.commit([{ path: VAULT_FILE, content: `${JSON.stringify(vaultFile, null, 2)}\n` }], 'Snowlog: cambiar frase de paso');
+  async writeVaultFile(vaultFile, message = 'cambiar frase de paso') {
+    const change = [{ path: VAULT_FILE, content: `${JSON.stringify(vaultFile, null, 2)}\n` }];
+    try {
+      await this.repo.commit(change, `Snowlog: ${message}`);
+    } catch (e) {
+      if (e.status !== 409) throw e;
+      await this.repo.fetchHead();
+      await this.repo.commit(change, `Snowlog: ${message}`);
+    }
   }
 }

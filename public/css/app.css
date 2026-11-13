@@ -126,6 +126,9 @@ button { cursor: pointer; }
 }
 .sidebar-actions { display: flex; gap: 2px; }
 
+.security-options { display: flex; flex-direction: column; gap: 8px; }
+.security-options .btn { text-align: left; }
+
 /* ---------- Historial ---------- */
 .modal.history { width: min(980px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
 .history-body { display: grid; grid-template-columns: 220px 1fr; gap: 14px; min-height: 0; flex: 1; }
