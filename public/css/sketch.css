@@ -1,5 +1,14 @@
-/* Copiado de serbenda/sketch (css/sketch.css, commit db44696). No editar aquí. */
+/* Copiado de serbenda/sketch (css/sketch.css, commit 0d64f54). No editar aquí. */
 /* Editor de sketch. Todo con el prefijo sk- para poder incrustarlo en otras páginas (Snowlog). */
+
+/* Letra a mano: Caveat (SIL Open Font License, ver fonts/OFL.txt), recortada a los caracteres latinos. */
+@font-face {
+  font-family: "Sketch Mano";
+  src: url("../fonts/caveat.woff") format("woff");
+  font-weight: 400 700;
+  font-display: swap;
+}
+
 .sk-editor {
   --sk-bg: #ffffff;
   --sk-ui: #ffffff;
@@ -233,8 +242,14 @@
   resize: none;
   overflow: hidden;
   white-space: pre;
-  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", "Chalkboard SE", cursive;
+  font-family: "Sketch Mano", "Segoe Print", "Bradley Hand", "Comic Sans MS", "Chalkboard SE", cursive;
   min-width: 40px;
+}
+
+/* Texto dentro de una forma: centrado y partido al ancho de la forma. */
+.sk-textbox.sk-bound {
+  white-space: pre-wrap;
+  text-align: center;
 }
 
 .sk-readonly .sk-canvas {
@@ -245,6 +260,12 @@
   .sk-toolbar {
     top: auto;
     bottom: 60px;
+    max-width: calc(100% - 12px);
+    gap: 0;
+  }
+
+  .sk-toolbar .sk-btn {
+    width: 34px;
   }
 
   .sk-panel {
@@ -253,4 +274,18 @@
     right: 10px;
     max-height: 34%;
   }
+}
+
+/* Solo para lectores de pantalla. */
+.sk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sk-editor [hidden] {
+  display: none !important;
 }

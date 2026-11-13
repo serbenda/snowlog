@@ -57,6 +57,7 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/config.js     configuración pública (nada secreto)
   js/sketch-*.js   motor de dibujo copiado de serbenda/sketch (no editar aquí; scripts/update-sketch.mjs)
   css/sketch.css   estilos del editor de dibujo (copiado igual)
+  fonts/           letra a mano de los dibujos (Caveat, OFL; copiada igual)
   sw.js            service worker: guarda la web para abrirla sin conexión (nunca datos de GitHub)
 scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
 scripts/update-sketch.mjs   copia el motor de sketch a public/

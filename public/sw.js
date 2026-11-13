@@ -8,6 +8,7 @@ const SHELL = [
   'index.html',
   'css/app.css',
   'css/sketch.css',
+  'fonts/caveat.woff',
   'icon.svg',
   'manifest.webmanifest',
   'js/app.js',

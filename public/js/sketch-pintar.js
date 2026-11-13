@@ -1,18 +1,47 @@
-// Copiado de serbenda/sketch (js/pintar.js, commit db44696) con scripts/update-sketch.mjs. No editar aquí.
+// Copiado de serbenda/sketch (js/pintar.js, commit 0d64f54) con scripts/update-sketch.mjs. No editar aquí.
 // Pinta una escena en un <canvas> o la convierte en SVG (texto para descargar o nodos DOM para
 // incrustar). Los textos del dibujo nunca se meten como HTML: se escapan o van con textContent.
 
-import { drawOps, sceneBounds, FONT } from './sketch-escena.js';
+import { drawOps, sceneBounds, textLayout, setTextMeasurer, FONT, FONT_NAME } from './sketch-escena.js';
 import { toSvgD, tracePath } from './sketch-trazo.js';
+
+// Mide los textos con un canvas (la letra a mano es más estrecha que la estimación sin DOM).
+let measuring = false;
+export function measureWithCanvas(doc) {
+  if (measuring) return;
+  const ctx = doc.createElement('canvas').getContext('2d');
+  if (!ctx) return;
+  measuring = true;
+  setTextMeasurer((text, fontSize) => {
+    ctx.font = `${fontSize}px ${FONT}`;
+    return ctx.measureText(text).width;
+  });
+}
+
+// Promesa que se cumple cuando la letra a mano está lista (o no se puede cargar).
+export function fontReady(doc) {
+  try {
+    return Promise.resolve(doc.fonts?.load(`24px "${FONT_NAME}"`)).catch(() => {});
+  } catch {
+    return Promise.resolve();
+  }
+}
 
 export function paintElement(ctx, el) {
   ctx.save();
   if (el.type === 'text') {
+    const L = textLayout(el);
     ctx.globalAlpha = el.opacity;
     ctx.fillStyle = el.stroke;
     ctx.font = `${el.fontSize}px ${FONT}`;
     ctx.textBaseline = 'top';
-    String(el.text || '').split('\n').forEach((line, i) => ctx.fillText(line, el.x, el.y + i * el.fontSize * 1.25));
+    ctx.textAlign = L.anchor === 'middle' ? 'center' : 'left';
+    if (L.angle) {
+      ctx.translate(L.c.x, L.c.y);
+      ctx.rotate(L.angle);
+      ctx.translate(-L.c.x, -L.c.y);
+    }
+    for (const l of L.lines) ctx.fillText(l.t, l.x, l.y);
     ctx.restore();
     return;
   }
@@ -66,9 +95,9 @@ export function toSvgString(scene, { padding = 20 } = {}) {
   let clipN = 0;
   for (const el of scene.elements) {
     if (el.type === 'text') {
-      String(el.text || '').split('\n').forEach((line, i) => {
-        parts.push(`<text x="${el.x}" y="${el.y + i * el.fontSize * 1.25}" font-size="${el.fontSize}" font-family="${esc(FONT)}" fill="${esc(el.stroke)}" opacity="${el.opacity}" dominant-baseline="hanging">${esc(line)}</text>`);
-      });
+      const L = textLayout(el);
+      const lines = L.lines.map((l) => `<text x="${l.x}" y="${l.y}" font-size="${el.fontSize}" font-family="${esc(FONT)}" fill="${esc(el.stroke)}" opacity="${el.opacity}" text-anchor="${L.anchor}" dominant-baseline="hanging">${esc(l.t)}</text>`).join('');
+      parts.push(L.angle ? `<g transform="rotate(${(L.angle * 180) / Math.PI} ${L.c.x} ${L.c.y})">${lines}</g>` : lines);
       continue;
     }
     for (const op of drawOps(el)) {
@@ -91,6 +120,7 @@ export function toSvgString(scene, { padding = 20 } = {}) {
 
 // Escena → nodo <svg> creado con el DOM (sin innerHTML), para incrustarlo en otra página.
 export function toSvgElement(doc, scene, { padding = 20, maxWidth = null } = {}) {
+  measureWithCanvas(doc);
   const NS = 'http://www.w3.org/2000/svg';
   const b = sceneBounds(scene.elements);
   const W = Math.ceil(b.w + padding * 2);
@@ -106,11 +136,14 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null } = {})
   const prefix = `s${Math.random().toString(36).slice(2, 8)}`;
   for (const el of scene.elements) {
     if (el.type === 'text') {
-      String(el.text || '').split('\n').forEach((line, i) => {
-        const t = mk('text', { x: el.x, y: el.y + i * el.fontSize * 1.25, 'font-size': el.fontSize, 'font-family': FONT, fill: el.stroke, opacity: el.opacity, 'dominant-baseline': 'hanging' });
-        t.textContent = line;
-        svg.append(t);
-      });
+      const L = textLayout(el);
+      const g = L.angle ? mk('g', { transform: `rotate(${(L.angle * 180) / Math.PI} ${L.c.x} ${L.c.y})` }) : svg;
+      for (const l of L.lines) {
+        const t = mk('text', { x: l.x, y: l.y, 'font-size': el.fontSize, 'font-family': FONT, fill: el.stroke, opacity: el.opacity, 'text-anchor': L.anchor, 'dominant-baseline': 'hanging' });
+        t.textContent = l.t;
+        g.append(t);
+      }
+      if (g !== svg) svg.append(g);
       continue;
     }
     for (const op of drawOps(el)) {
@@ -133,6 +166,8 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null } = {})
 
 // Escena → PNG (Blob) a `scale` veces su tamaño.
 export async function toPngBlob(doc, scene, { padding = 20, scale = 2 } = {}) {
+  measureWithCanvas(doc);
+  await fontReady(doc);
   const b = sceneBounds(scene.elements);
   const canvas = doc.createElement('canvas');
   canvas.width = Math.max(1, Math.ceil((b.w + padding * 2) * scale));

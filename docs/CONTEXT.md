@@ -132,7 +132,9 @@ Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI q
 
 - [sketch](https://github.com/serbenda/sketch): pizarra a mano alzada, web propia sin red. Su motor
   (`js/{trazo,escena,pintar,editor}.js` y `css/sketch.css`) se copia en `public/js/sketch-*.js` y
-  `public/css/sketch.css` con `node scripts/update-sketch.mjs <ruta-a-sketch>`; no se editan aquí. Los dibujos
+  `public/css/sketch.css`, y su letra a mano (Caveat, OFL) en `public/fonts/`, con
+  `node scripts/update-sketch.mjs <ruta-a-sketch>`; no se editan aquí. La portátil quita el `@font-face` (sin
+  `font-src`) y usa la cursiva del sistema. Los dibujos
   son adjuntos `.sketch` (JSON) cifrados como cualquier otro; se incrustan con `![[x.sketch]]` como SVG hecho
   con DOM (sin innerHTML). Si un dibujo cambia en dos dispositivos, no se fusiona: la otra versión se guarda
   como copia.

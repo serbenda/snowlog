@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Copia el editor de dibujos desde una copia local del repo sketch (serbenda/sketch) a public/:
-// js/sketch-*.js y css/sketch.css. Los imports se renombran para que el empaquetador de la versión
+// js/sketch-*.js, css/sketch.css y la letra a mano (fonts/). Los imports se renombran para que el empaquetador de la versión
 // portátil (que solo entiende './x.js' en public/js) los encuentre.
 //
 // Uso: node scripts/update-sketch.mjs ../sketch
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,4 +25,7 @@ for (const f of FILES) {
   writeFileSync(join(ROOT, 'public', 'js', `sketch-${f}.js`), head + src);
 }
 writeFileSync(join(ROOT, 'public', 'css', 'sketch.css'), `/* Copiado de serbenda/sketch (css/sketch.css, commit ${commit}). No editar aquí. */\n${readFileSync(join(SRC, 'css', 'sketch.css'), 'utf8')}`);
-console.log(`sketch ${commit} copiado en public/js/sketch-*.js y public/css/sketch.css`);
+// La letra a mano (Caveat, OFL) con su licencia. En la versión portátil no se usa (sin font-src).
+mkdirSync(join(ROOT, 'public', 'fonts'), { recursive: true });
+for (const f of ['caveat.woff', 'OFL.txt']) copyFileSync(join(SRC, 'fonts', f), join(ROOT, 'public', 'fonts', f));
+console.log(`sketch ${commit} copiado en public/js/sketch-*.js, public/css/sketch.css y public/fonts/`);
