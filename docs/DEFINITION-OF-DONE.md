@@ -43,7 +43,7 @@ La hoja de ruta completa, con el motivo de cada punto, está en [ROADMAP.md](ROA
 ### Fase 2: Confianza
 - [x] Historial de una nota con vista de cada versión y botón de restaurar.
 - [x] Cambiar la frase de paso desde la app (reenvolver la clave sin recifrar todo).
-- [ ] Recordatorio y copia de seguridad: exportar .zip cifrado de forma periódica.
+- [x] Recordatorio y copia de seguridad: exportar .zip cifrado de forma periódica.
 - [ ] Rendimiento: con 1.000 notas, entrar en menos de 3 s; guardados agrupados para no generar un commit por tecla.
 - [ ] Versión online sin conexión (PWA): leer y editar sin red, con cola de cambios y caché cifrada.
 - [ ] Revisión de seguridad independiente del cifrado y de la CSP, con sus hallazgos resueltos.

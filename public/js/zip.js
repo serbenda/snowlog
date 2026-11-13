@@ -1,4 +1,5 @@
 // ZIP mínimo sin compresión (método "store"), suficiente para exportar notas de texto.
+// readZip solo lee zips sin compresión, como los que genera makeZip.
 // Sin dependencias: se genera en el navegador y se descarga, sin pasar por la red.
 
 const CRC_TABLE = (() => {
@@ -79,6 +80,38 @@ export function makeZip(files, now = new Date()) {
   for (const part of [...locals, ...centrals, end]) {
     out.set(part, pos);
     pos += part.length;
+  }
+  return out;
+}
+
+// Lee un .zip sin compresión: [{ path, data: Uint8Array }]. Comprueba el CRC de cada fichero.
+export function readZip(bytes) {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let end = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 65535); i--) {
+    if (v.getUint32(i, true) === 0x06054b50) { end = i; break; }
+  }
+  if (end < 0) throw new Error('bad_zip');
+  const count = v.getUint16(end + 10, true);
+  let p = v.getUint32(end + 16, true);
+  const dec = new TextDecoder();
+  const out = [];
+  for (let n = 0; n < count; n++) {
+    if (v.getUint32(p, true) !== 0x02014b50) throw new Error('bad_zip');
+    const method = v.getUint16(p + 10, true);
+    const crc = v.getUint32(p + 16, true);
+    const size = v.getUint32(p + 20, true);
+    const nameLen = v.getUint16(p + 28, true);
+    const extraLen = v.getUint16(p + 30, true);
+    const commentLen = v.getUint16(p + 32, true);
+    const local = v.getUint32(p + 42, true);
+    const path = dec.decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    if (method !== 0) throw new Error('zip_compressed');
+    const start = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
+    const data = bytes.slice(start, start + size);
+    if (crc32(data) !== crc) throw new Error('bad_zip');
+    if (!path.endsWith('/')) out.push({ path, data });
+    p += 46 + nameLen + extraLen + commentLen;
   }
   return out;
 }

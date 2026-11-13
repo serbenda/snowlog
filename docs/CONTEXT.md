@@ -60,6 +60,9 @@ aunque se robe no puede modificar el código de la web.
 - Sin framework ni build: módulos ES servidos tal cual. Menos superficie de ataque.
 - Markdown propio en `markdown.js` en lugar de una librería: escapa todo antes de dar formato.
 - Un commit por guardado (con retardo de 2,5 s), con un reintento si otro dispositivo escribió antes.
+- Copias (`backup.js`): `.snowlog` = JSON con `vault.json` (claves envueltas) y un .zip cifrado con la DEK
+  (AAD `snowlog-backup`). Se abre con `unlockWithAny` (frase o código). El navegador no deja guardar ficheros
+  solo, así que «periódica» es un recordatorio: en `localStorage` solo se guarda la fecha de la última copia.
 - Historial: online, `GET /commits?path=n/<id>.enc` y cada versión se descifra al elegirla; restaurar es un
   guardado más. Local: copias en `.history/<ruta>/<fecha>.md` (oculta, no se carga como nota), que siguen a la
   nota al renombrarla.
@@ -99,7 +102,7 @@ en memoria descifrando todas las notas tras desbloquear (`noteindex.js`); se bor
 
 Plan en tres fases (Imprescindible, Confianza, Pulido) en [ROADMAP.md](ROADMAP.md), con criterios en
 [DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md). **Fase 1** hecha (enlaces al renombrar, editor, búsqueda, etiquetas, adjuntos y conflictos). En curso: **Fase 2**
-(hecho: historial y cambiar la frase de paso).
+(hecho: historial, cambiar la frase de paso y copias de seguridad).
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 

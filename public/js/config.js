@@ -32,4 +32,6 @@ export const CONFIG = {
 
   // Espera tras dejar de escribir antes de guardar (ms).
   saveDelayMs: 2500,
+  // Días sin copia de seguridad antes de recordarla (0 = nunca).
+  backupReminderDays: 7,
 };

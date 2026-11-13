@@ -179,6 +179,19 @@ export async function unlockVault(vault, passphrase) {
   return dek;
 }
 
+// Abre la DEK con la frase de paso o, si no encaja, con el código de recuperación.
+export async function unlockWithAny(vault, secret) {
+  for (const [slot, value] of [[vault.keys.passphrase, secret], [vault.keys.recovery, normalizeRecoveryCode(secret)]]) {
+    try {
+      const raw = await unwrapWith(slot, value);
+      const dek = await importDek(raw);
+      raw.fill(0);
+      return dek;
+    } catch { /* probar el siguiente */ }
+  }
+  throw new Error('bad_secret');
+}
+
 // Con el código de recuperación se fija una frase de paso nueva.
 // Devuelve la bóveda actualizada y la DEK.
 export async function recoverVault(vault, recoveryCode, newPassphrase) {

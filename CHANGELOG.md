@@ -6,6 +6,9 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- Copias de seguridad: «Copia de seguridad cifrada» descarga un fichero `.snowlog` con todas las notas y adjuntos cifrados, que se abre con la frase de paso o con el código de recuperación, sin GitHub. «Abrir copia de seguridad…» la importa en una carpeta aparte o la descarga como .zip sin cifrar; también funciona en la versión portátil, sin red. En local, la copia es el .zip de siempre.
+- Recordatorio cuando pasan 7 días sin copia (`backupReminderDays` en la configuración), con «Hacer copia ahora» o «Mañana».
+- Al bloquear también se vacían los avisos de la pantalla.
 - «Frase de paso y recuperación…» en el menú ⋯: cambiar la frase de paso (pide la actual) y generar un código de recuperación nuevo (el anterior deja de servir). Solo se vuelve a envolver la clave; las notas no se recifran. Al cambiarla se aplican las iteraciones de PBKDF2 de la configuración si son más.
 - Historial de versiones de cada nota (menú ⋯ › «Historial de versiones…»): lista de versiones con fecha, vista previa, cuántas líneas cambian frente a la actual y botón para restaurar (restaurar no borra nada del historial). En online se leen de los commits del repo, cifradas; en local se guarda una copia en `.history/` como mucho cada 10 minutos (las 50 últimas por nota).
 - Ningún cambio se pierde entre dispositivos: si la misma nota se cambió en otro sitio desde que la abriste, al guardar se conserva tu versión y la otra queda en una copia «Nota (otro dispositivo AAAA-MM-DD HHMM)», con un aviso que la abre. Si la borraron en otro dispositivo, guardarla la recupera. En la versión portátil pasa lo mismo cuando la carpeta se sincroniza (OneDrive, Dropbox…) y el fichero cambió fuera.

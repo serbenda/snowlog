@@ -12,6 +12,7 @@ import { makeZip } from './zip.js';
 import { rewriteLinks, linkChanges } from './links.js';
 import * as Ed from './editor.js';
 import { searchNotes, tagCounts } from './search.js';
+import { makeBackup, openBackup, parseBackup } from './backup.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
 import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
@@ -103,6 +104,8 @@ function errText(e) {
     no_worker: 'Falta configurar el servicio de login (authWorker).',
     session_expired: 'La sesión de GitHub ha caducado. Vuelve a entrar.',
     vault_exists: 'Ya hay una bóveda en el repo.',
+    bad_backup: 'Ese fichero no es una copia de seguridad de Snowlog o está dañado.',
+    bad_zip: 'El contenido de la copia está dañado.',
     bad_type: 'Solo se pueden adjuntar imágenes (png, jpg, gif, webp, avif, bmp) y PDF.',
     too_big: 'El adjunto es demasiado grande (máximo 20 MB).',
   };
@@ -306,6 +309,121 @@ async function reloadLocal() {
   notice('Carpeta recargada.');
 }
 
+// Todas las notas y adjuntos, para exportar o copiar: [{ path, text }] y [{ path, data }].
+async function collectFiles() {
+  const files = [];
+  for (const n of S.vault.notes()) files.push({ path: `${n.path}.md`, text: await S.vault.read(n.id) });
+  for (const f of S.vault.files()) files.push({ path: f.path, data: await S.vault.readFile(f.id) });
+  return files;
+}
+
+function download(bytes, name, type) {
+  const a = h('a', { href: URL.createObjectURL(new Blob([bytes], { type })), download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+// --- Copias de seguridad ---
+// Solo se recuerda la fecha de la última copia (nada secreto) para avisar si pasa mucho tiempo.
+const backupKey = () => `snowlog.backup.${S.local ? 'local' : `${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}`}`;
+function backupState() {
+  try {
+    return JSON.parse(localStorage.getItem(backupKey()) || 'null') || {};
+  } catch {
+    return {};
+  }
+}
+function saveBackupState(st) {
+  try { localStorage.setItem(backupKey(), JSON.stringify(st)); } catch { /* sin almacenamiento */ }
+}
+
+function backupReminder() {
+  const days = CONFIG.backupReminderDays;
+  if (!days || !S.vault || !S.vault.notes().length) return;
+  const st = backupState();
+  const now = Date.now();
+  if (!st.since) saveBackupState({ ...st, since: now });
+  const from = st.last || st.since || now;
+  if (now - from < days * 86400000 || (st.snoozed && now - st.snoozed < 86400000)) return;
+  const n = h('div', { class: 'notice' },
+    st.last ? `Tu última copia de seguridad es de hace ${Math.floor((now - st.last) / 86400000)} días. ` : 'Aún no has hecho ninguna copia de seguridad. ',
+    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); backupNow(); } }, 'Hacer copia ahora'),
+    ' · ',
+    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); saveBackupState({ ...backupState(), snoozed: Date.now() }); } }, 'Mañana'));
+  $('notices').append(n);
+  setTimeout(() => n.remove(), 30000);
+}
+
+// Online: fichero .snowlog cifrado (se abre con la frase o el código). Local: .zip con los .md.
+async function backupNow() {
+  if (!S.vault) return;
+  if (S.local) return exportZip();
+  await saveNow();
+  setStatus('');
+  $('st-sync').textContent = 'Preparando la copia cifrada…';
+  try {
+    const files = await collectFiles();
+    const vaultFile = (await Vault.fetchVaultFile(S.repo).catch(() => null)) || S.vaultFile;
+    download(await makeBackup(vaultFile, S.dek, files), `snowlog-copia-${isoDate(new Date())}.snowlog`, 'application/octet-stream');
+    saveBackupState({ ...backupState(), last: Date.now() });
+    notice(`Copia cifrada descargada: ${files.length} ficheros. Se abre con tu frase de paso o tu código de recuperación.`);
+  } catch (e) {
+    notice(errText(e), 'error');
+  } finally {
+    $('st-sync').textContent = '';
+  }
+}
+
+async function restoreBackup(file) {
+  let meta;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  try {
+    meta = parseBackup(bytes);
+  } catch (e) {
+    return notice(errText(e), 'error');
+  }
+  const when = dateFmt.format(new Date(meta.created));
+  const opened = await secretForm('Abrir copia de seguridad',
+    `Copia del ${when} con ${meta.notes} nota${meta.notes === 1 ? '' : 's'}. Se abre con la frase de paso que tenías entonces o con el código de recuperación.`,
+    [passField('bk0', 'Frase de paso o código de recuperación')],
+    'Abrir',
+    async ([secret]) => openBackup(bytes, secret));
+  if (!opened) return;
+  const target = `Copia ${isoDate(new Date(meta.created))}`;
+  const action = await pickModal('¿Qué quieres hacer con la copia?', [
+    { label: `Importarla en la carpeta «${target}»`, sub: 'Tus notas actuales no se tocan', value: 'import' },
+    { label: 'Descargarla como .zip sin cifrar', sub: 'Para abrirla con cualquier editor', value: 'zip' },
+  ]);
+  if (action === 'zip') return download(opened.zip, `${target}.zip`, 'application/zip');
+  if (action !== 'import') return;
+  await saveNow();
+  const dec = new TextDecoder();
+  const notes = opened.files.filter((f) => /\.md$/i.test(f.path))
+    .map((f) => ({ path: `${target}/${f.path.replace(/\.md$/i, '')}`, text: dec.decode(f.data) }));
+  const others = opened.files.filter((f) => !/\.md$/i.test(f.path));
+  const st = $('st-sync');
+  try {
+    st.textContent = `Importando 0/${notes.length}…`;
+    const result = await S.vault.importNotes(notes, { message: 'restaurar copia', onProgress: (d, t) => { S.lastActivity = Date.now(); st.textContent = `Importando ${d}/${t}…`; } });
+    let skipped = 0;
+    for (const f of others) {
+      try {
+        await S.vault.addFile(parentPath(`${target}/${f.path}`), baseName(f.path), f.data);
+      } catch { skipped += 1; }
+    }
+    S.expanded.add(target);
+    renderTree();
+    notice(`Copia importada en «${target}»: ${result.length} notas${others.length ? ` y ${others.length - skipped} adjuntos` : ''}.`);
+  } catch (e) {
+    renderTree();
+    notice(`La importación se ha detenido: ${errText(e)}. Lo ya importado se conserva.`, 'error');
+  } finally {
+    st.textContent = '';
+  }
+}
+
 async function exportZip() {
   if (!S.vault) return;
   if (!S.local) {
@@ -317,16 +435,10 @@ async function exportZip() {
   setStatus('');
   $('st-sync').textContent = 'Preparando la copia…';
   try {
-    const files = [];
-    for (const n of S.vault.notes()) files.push({ path: `${n.path}.md`, text: await S.vault.read(n.id) });
-    for (const f of S.vault.files()) files.push({ path: f.path, data: await S.vault.readFile(f.id) });
-    const blob = new Blob([makeZip(files)], { type: 'application/zip' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: `snowlog-${isoDate(new Date())}.zip` });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-    notice(`Copia exportada: ${files.length} notas.`);
+    const files = await collectFiles();
+    download(makeZip(files), `snowlog-${isoDate(new Date())}.zip`, 'application/zip');
+    if (S.local) saveBackupState({ ...backupState(), last: Date.now() });
+    notice(`Copia exportada: ${files.length} ficheros.`);
   } catch (e) {
     notice(errText(e), 'error');
   } finally {
@@ -557,6 +669,7 @@ function wipe() {
   $('editor-mirror').replaceChildren();
   revokeBlobs();
   $('search-input').value = '';
+  $('notices').replaceChildren();
   $('search-results').replaceChildren();
   $('tag-list').replaceChildren();
   closeSuggest();
@@ -629,6 +742,7 @@ function enterApp() {
     if (b) { b.title = label; b.setAttribute('aria-label', label); }
   }
   renderTree();
+  setTimeout(backupReminder, 4000);
   // El índice completo (para consultas y enlaces entrantes) se carga en segundo plano.
   ensureIndex().then(() => {
     refreshBacklinks();
@@ -2269,8 +2383,10 @@ function noteMenu(x, y) {
     ['setup', 'Configurar mi espacio…', () => setupSpace()],
     ['example', 'Cargar ejemplos…', () => loadExamples()],
     ['import', 'Importar carpeta…', () => ACTIONS.import()],
-    ['download', 'Exportar copia (.zip)', () => exportZip()],
+    ['download', S.local ? 'Copia de seguridad (.zip)' : 'Copia de seguridad cifrada', () => backupNow()],
   );
+  if (!S.local) items.push(['download', 'Exportar sin cifrar (.zip)', () => exportZip()]);
+  items.push(['import', 'Abrir copia de seguridad…', () => $('backup-input').click()]);
   if (S.local) items.push(['collapse', 'Recargar la carpeta', () => reloadLocal()]);
   else items.push(['key', 'Frase de paso y recuperación…', () => securityModal()]);
   if (S.current) items.push(null, ['trash', 'Eliminar nota', () => deleteNote(S.current), 'danger']);
@@ -2359,6 +2475,11 @@ function setupUi() {
       if (ev.dataTransfer?.types.includes('Files') && !ev.defaultPrevented) ev.preventDefault();
     });
   }
+  $('backup-input').addEventListener('change', (ev) => {
+    const [file] = ev.target.files;
+    ev.target.value = '';
+    if (file && S.vault) restoreBackup(file);
+  });
   $('attach-input').addEventListener('change', (ev) => {
     const files = [...ev.target.files];
     ev.target.value = '';
