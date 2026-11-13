@@ -130,6 +130,10 @@ Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI q
 
 ## Proyectos relacionados
 
+- Escritorio (Tauri 2, `desktop/`): una ventana que carga `public/` tal cual, sin órdenes del sistema expuestas
+  a la web (`withGlobalTauri: false`, sin plugins). Usa el motor del sistema: en Windows (WebView2) funciona la
+  carpeta del ordenador; en macOS y Linux (WebKit) no hay File System Access y la bóveda local va dentro de la
+  app (kvdir). El login con GitHub App no sirve (su vuelta va a la web publicada): se entra con token personal.
 - [sketch](https://github.com/serbenda/sketch): pizarra a mano alzada, web propia sin red. Su motor
   (`js/{trazo,escena,pintar,editor}.js` y `css/sketch.css`) se copia en `public/js/sketch-*.js` y
   `public/css/sketch.css`, y su letra a mano (Caveat, OFL) en `public/fonts/`, con

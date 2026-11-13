@@ -62,6 +62,7 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
 scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
 scripts/update-sketch.mjs   copia el motor de sketch a public/
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)
+desktop/           versión de escritorio con Tauri (src-tauri/); la compila .github/workflows/desktop.yml
 tests/             node --test; incluye un GitHub falso en memoria
 tests/e2e/         recorridos en Chrome por el protocolo de DevTools (cdp.mjs), sin dependencias
 docs/              contexto, Definition of Done y puesta en marcha

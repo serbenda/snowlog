@@ -6,6 +6,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- **Versión de escritorio con Tauri** para Windows (`.exe` que se abre sin instalar), macOS (`.app` para Intel y Apple Silicon) y Linux (AppImage): una ventana propia con la web dentro, sin navegador. La compila el workflow «Escritorio» y la deja como artefacto. Sin firmar: en equipos de empresa el antivirus puede bloquearla; para esos casos sigue la versión portátil en HTML.
 - **Dibujos que cambian en dos dispositivos se juntan** elemento a elemento: si uno mueve una caja y el otro añade un rombo, quedan las dos cosas sin crear copias. Solo si los dos cambian el mismo elemento de forma distinta se guarda además la otra versión aparte. Vale también para la carpeta del ordenador (cambios hechos fuera).
 - La **búsqueda encuentra los dibujos** por su nombre y por los textos que llevan dentro, y al abrir un dibujo, «Enlaces entrantes» muestra las notas que lo incrustan.
 - Dibujos con teclado (crear, recorrer, mover, cambiar de tamaño y girar sin ratón) y más fluidos con muchos elementos (motor de sketch actualizado).

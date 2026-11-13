@@ -1,0 +1,6 @@
+# Lo genera la compilación
+src-tauri/target/
+src-tauri/gen/
+src-tauri/icons/
+src-tauri/Cargo.lock
+app/
