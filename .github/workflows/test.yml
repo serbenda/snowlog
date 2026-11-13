@@ -17,6 +17,12 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      - name: Construir la versión portátil
+        run: node scripts/build-portable.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snowlog-portable
+          path: dist/snowlog-portable.html
 
   autoria:
     name: Autoría de los commits

@@ -4,9 +4,11 @@
   "type": "module",
   "description": "Snowlog: cuaderno de notas personal al estilo Obsidian, cifrado de extremo a extremo, sobre GitHub y GitHub Pages.",
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "build:portable": "node scripts/build-portable.mjs"
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "version": "0.2.0"
 }
