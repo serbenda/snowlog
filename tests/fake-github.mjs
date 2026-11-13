@@ -6,6 +6,8 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
   const trees = new Map(); // sha -> Map
   let head = null;
   let n = 0;
+  let graphqlCalls = 0;
+  const blobs = new Map();
   const sha = (p) => `${p}${(n += 1).toString(16).padStart(8, '0')}`;
   const base = `https://api.github.com/repos/${owner}/${repo}`;
 
@@ -21,11 +23,21 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
   async function fetchImpl(url, opts = {}) {
     const u = new URL(url);
     const method = opts.method || 'GET';
-    if (!u.href.startsWith(base)) return json(404, { message: 'Not Found' });
+    if (!u.href.startsWith(base) && u.href !== 'https://api.github.com/graphql') return json(404, { message: 'Not Found' });
     const path = decodeURIComponent(u.pathname.slice(new URL(base).pathname.length));
     const body = opts.body ? JSON.parse(opts.body) : null;
 
     if (path === '' && method === 'GET') return json(200, { full_name: `${owner}/${repo}`, private: true });
+    if (u.href === 'https://api.github.com/graphql' && method === 'POST') {
+      graphqlCalls += 1;
+      const data = {};
+      for (const m of body.query.matchAll(/(f\d+): object\(expression: "([^"]+)"\)/g)) {
+        const [sha, ...rest] = m[2].split(':');
+        const file = commits.get(sha)?.files.get(rest.join(':'));
+        data[m[1]] = file == null ? null : { text: file, isTruncated: false };
+      }
+      return json(200, { data: { repository: data } });
+    }
     if (path === '/git/ref/heads/main') return head ? json(200, { object: { sha: head } }) : json(409, { message: 'Git Repository is empty.' });
     if (path.startsWith('/contents/') && method === 'GET') {
       const c = commits.get(u.searchParams.get('ref') || head);
@@ -61,11 +73,17 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
       const files = new Map(trees.get(body.base_tree));
       for (const e of body.tree) {
         if (e.sha === null) files.delete(e.path);
+        else if (e.sha) files.set(e.path, blobs.get(e.sha));
         else files.set(e.path, e.content);
       }
       const t = sha('t');
       trees.set(t, files);
       return json(201, { sha: t });
+    }
+    if (path === '/git/blobs' && method === 'POST') {
+      const b = sha('b');
+      blobs.set(b, body.content);
+      return json(201, { sha: b });
     }
     if (path === '/git/commits' && method === 'POST') {
       return json(201, { sha: commitFiles(trees.get(body.tree), body.parents[0]) });
@@ -82,6 +100,7 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
     fetch: fetchImpl,
     files: () => new Map(head ? commits.get(head).files : []),
     commitCount: () => commits.size,
+    graphqlCalls: () => graphqlCalls,
     // Simula que otro dispositivo escribe un fichero.
     externalWrite(path, content) {
       const files = new Map(commits.get(head).files);

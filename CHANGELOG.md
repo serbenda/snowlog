@@ -6,6 +6,15 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- **Dibujos que cambian en dos dispositivos se juntan** elemento a elemento: si uno mueve una caja y el otro añade un rombo, quedan las dos cosas sin crear copias. Solo si los dos cambian el mismo elemento de forma distinta se guarda además la otra versión aparte. Vale también para la carpeta del ordenador (cambios hechos fuera).
+- La **búsqueda encuentra los dibujos** por su nombre y por los textos que llevan dentro, y al abrir un dibujo, «Enlaces entrantes» muestra las notas que lo incrustan.
+- Dibujos con teclado (crear, recorrer, mover, cambiar de tamaño y girar sin ratón) y más fluidos con muchos elementos (motor de sketch actualizado).
+- Dibujos: letra a mano, texto dentro de las formas (doble clic), flechas pegadas a las formas, girar, agrupar, alinear y repartir (motor de sketch actualizado). En la versión portátil los textos usan la letra cursiva del sistema, porque su CSP no admite fuentes.
+- **Dibujos a mano alzada** (motor de [sketch](https://github.com/serbenda/sketch)): «Nuevo dibujo» crea un `.sketch` en la carpeta `Dibujos` y lo abre en una pizarra con rectángulos, rombos, elipses, flechas, líneas, lápiz, texto y goma; deshacer, zoom y temas claro y oscuro. «Insertar un dibujo nuevo» añade `![[Dibujo….sketch]]` a la nota, que se ve como imagen en el modo lectura y se abre al pulsarla. Se guardan cifrados como cualquier adjunto; si el mismo dibujo cambia en dos dispositivos, se guarda la otra versión como copia. Adjuntar un `.excalidraw` lo convierte en `.sketch`. `scripts/update-sketch.mjs` copia el motor desde el repo de sketch.
+- **Cambiar la clave de cifrado** («Frase de paso y recuperación…» → «Cambiar la clave de cifrado»): todas las notas, adjuntos y el índice se vuelven a cifrar con una clave nueva en un solo commit, y se genera un código de recuperación nuevo. Las claves anteriores se guardan cifradas con la nueva en un llavero, así el historial se sigue leyendo. Los demás dispositivos piden la frase al guardar o al entrar, y lo que estuvieran escribiendo no se pierde: se sube tras desbloquear.
+- Si la frase de paso se cambia en otro dispositivo, este pide la nueva al desbloquear (antes seguía valiendo la antigua aquí).
+- **Fusión automática:** si la misma nota cambia en dos dispositivos (o fuera de Snowlog, en la versión portátil) en partes distintas, se juntan los dos cambios sin crear copias. Si los dos añaden líneas en el mismo sitio, se quedan ambas. Solo cuando cambian las mismas líneas de forma distinta se guarda la otra versión como copia, como antes.
+- Primera entrada en un dispositivo nuevo mucho más rápida: las notas se descargan en bloques de 100 (GraphQL de GitHub) en lugar de una a una. Con 1.000 notas y 150 ms de latencia, el índice completo pasa de 17,5 s a 2,9 s. Si GraphQL no está disponible, se sigue como antes.
 - **Tests en el navegador** (`npm run test:e2e`, y en la CI en cada push y PR): crear bóveda, escribir, bloquear y volver a entrar sin nada en claro en el repo; que el HTML de una nota no se ejecute y la CSP no se queje; ejemplos, búsqueda y renombrar con enlaces; y la versión portátil desde el disco sin ninguna conexión. Usan Chrome directamente por el protocolo de DevTools, sin dependencias.
 - **Pasar notas entre la versión portátil y la online:** «Importar copia (.snowlog o .zip)…» acepta la copia cifrada de la online y el .zip de la portátil (o de «Exportar sin cifrar»). Se puede importar en una carpeta aparte o tal cual, con sus carpetas y adjuntos.
 - Versión portátil en Firefox y Safari (y en cualquier navegador que no deje elegir carpetas): «Guardar dentro del navegador» guarda las notas en IndexedDB (o en localStorage si no hay) y siguen ahí al volver a abrir el fichero.
@@ -68,6 +77,8 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 - Los enlaces y etiquetas escritos dentro de `código` ya no cuentan como enlaces ni etiquetas.
 
 ### Corregido
+- El menú ⋯ se abre debajo de su botón sin taparlo (antes, con el menú abierto no se podía volver a pulsar).
+- Tableros en el móvil: una columna por pantalla, con desplazamiento que se ajusta a cada columna.
 - El menú ⋯ ya no se sale de la pantalla (tiene su propio desplazamiento) y se cierra al usar un atajo de teclado.
 - Con muchas notas, el explorador ya no estira la página entera: cada panel tiene su propio desplazamiento.
 - La pantalla de acceso ya no muestra el texto «null» cuando el login con GitHub está activo.

@@ -19,7 +19,7 @@ function safeUrl(url) {
   return /^(https?:\/\/|mailto:|#)/i.test(u) ? u : null;
 }
 
-const EMBED_RE = /\.(png|jpe?g|gif|webp|avif|bmp|pdf)$/i;
+const EMBED_RE = /\.(png|jpe?g|gif|webp|avif|bmp|pdf|sketch)$/i;
 const TAG_RE = /(^|[\s(])#([\p{L}_][\p{L}\p{N}_/-]*)/gu;
 
 export function inline(raw) {

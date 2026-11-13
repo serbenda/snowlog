@@ -15,6 +15,10 @@ import { searchNotes, tagCounts, fold } from './search.js';
 import { makeBackup, openBackup, parseBackup } from './backup.js';
 import { openCache } from './cache.js';
 import * as K from './kanban.js';
+import { createEditor as createSketch } from './sketch-editor.js';
+import { emptyScene as emptySketch, parseScene as parseSketch, serializeScene as serializeSketch, mergeScenes as mergeSketch } from './sketch-escena.js';
+import { toSvgElement as sketchSvg } from './sketch-pintar.js';
+import { merge3 } from './merge.js';
 import { openKvDir, browserBackend } from './kvdir.js';
 import { buildGraph, localGraph, initLayout, step as graphStep } from './graph.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
@@ -52,6 +56,7 @@ const ICONS = {
   history: 'M4 12a8 8 0 1 0 2.3-5.6 M4 4v4h4 M12 8v4l3 2',
   bookmark: 'M7 4h10v16l-5-4-5 4z',
   kanban: 'M4 5h4v14H4z M10 5h4v9h-4z M16 5h4v6h-4z',
+  sketch: 'M3 17c3-4 5-9 8-9s1 9 4 9 4-6 6-8 M15 4l5 5',
   graph: 'M6 7a2 2 0 1 0 0-.1z M18 6a2 2 0 1 0 0-.1z M12 18a2 2 0 1 0 0-.1z M7.5 7.8l3.4 8.6 M16.6 7.4l-3.6 8.9 M8 6.3h8',
   command: 'M4 6l5 6-5 6 M12 18h8',
   settings: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1',
@@ -73,6 +78,8 @@ const TT = globalThis.trustedTypes?.createPolicy('snowlog', {
 const trusted = (s) => (TT ? TT.createHTML(s) : s);
 
 const $ = (id) => document.getElementById(id);
+// Dibujo abierto (si hay uno) y su guardado pendiente.
+const D = { id: null, editor: null, timer: 0, dirty: false, saving: Promise.resolve() };
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -103,6 +110,7 @@ const S = {
   lastActivity: Date.now(),
   local: false, // true = notas en una carpeta local o en el navegador (sin GitHub)
   notesIdx: new Map(), // id -> nota analizada (solo en memoria)
+  drawText: new Map(), // id de dibujo -> { ver, note } con su texto, para buscar (solo en memoria)
   indexReady: null,
   calMonth: null,
 };
@@ -118,6 +126,7 @@ function applySettings() {
 function applyTheme(theme = (() => { try { return localStorage.getItem('snowlog.theme') || 'auto'; } catch { return 'auto'; } })()) {
   if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
   else delete document.documentElement.dataset.theme;
+  if (D.editor) sketchTheme(D.editor.root);
 }
 
 const isMobile = () => matchMedia('(max-width: 760px)').matches;
@@ -138,9 +147,13 @@ function errText(e) {
     no_worker: 'Falta configurar el servicio de login (authWorker).',
     session_expired: 'La sesión de GitHub ha caducado. Vuelve a entrar.',
     vault_exists: 'Ya hay una bóveda en el repo.',
+    key_changed: 'La clave de cifrado se ha cambiado en otro dispositivo. Vuelve a desbloquear con tu frase de paso.',
+    pending: 'Hay cambios sin subir. Espera a tener conexión y a que se suban antes de cambiar la clave.',
+    busy: 'Otro dispositivo ha guardado mientras tanto. No se ha cambiado nada: vuelve a intentarlo.',
     offline: 'Sin conexión: esto se podrá hacer cuando vuelva la red. Lo que escribes en las notas sí se guarda.',
     bad_backup: 'Ese fichero no es una copia de seguridad de Snowlog o está dañado.',
     bad_zip: 'El contenido de la copia está dañado.',
+    bad_file: 'Ese fichero no es un dibujo de sketch ni de Excalidraw.',
     zip_compressed: 'Este .zip está comprimido y no se puede leer aquí. Descomprímelo y usa «Importar carpeta».',
     bad_type: 'Solo se pueden adjuntar imágenes (png, jpg, gif, webp, avif, bmp) y PDF.',
     too_big: 'El adjunto es demasiado grande (máximo 20 MB).',
@@ -627,8 +640,9 @@ function showRecoveryCode(code) {
   );
 }
 
-function showUnlock(vaultFile, { fresh = false } = {}) {
+function showUnlock(vaultFile, { fresh = false, message = '' } = {}) {
   const err = errorLine();
+  if (message) showError(err, message);
   const [f1, p1] = passField('pp', 'Frase de paso');
   const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Desbloquear');
   const form = h('form', {}, f1, btn, err);
@@ -636,10 +650,11 @@ function showUnlock(vaultFile, { fresh = false } = {}) {
     ev.preventDefault();
     const done = busy(btn, 'Descifrando…');
     try {
-      S.dek = await C.unlockVault(vaultFile, p1.value);
+      const pass = p1.value;
+      S.dek = await C.unlockVault(vaultFile, pass);
       p1.value = '';
       S.vaultFile = vaultFile;
-      await afterUnlock(fresh);
+      await afterUnlock(fresh, pass);
     } catch (e) {
       S.dek = null;
       done();
@@ -657,7 +672,7 @@ function showUnlock(vaultFile, { fresh = false } = {}) {
 }
 
 // Con la DEK ya descifrada: recuperar credenciales guardadas si hace falta y abrir.
-async function afterUnlock(fresh) {
+async function afterUnlock(fresh, pass = null) {
   if (!fresh) {
     S.cred = await Auth.loadCred(S.dek);
     if (!S.cred) {
@@ -681,6 +696,16 @@ async function afterUnlock(fresh) {
     try {
       const remote = await Vault.fetchVaultFile(S.repo);
       if (remote) {
+        // Si en otro dispositivo se cambió la frase o se rotó la clave, se abre con el vault.json nuevo.
+        if (pass && JSON.stringify(remote.keys.passphrase) !== JSON.stringify(S.vaultFile.keys.passphrase)) {
+          try {
+            S.dek = await C.unlockVault(remote, pass);
+          } catch {
+            S.dek = null;
+            Auth.cacheVault(remote);
+            return showUnlock(remote, { message: 'La frase de paso se cambió en otro dispositivo: usa la nueva.' });
+          }
+        }
         Auth.cacheVault(remote);
         S.vaultFile = remote;
       }
@@ -771,6 +796,11 @@ function wipe() {
   $('title').value = '';
   $('breadcrumb').replaceChildren();
   document.title = 'Snowlog';
+  if (D.editor) D.editor.destroy();
+  Object.assign(D, { id: null, editor: null, dirty: false });
+  clearTimeout(D.timer);
+  $('drawing').replaceChildren();
+  $('drawing').hidden = true;
   $('modal-root').replaceChildren();
   $('menu').hidden = true;
   $('menu').replaceChildren();
@@ -781,12 +811,18 @@ function wipe() {
   $('backlinks').replaceChildren();
   $('calendar').replaceChildren();
   S.notesIdx.clear();
+  S.drawText.clear();
   S.indexReady = null;
 }
 
-async function lock() {
+async function lock(message = '') {
   if (!S.vault) return;
-  await saveNow();
+  if (!message) await saveNow();
+  if (D.editor) {
+    D.editor.destroy();
+    Object.assign(D, { id: null, editor: null, dirty: false });
+    $('drawing').hidden = true;
+  }
   if (S.local) {
     wipe();
     S.local = false;
@@ -795,8 +831,14 @@ async function lock() {
   }
   wipe();
   const cached = Auth.cachedVault();
-  if (cached) showUnlock(cached);
-  else showLogin();
+  if (cached) showUnlock(cached, { message });
+  else showLogin(message);
+}
+
+// La clave se rotó en otro dispositivo: lo pendiente queda guardado aquí (cifrado) y se sube tras
+// volver a desbloquear con la frase.
+function keyChanged() {
+  lock(errText(new Error('key_changed')));
 }
 
 async function logout() {
@@ -836,6 +878,7 @@ async function enterApp() {
   $('app').hidden = false;
   S.lastActivity = Date.now();
   S.notesIdx.clear();
+  S.drawText.clear();
   S.indexReady = null;
   S.calMonth = null;
   updatePlace();
@@ -869,6 +912,8 @@ function ensureIndex() {
       const ids = vault.notes().map((n) => n.id);
       let i = 0;
       S.indexProgress = { done: 0, total: ids.length };
+      // Online: lo que falta se pide en bloques de 100 (GraphQL); lo que quede, uno a uno.
+      if (vault.prefetch) await vault.prefetch(ids);
       const worker = async () => {
         while (i < ids.length && S.vault === vault) {
           const id = ids[i++];
@@ -907,6 +952,7 @@ function syncIndex() {
 const indexedNotes = () => [...S.notesIdx.values()];
 
 function showEmpty() {
+  closeDrawing();
   S.current = null;
   $('note').hidden = true;
   $('empty').hidden = false;
@@ -968,7 +1014,7 @@ function renderTree() {
     const notes = node.notes.slice().sort((a, b) => collator.compare(baseName(a.path), baseName(b.path)));
     for (const n of notes) {
       if (n.file) {
-        const row = h('div', { class: 'tree-row is-file', role: 'treeitem', tabindex: '0', 'data-file': n.id },
+        const row = h('div', { class: `tree-row is-file${n.id === D.id ? ' active' : ''}`, role: 'treeitem', tabindex: '0', 'data-file': n.id },
           h('span', { class: 'spacer' }), h('span', { class: 'label' }, baseName(n.path).replace(/\.[^.]+$/, '')),
           h('span', { class: 'file-ext' }, extOf(n.path)), moreButton());
         row.style.setProperty('--depth', depth);
@@ -1041,7 +1087,10 @@ function setupTree() {
       return rowMenu(row, r.left, r.bottom);
     }
     if (row.dataset.folder) toggleFolder(row.dataset.folder);
-    else if (row.dataset.file) openAttachment(row.dataset.file);
+    else if (row.dataset.file) {
+      if (isSketch(row.dataset.file)) openDrawing(row.dataset.file);
+      else openAttachment(row.dataset.file);
+    }
     else openNote(row.dataset.note);
   });
   tree.addEventListener('keydown', (ev) => {
@@ -1117,7 +1166,7 @@ function rowMenu(row, x, y) {
   if (row.dataset.file) {
     const id = row.dataset.file;
     openMenu(x, y, [
-      ['read', 'Abrir', () => openAttachment(id)],
+      ['read', 'Abrir', () => (isSketch(id) ? openDrawing(id) : openAttachment(id))],
       ['import', 'Insertar en la nota', () => insertEmbed(S.vault.index.files[id].path)],
       null,
       ['trash', 'Eliminar', () => deleteAttachment(id), 'danger'],
@@ -1159,11 +1208,18 @@ function openMenu(x, y, items) {
       onclick: () => { closeMenu(); fn(); },
     }, label);
   }));
+  menu.style.maxHeight = '';
   menu.hidden = false;
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
-  // Debajo de donde se abrió; si no cabe, lo más abajo posible (y con su propio scroll si es muy largo).
-  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+  // Debajo de donde se abrió, sin tapar el botón: si no cabe entero, con su propio scroll.
+  const below = innerHeight - y - 8;
+  if (r.height <= below || below >= 240) {
+    menu.style.top = `${y}px`;
+    menu.style.maxHeight = `${below}px`;
+  } else {
+    menu.style.top = `${Math.max(8, innerHeight - r.height - 8)}px`;
+  }
   menu.querySelector('.menu-item')?.focus();
 }
 function closeMenu() {
@@ -1430,6 +1486,7 @@ async function deleteFolder(path) {
 async function openNote(id, { focusTitle = false } = {}) {
   if (!S.vault.index.notes[id]) return;
   await saveNow();
+  await closeDrawing();
   closeMobilePanels();
   S.current = id;
   try { localStorage.setItem('snowlog.last', id); } catch { /* sin almacenamiento */ }
@@ -1765,13 +1822,38 @@ function trySync() {
       S.indexReady = null;
       ensureIndex().catch(() => {});
     } catch (e) {
-      if (e.message !== 'offline') notice(`No se pudo sincronizar: ${errText(e)}`, 'error');
+      if (e.message === 'key_changed') keyChanged();
+      else if (e.message !== 'offline') notice(`No se pudo sincronizar: ${errText(e)}`, 'error');
     } finally {
       syncing = null;
       updatePlace();
     }
   })();
   return syncing;
+}
+
+// Al guardar se han juntado los cambios de aquí con los de otro dispositivo: el editor pasa a mostrar
+// el resultado (y si mientras tanto se ha seguido escribiendo, también se junta con eso).
+function applyMerged(id, sent, merged) {
+  if (S.current !== id) return;
+  const ed = $('editor');
+  const now = ed.value;
+  let next = merged;
+  if (now !== sent) {
+    const m = merge3(sent, now, merged);
+    if (m.conflict) return; // lo que se está escribiendo choca: se resolverá al guardar
+    next = m.text;
+    S.dirty = true;
+    scheduleSave();
+  }
+  const pos = ed.selectionStart;
+  ed.value = next;
+  if (document.activeElement === ed) ed.setSelectionRange(Math.min(pos, next.length), Math.min(pos, next.length));
+  autosize();
+  if (S.mode === 'read') setMode('read');
+  clearTimeout(sideTimer);
+  sideTimer = setTimeout(refreshSide, 300);
+  notice('Se han juntado tus cambios con los que se hicieron en otro sitio.');
 }
 
 function reportConflict(conflict) {
@@ -1805,9 +1887,10 @@ function scheduleSave() {
 }
 
 function saveNow() {
+  if (D.dirty) saveDrawing();
   clearTimeout(S.saveTimer);
   S.dirtySince = 0;
-  if (!S.dirty || !S.current || !S.vault) return S.saving;
+  if (!S.dirty || !S.current || !S.vault) return Promise.all([S.saving, D.saving]);
   const id = S.current;
   const text = $('editor').value;
   const vault = S.vault;
@@ -1816,6 +1899,7 @@ function saveNow() {
   S.saving = S.saving
     .then(() => vault.saveNote(id, text))
     .then((res) => {
+      if (res?.merged != null) applyMerged(id, text, res.merged);
       if (res?.conflict) reportConflict(res.conflict);
       if (!S.dirty && S.current === id) setStatus(res?.queued ? 'queued' : 'saved');
       updatePlace();
@@ -1826,6 +1910,11 @@ function saveNow() {
       if (S.current === id) {
         S.dirty = true;
         setStatus('error');
+      }
+      if (e?.message === 'key_changed') {
+        S.dirty = false;
+        keyChanged();
+        return;
       }
       notice(`No se pudo guardar: ${errText(e)}`, 'error');
     });
@@ -1942,8 +2031,10 @@ async function toggleTask(box) {
 // --- Enlaces entrantes ---
 function refreshBacklinks() {
   const el = $('backlinks');
-  const me = S.current && S.notesIdx.get(S.current);
-  if (!S.current) {
+  // Con un dibujo abierto: las notas que lo incrustan o enlazan.
+  const file = !S.current && D.id ? S.vault?.index.files?.[D.id] : null;
+  const me = S.current ? S.notesIdx.get(S.current) : file && { id: D.id, name: baseName(file.path), path: file.path };
+  if (!S.current && !file) {
     el.replaceChildren();
     return;
   }
@@ -2584,6 +2675,8 @@ function commands() {
     ['graph', 'Vista de grafo', 'Ctrl+G', () => graphView()],
     cur && ['graph-local', 'Grafo de esta nota', '', () => graphView(cur)],
     ['board', 'Nuevo tablero Kanban', '', () => newBoard()],
+    ['drawing', 'Nuevo dibujo', '', () => newDrawing()],
+    cur && ['drawing-in', 'Insertar un dibujo nuevo en la nota', '', () => newDrawing({ insert: true })],
     ['files', 'Ver archivos', '', () => showLeftPane('files')],
     ['tags', 'Ver etiquetas', '', () => showLeftPane('tags')],
     ['bookmarks', 'Ver marcadores', '', () => showLeftPane('bookmarks')],
@@ -2786,10 +2879,58 @@ async function securityModal() {
     h('p', {}, 'La clave que cifra tus notas no cambia: solo cambia cómo se abre. No hace falta recifrar nada.'),
     h('div', { class: 'security-options' },
       h('button', { class: 'btn', type: 'button', onclick: () => close('pass') }, 'Cambiar la frase de paso'),
-      h('button', { class: 'btn', type: 'button', onclick: () => close('recovery') }, 'Generar un código de recuperación nuevo')),
+      h('button', { class: 'btn', type: 'button', onclick: () => close('recovery') }, 'Generar un código de recuperación nuevo'),
+      h('button', { class: 'btn', type: 'button', onclick: () => close('rotate') }, 'Cambiar la clave de cifrado (recifrar todo)')),
     h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cerrar'))));
   if (choice === 'pass') changePassphraseModal();
   else if (choice === 'recovery') renewRecoveryModal();
+  else if (choice === 'rotate') rotateKeyModal();
+}
+
+function showNewRecoveryCode(code, title = 'Tu código de recuperación nuevo') {
+  return modal((close) => {
+    const check = h('input', { type: 'checkbox', id: 'saved2' });
+    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => close(true) }, 'Hecho');
+    check.addEventListener('change', () => { btn.disabled = !check.checked; });
+    return h('div', { class: 'modal', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': title },
+      h('h2', {}, title),
+      h('p', {}, 'Apúntalo en papel y guárdalo en un sitio seguro. El anterior ya no sirve. No se volverá a mostrar.'),
+      h('div', { class: 'recovery-code' }, code),
+      h('label', { class: 'check', for: 'saved2' }, check, 'Lo he guardado en un sitio seguro'),
+      h('div', { class: 'modal-actions' }, btn));
+  });
+}
+
+// Rotar la clave: todo se vuelve a cifrar con una clave nueva. Para cuando alguien pudo conocer la
+// frase antigua: desde ahora, ni esa frase ni la clave antigua abren lo que se escriba.
+async function rotateKeyModal() {
+  const result = await secretForm('Cambiar la clave de cifrado',
+    'Se vuelven a cifrar todas tus notas y adjuntos con una clave nueva, en un solo paso, y se genera un código de recuperación nuevo. Tu frase de paso sigue siendo la misma (cámbiala después si quieres). Los demás dispositivos pedirán la frase la próxima vez. No uses Snowlog en otro dispositivo mientras tanto.',
+    [passField('rk0', 'Frase de paso actual')],
+    'Recifrar todo',
+    async ([pass]) => {
+      await saveNow();
+      const st = $('st-sync');
+      try {
+        const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
+        const res = await S.vault.rotate(current, pass, CONFIG.kdfIterations, (d, t) => {
+          S.lastActivity = Date.now();
+          st.textContent = `Recifrando ${d}/${t}…`;
+        });
+        st.textContent = 'Subiendo…';
+        return res;
+      } finally {
+        st.textContent = '';
+      }
+    });
+  if (!result) return;
+  S.dek = S.vault.dek;
+  S.vaultFile = result.vaultFile;
+  Auth.cacheVault(result.vaultFile);
+  await Auth.saveCred(S.dek, S.cred);
+  await saveExpanded();
+  await showNewRecoveryCode(result.recoveryCode);
+  notice('Clave cambiada: todo está cifrado con la clave nueva.');
 }
 
 function secretForm(title, text, fields, okText, onSubmit) {
@@ -2848,17 +2989,7 @@ async function renewRecoveryModal() {
       return recoveryCode;
     });
   if (!code) return;
-  await modal((close) => {
-    const check = h('input', { type: 'checkbox', id: 'saved2' });
-    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => close(true) }, 'Hecho');
-    check.addEventListener('change', () => { btn.disabled = !check.checked; });
-    return h('div', { class: 'modal', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': 'Tu código de recuperación nuevo' },
-      h('h2', {}, 'Tu código de recuperación nuevo'),
-      h('p', {}, 'Apúntalo en papel y guárdalo en un sitio seguro. No se volverá a mostrar.'),
-      h('div', { class: 'recovery-code' }, code),
-      h('label', { class: 'check', for: 'saved2' }, check, 'Lo he guardado en un sitio seguro'),
-      h('div', { class: 'modal-actions' }, btn));
-  });
+  await showNewRecoveryCode(code);
 }
 
 // --- Historial de versiones ---
@@ -2952,6 +3083,167 @@ async function historyModal(id) {
   notice('Versión restaurada. La que había sigue en el historial.');
 }
 
+// --- Dibujos (serbenda/sketch) ---
+// Son adjuntos .sketch (JSON, cifrados en online). Se editan aquí mismo y se ven en las notas con
+// ![[dibujo.sketch]]. El editor viene de sketch y no usa innerHTML.
+const SKETCH_TYPE = 'application/vnd.sketch+json';
+const isSketch = (id) => S.vault?.index.files?.[id]?.type === SKETCH_TYPE;
+
+function sketchTheme(root) {
+  const t = document.documentElement.dataset.theme;
+  const dark = t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches);
+  root.classList.toggle('sk-dark', dark);
+  root.classList.toggle('sk-light', !dark);
+}
+
+function sketchFigure(f, bytes, width) {
+  let scene;
+  try {
+    scene = parseSketch(new TextDecoder().decode(bytes));
+  } catch {
+    return h('span', { class: 'embed embed-missing' }, `«${baseName(f.path)}» no es un dibujo válido`);
+  }
+  const fig = h('button', { class: 'embed-sketch', type: 'button', title: 'Abrir el dibujo', 'aria-label': `Dibujo ${baseName(f.path)}. Pulsa para editarlo.`, onclick: () => openDrawing(f.id) });
+  if (!scene.elements.length) fig.append(h('span', { class: 'embed-sketch-empty' }, `Dibujo vacío: pulsa para dibujar en «${baseName(f.path)}»`));
+  else fig.append(sketchSvg(document, scene, { maxWidth: Number(width) || 720 }));
+  return fig;
+}
+
+async function openDrawing(id) {
+  const f = S.vault?.index.files?.[id];
+  if (!f) return;
+  await saveNow();
+  await closeDrawing();
+  closeMobilePanels();
+  S.current = null;
+  $('empty').hidden = true;
+  $('note').hidden = true;
+  const box = $('drawing');
+  box.hidden = false;
+  expandTo(f.path);
+  D.id = id;
+  renderTree();
+  const parts = f.path.split('/');
+  $('breadcrumb').replaceChildren(...parts.flatMap((p, i) => [i ? h('span', { class: 'crumb-sep' }, '/') : null, h('span', { class: i === parts.length - 1 ? 'crumb-last' : '' }, p)]).filter(Boolean));
+  document.title = `${baseName(f.path)} · Snowlog`;
+  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'Dibujo'));
+  refreshBacklinks();
+  ensureIndex().then(() => { if (D.id === id) refreshBacklinks(); }).catch(() => {});
+  $('st-words').textContent = '';
+  $('st-chars').textContent = '';
+  setStatus('loading');
+  let scene = emptySketch();
+  try {
+    scene = parseSketch(new TextDecoder().decode(await S.vault.readFile(id)));
+    setStatus('saved');
+  } catch (e) {
+    setStatus('error');
+    notice(`No se pudo abrir el dibujo: ${errText(e)}`, 'error');
+  }
+  if (D.id !== id) return;
+  D.editor = createSketch(box, { scene, onChange: () => scheduleDrawingSave() });
+  sketchTheme(D.editor.root);
+  D.editor.focus();
+}
+
+function scheduleDrawingSave() {
+  D.dirty = true;
+  setStatus('pending');
+  clearTimeout(D.timer);
+  D.timer = setTimeout(saveDrawing, S.local ? CONFIG.localSaveDelayMs : CONFIG.saveDelayMs);
+}
+
+function saveDrawing() {
+  clearTimeout(D.timer);
+  if (!D.dirty || !D.id || !D.editor || !S.vault) return D.saving;
+  const id = D.id;
+  const vault = S.vault;
+  const bytes = new TextEncoder().encode(serializeSketch(D.editor.getScene()));
+  D.dirty = false;
+  setStatus('saving');
+  D.saving = D.saving
+    .then(() => vault.saveFile(id, bytes, { merge: mergeDrawing }))
+    .then((res) => {
+      if (D.id === id && !D.dirty) setStatus('saved');
+      // Se juntaron cambios de otro dispositivo: el editor pasa a mostrar el dibujo junto.
+      if (res?.merged && D.id === id && !D.dirty && D.editor) {
+        try {
+          D.editor.setScene(parseSketch(new TextDecoder().decode(res.merged)), { fit: false });
+        } catch { /* se verá al volver a abrirlo */ }
+      }
+      if (res?.conflict) {
+        renderTree();
+        notice(`Este dibujo también se cambió en otro sitio en las mismas partes: se han juntado y la otra versión está en «${baseName(res.conflict.path)}».`);
+      } else if (res?.merged) {
+        notice('Se han juntado los cambios de este dibujo hechos en otro sitio.');
+      }
+    })
+    .catch((e) => {
+      if (D.id === id) {
+        D.dirty = true;
+        setStatus('error');
+      }
+      if (e?.message === 'key_changed') keyChanged();
+      else notice(`No se pudo guardar el dibujo: ${errText(e)}`, 'error');
+    });
+  return D.saving;
+}
+
+// Junta dos versiones de un dibujo elemento a elemento (null si alguna no es un dibujo válido).
+function mergeDrawing(base, mine, theirs) {
+  const dec = (b) => parseSketch(new TextDecoder().decode(b));
+  const r = mergeSketch(dec(base), dec(mine), dec(theirs));
+  return { bytes: new TextEncoder().encode(serializeSketch(r.scene)), conflict: r.conflict };
+}
+
+// Dibujos como "notas" para la búsqueda: nombre, carpeta y los textos que llevan dentro.
+async function drawingNotes() {
+  const out = [];
+  for (const [id, f] of Object.entries(S.vault?.index.files || {})) {
+    if (f.type !== SKETCH_TYPE) continue;
+    const ver = f.updated || f.created || '';
+    let c = S.drawText.get(id);
+    if (!c || c.ver !== ver || c.note.path !== f.path) {
+      let text = '';
+      try {
+        text = parseSketch(new TextDecoder().decode(await S.vault.readFile(id))).elements
+          .filter((e) => e.type === 'text').map((e) => e.text).join('\n');
+      } catch { /* sin conexión o dañado: se busca solo por el nombre */ }
+      c = { ver, note: { id, path: f.path, name: baseName(f.path), folder: parentPath(f.path), text, tags: new Set(), links: new Set(), fm: {}, tasks: [], ctime: f.created || '', mtime: ver, drawing: true } };
+      S.drawText.set(id, c);
+    }
+    out.push(c.note);
+  }
+  return out;
+}
+
+async function closeDrawing() {
+  if (!D.editor) return;
+  await saveDrawing();
+  D.editor.destroy();
+  D.editor = null;
+  D.id = null;
+  $('drawing').hidden = true;
+}
+
+async function newDrawing({ insert = false } = {}) {
+  if (!S.vault) return;
+  const into = insert && S.current ? S.current : null;
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const name = `Dibujo ${isoDate(d)} ${p(d.getHours())}${p(d.getMinutes())}.sketch`;
+  try {
+    const { id, path } = await S.vault.addFile(WS.drawingsFolder || '', name, new TextEncoder().encode(serializeSketch(emptySketch())));
+    if (into) {
+      insertEmbed(path);
+      await saveNow();
+    }
+    await openDrawing(id);
+  } catch (e) {
+    notice(`No se pudo crear el dibujo: ${errText(e)}`, 'error');
+  }
+}
+
 // --- Adjuntos (imágenes y PDF) ---
 const fmtSize = (n) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 let blobUrls = [];
@@ -2982,6 +3274,10 @@ async function fillEmbeds(view) {
     try {
       const bytes = await vault.readFile(f.id);
       if (S.vault !== vault || !slot.isConnected) return;
+      if (f.type === SKETCH_TYPE) {
+        slot.replaceWith(sketchFigure(f, bytes, slot.dataset.width));
+        continue;
+      }
       if (f.type === 'application/pdf') {
         slot.replaceWith(h('span', { class: 'embed-file' },
           h('span', { class: 'embed-file-ext' }, 'PDF'),
@@ -3050,7 +3346,14 @@ async function attachFiles(files) {
   for (const file of files) {
     $('st-sync').textContent = S.local ? 'Guardando adjunto…' : 'Cifrando y subiendo adjunto…';
     try {
-      const { path } = await vault.addFile(folder, pastedName(file), new Uint8Array(await file.arrayBuffer()));
+      let name = pastedName(file);
+      let data = new Uint8Array(await file.arrayBuffer());
+      // Un .excalidraw se convierte en dibujo de sketch; un .sketch se comprueba antes de guardarlo.
+      if (/\.(excalidraw|sketch)$/i.test(name)) {
+        data = new TextEncoder().encode(serializeSketch(parseSketch(new TextDecoder().decode(data))));
+        name = name.replace(/\.excalidraw$/i, '.sketch');
+      }
+      const { path } = await vault.addFile(/\.sketch$/i.test(name) ? (WS.drawingsFolder || folder) : folder, name, data);
       if (S.vault !== vault) return;
       expandTo(path);
       insertEmbed(path);
@@ -3124,7 +3427,9 @@ async function runSearch() {
   if (seq !== searchSeq || !S.vault) return;
   syncIndex();
   const t0 = performance.now();
-  const results = searchNotes(indexedNotes(), query);
+  const drawings = await drawingNotes();
+  if (seq !== searchSeq || !S.vault) return;
+  const results = searchNotes([...indexedNotes(), ...drawings], query);
   const ms = Math.round(performance.now() - t0);
   const total = results.reduce((a, r) => a + r.count, 0);
   const head = h('p', { class: 'search-count' }, results.length
@@ -3133,7 +3438,8 @@ async function runSearch() {
   box.replaceChildren(head, ...results.map((r) => h('div', { class: 'search-result', role: 'listitem' },
     h('button', { class: 'search-note', type: 'button', title: r.note.path, onclick: () => openResult(r.note.id) },
       h('span', { class: 'search-name' }, r.note.name),
-      r.note.folder ? h('span', { class: 'search-folder' }, r.note.folder) : null),
+      r.note.drawing ? h('span', { class: 'search-folder' }, `Dibujo${r.note.folder ? ` · ${r.note.folder}` : ''}`)
+        : r.note.folder ? h('span', { class: 'search-folder' }, r.note.folder) : null),
     ...r.matches.map((m) => h('button', { class: 'search-line', type: 'button', onclick: () => openResult(r.note.id, m) }, ...marked(m))),
   )));
 }
@@ -3154,6 +3460,10 @@ function marked(m) {
 
 async function openResult(id, match) {
   closeMobilePanels();
+  if (isSketch(id)) {
+    await openDrawing(id);
+    return;
+  }
   if (S.current !== id) await openNote(id);
   if (!match || S.current !== id) return;
   if (S.mode === 'read') setMode('edit');
@@ -3207,12 +3517,13 @@ function noteMenu(x, y) {
     items.push(['rename', 'Renombrar', () => renameNotePrompt(id)], ['move', 'Mover a…', () => moveNotePrompt(id)], ['history', 'Historial de versiones…', () => historyModal(id)],
       ['bookmark', isBookmarked(id) ? 'Quitar de marcadores' : 'Añadir a marcadores', () => toggleBookmark(id)]);
   }
-  if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()], ['import', 'Adjuntar imagen o PDF…', () => $('attach-input').click()]);
+  if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()], ['import', 'Adjuntar imagen, PDF o dibujo…', () => $('attach-input').click()], ['sketch', 'Insertar un dibujo nuevo', () => newDrawing({ insert: true })]);
   items.push(
     ['command', 'Paleta de comandos (Ctrl+P)', () => commandPalette()],
     ['filePlus', 'Nueva nota', () => newNote()],
     ['template', 'Nueva nota desde plantilla…', () => newFromTemplate()],
     ['kanban', 'Nuevo tablero Kanban', () => newBoard()],
+    ['sketch', 'Nuevo dibujo', () => newDrawing()],
     ['graph', 'Vista de grafo (Ctrl+G)', () => graphView()],
     null,
     ['today', 'Nota de hoy (Ctrl+D)', () => openDaily()],

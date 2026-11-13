@@ -7,9 +7,12 @@
 //   a/<id>.enc            un adjunto cifrado (imagen, PDF…); su nombre y tipo van en el índice
 
 import * as C from './crypto.js';
+import { merge3 } from './merge.js';
 
 export const VAULT_FILE = '.snowlog/vault.json';
 export const INDEX_FILE = '.snowlog/index.enc';
+// Claves anteriores (tras rotar), cifradas con la actual: para seguir leyendo el historial.
+export const KEYRING_FILE = '.snowlog/keyring.enc';
 const notePath = (id) => `n/${id}.enc`;
 const filePath = (id) => `a/${id}.enc`;
 
@@ -17,6 +20,7 @@ const filePath = (id) => `a/${id}.enc`;
 export const ATTACHMENT_TYPES = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
   avif: 'image/avif', bmp: 'image/bmp', pdf: 'application/pdf',
+  sketch: 'application/vnd.sketch+json', // dibujos de serbenda/sketch
 };
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const extOf = (name) => (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';
@@ -82,6 +86,8 @@ export function validName(path) {
   if (/[\\:*?"<>|#^[\]]/.test(path)) throw new Error('bad_chars');
 }
 
+const sameBytes = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
 export class Vault {
   // store: caché opcional de ficheros cifrados (cache.js) para no volver a bajar lo que no cambió.
   constructor(repo, dek, { store = null } = {}) {
@@ -98,11 +104,17 @@ export class Vault {
     // Fecha `updated` de cada nota cuando se leyó o guardó aquí: si al guardar el índice
     // trae otra, es que la nota cambió en otro dispositivo mientras tanto.
     this.base = new Map();
+    // Texto de esa misma versión: la base para juntar cambios de dos dispositivos.
+    this.baseText = new Map();
+    // Igual para los adjuntos que se pueden editar (dibujos): versión con la que se leyeron aquí.
+    this.fileBase = new Map();
+    this.fileBaseBytes = new Map(); // contenido de cada adjunto tal como se leyó o guardó aquí (para fusionar)
   }
 
   remember(id, text) {
     this.cache.set(id, text);
     this.base.set(id, this.index.notes[id]?.updated);
+    this.baseText.set(id, text);
   }
 
   static async fetchVaultFile(repo) {
@@ -138,11 +150,21 @@ export class Vault {
       this.offline = true;
     }
     await this.loadOutbox();
-    if (text) this.index = JSON.parse(await C.decryptText(this.dek, text, 'index'));
+    if (text) {
+      try {
+        this.index = JSON.parse(await C.decryptText(this.dek, text, 'index'));
+      } catch {
+        // La clave se rotó en otro dispositivo: hay que volver a desbloquear con la frase.
+        throw new Error('key_changed');
+      }
+    }
     if (!this.index.folders) this.index.folders = [];
     // Lo que otro dispositivo cambió se vuelve a leer del repo (la versión de aquí ya no es la última).
     for (const id of [...this.cache.keys()]) {
       if (this.index.notes[id]?.updated !== this.base.get(id)) this.cache.delete(id);
+    }
+    for (const id of [...this.fileCache.keys()]) {
+      if (this.fileBase.has(id) && this.versionOf(id) !== this.fileBase.get(id)) this.fileCache.delete(id);
     }
     if (!this.index.files) this.index.files = {};
   }
@@ -160,7 +182,7 @@ export class Vault {
 
   // Versión de un fichero según el índice: si coincide con la de la caché, la caché vale.
   versionOf(id) {
-    return this.index.notes[id]?.updated || this.index.files?.[id]?.created || null;
+    return this.index.notes[id]?.updated || this.index.files?.[id]?.updated || this.index.files?.[id]?.created || null;
   }
 
   // Lee un fichero cifrado: de la caché si está al día, si no del repo (y lo guarda en la caché).
@@ -173,6 +195,37 @@ export class Vault {
     const content = await this.repo.readText(path);
     if (content != null && this.store && v) await this.store.put(path, { v, content });
     return { content, cached: false };
+  }
+
+  // Descarga de golpe las notas que no están en memoria ni en la caché local (para el índice completo).
+  // Con GraphQL son 10 peticiones para 1.000 notas en lugar de 1.000. Si falla, no pasa nada:
+  // read() las pedirá una a una.
+  async prefetch(ids) {
+    const want = [];
+    for (const id of ids) {
+      if (this.cache.has(id) || !this.index.notes[id]) continue;
+      const hit = this.store && await this.store.get(notePath(id));
+      if (hit && hit.v === this.versionOf(id)) continue;
+      want.push(id);
+    }
+    if (!want.length || this.offline || !this.repo.readMany) return 0;
+    let texts;
+    try {
+      texts = await this.repo.readMany(want.map(notePath));
+    } catch {
+      return 0;
+    }
+    let n = 0;
+    for (const id of want) {
+      const content = texts.get(notePath(id));
+      if (content == null) continue;
+      try {
+        this.remember(id, await C.decryptText(this.dek, content, id));
+        if (this.store) await this.store.put(notePath(id), { v: this.versionOf(id), content });
+        n += 1;
+      } catch { /* se leerá con read() */ }
+    }
+    return n;
   }
 
   async indexChange() {
@@ -364,6 +417,11 @@ export class Vault {
     try {
       return await this.saveOnline(id, text);
     } catch (e) {
+      if (e.message === 'key_changed') {
+        // Se rotó la clave en otro dispositivo: lo escrito se guarda aquí para subirlo tras desbloquear.
+        await this.queue(id, text);
+        throw e;
+      }
       if (e.message !== 'offline') throw e;
       return this.queue(id, text);
     }
@@ -380,6 +438,7 @@ export class Vault {
       path: meta.path,
       created: meta.created,
       base: prev ? prev.base : (isNew ? null : this.base.get(id) ?? null),
+      baseText: prev ? prev.baseText : (isNew ? null : this.baseText.get(id) ?? null),
       isNew: prev ? prev.isNew : isNew,
     });
     this.cache.set(id, text);
@@ -400,9 +459,91 @@ export class Vault {
   async loadOutbox() {
     const hit = this.store && await this.store.get('outbox');
     if (!hit) return;
+    // Puede estar cifrada con una clave anterior (si se rotó en otro dispositivo mientras había cambios
+    // pendientes aquí): se prueba también con el llavero para no perderlos.
     try {
       this.outbox = new Map(JSON.parse(await C.decryptText(this.dek, hit.content, 'outbox')));
-    } catch { /* de otra clave o dañada: se ignora */ }
+      return;
+    } catch { /* quizá de antes de rotar */ }
+    for (const key of await this.loadKeyring(true).catch(() => [])) {
+      try {
+        this.outbox = new Map(JSON.parse(await C.decryptText(key, hit.content, 'outbox')));
+        await this.saveOutbox();
+        return;
+      } catch { /* siguiente */ }
+    }
+  }
+
+  // Claves anteriores de la bóveda (CryptoKey), de la más reciente a la más antigua.
+  // Solo existe si alguna vez se rotó (el índice lo indica); `force` lo busca igualmente.
+  async loadKeyring(force = false) {
+    if (this.keyring) return this.keyring;
+    if (!force && !this.index.hasKeyring) return [];
+    let text = null;
+    try {
+      text = await this.repo.readText(KEYRING_FILE);
+    } catch {
+      return [];
+    }
+    if (!text) {
+      this.keyring = [];
+      return this.keyring;
+    }
+    const list = JSON.parse(await C.decryptText(this.dek, text, 'keyring'));
+    this.keyring = await Promise.all(list.map((k) => C.importKey(k.key)));
+    this.keyringRaw = list;
+    return this.keyring;
+  }
+
+  // Rota la clave: todo (notas, adjuntos, índice) se vuelve a cifrar con una DEK nueva en un solo
+  // commit. La DEK antigua va al llavero, cifrada con la nueva, para poder leer el historial.
+  // Devuelve { vaultFile, recoveryCode }. Mientras se hace no debe escribir nadie más.
+  async rotate(vaultFile, passphrase, iterations, onProgress = () => {}) {
+    if (this.offline) throw new Error('offline');
+    if (this.outbox.size) throw new Error('pending');
+    await this.repo.fetchHead();
+    await this.loadIndex();
+    await this.loadKeyring();
+    const { vault: next, dek, recoveryCode, oldKey } = await C.rotateVault(vaultFile, passphrase, iterations);
+    const notes = this.notes();
+    const files = this.files();
+    const total = notes.length + files.length;
+    let done = 0;
+    await this.prefetch(notes.map((n) => n.id));
+    const changes = [];
+    for (const n of notes) {
+      changes.push({ path: notePath(n.id), content: await C.encryptText(dek, await this.read(n.id), n.id) });
+      onProgress(++done, total);
+    }
+    for (const f of files) {
+      changes.push({ path: filePath(f.id), content: C.toB64(await C.encryptBytes(dek, await this.readFile(f.id), f.id)) });
+      onProgress(++done, total);
+    }
+    const ring = [{ key: oldKey, until: next.rotated }, ...(this.keyringRaw || [])];
+    this.index.hasKeyring = true;
+    changes.push({ path: KEYRING_FILE, content: await C.encryptText(dek, JSON.stringify(ring), 'keyring') });
+    changes.push({ path: INDEX_FILE, content: await C.encryptText(dek, JSON.stringify(this.index), 'index') });
+    changes.push({ path: VAULT_FILE, content: `${JSON.stringify(next, null, 2)}\n` });
+    try {
+      await this.repo.commit(changes, 'Snowlog: rotar la clave', { blobs: true });
+    } catch (e) {
+      if (e.status === 409) throw new Error('busy');
+      if (isNetworkError(e)) throw new Error('offline');
+      throw e;
+    }
+    const old = this.dek;
+    this.dek = dek;
+    this.keyring = [old, ...(this.keyring || [])];
+    this.keyringRaw = ring;
+    if (this.store) {
+      await this.store.clear();
+      for (const c of changes) {
+        const m = c.path.match(/^[na]\/([^/]+)\.enc$/);
+        if (m) await this.store.put(c.path, { v: this.versionOf(m[1]), content: c.content });
+      }
+      await this.store.put('index', { content: changes.find((c) => c.path === INDEX_FILE).content });
+    }
+    return { vaultFile: next, recoveryCode };
   }
 
   // Vuelve a conectar (recarga el índice) y sube lo pendiente. Cada nota se guarda como un guardado normal, con la detección de
@@ -419,22 +560,26 @@ export class Vault {
     await this.loadIndex();
     if (this.offline) throw new Error('offline');
     const conflicts = [];
+    const merged = [];
     let synced = 0;
     for (const [id, e] of pending) {
       if (e.base) this.base.set(id, e.base);
       else this.base.delete(id);
+      if (e.baseText != null) this.baseText.set(id, e.baseText);
       const res = await this.saveOnline(id, e.text, { path: e.path, created: e.created, updated: e.base });
       this.outbox.delete(id);
       await this.saveOutbox();
       synced += 1;
       if (res.conflict) conflicts.push(res.conflict);
+      if (res.merged != null) merged.push(id);
     }
-    return { synced, conflicts };
+    return { synced, conflicts, merged };
   }
 
   async saveOnline(id, text, meta) {
     const mine = meta || { ...this.index.notes[id] };
     let conflict = null;
+    let finalText = text;
     await this.apply(
       'Snowlog: guardar nota',
       (idx) => {
@@ -452,23 +597,32 @@ export class Vault {
       },
       async () => {
         conflict = null;
-        const changes = [{ path: notePath(id), content: await C.encryptText(this.dek, text, id) }];
+        finalText = text;
+        const extra = [];
         const remote = this.index.notes[id];
         if (remote && this.base.has(id) && remote.updated !== this.base.get(id)) {
           const theirs = await this.repo.readText(notePath(id));
           const plain = theirs ? await C.decryptText(this.dek, theirs, id) : '';
           if (plain !== text) {
-            conflict = { id: C.randomId(), text: plain };
-            changes.push({ path: notePath(conflict.id), content: await C.encryptText(this.dek, plain, conflict.id) });
+            // Primero se intenta juntar los dos cambios; si chocan, la otra versión va a una copia.
+            const baseText = this.baseText.get(id);
+            const m = baseText != null ? merge3(baseText, text, plain) : { conflict: true };
+            if (!m.conflict) {
+              finalText = m.text;
+            } else {
+              conflict = { id: C.randomId(), text: plain };
+              extra.push({ path: notePath(conflict.id), content: await C.encryptText(this.dek, plain, conflict.id) });
+            }
           }
         }
-        return changes;
+        return [{ path: notePath(id), content: await C.encryptText(this.dek, finalText, id) }, ...extra];
       },
     );
-    this.remember(id, text);
-    if (!conflict) return {};
+    this.remember(id, finalText);
+    const out = finalText !== text ? { merged: finalText } : {};
+    if (!conflict) return out;
     this.remember(conflict.id, conflict.text);
-    return { conflict: { id: conflict.id, path: conflict.path } };
+    return { ...out, conflict: { id: conflict.id, path: conflict.path } };
   }
 
   // Como freePath, pero sobre un índice concreto (el recargado dentro de apply).
@@ -559,7 +713,18 @@ export class Vault {
 
   async readVersion(id, ref) {
     const text = await this.repo.readText(notePath(id), ref);
-    return text ? C.decryptText(this.dek, text, id) : '';
+    if (!text) return '';
+    try {
+      return await C.decryptText(this.dek, text, id);
+    } catch (e) {
+      // Versión de antes de rotar la clave: se abre con la clave de entonces (del llavero).
+      for (const key of await this.loadKeyring()) {
+        try {
+          return await C.decryptText(key, text, id);
+        } catch { /* siguiente */ }
+      }
+      throw e;
+    }
   }
 
   // --- Adjuntos ---
@@ -605,6 +770,8 @@ export class Vault {
       this.addFolderChain(idx, parentPath(path));
     }, async () => [{ path: filePath(id), content }]);
     this.fileCache.set(id, bytes);
+    this.fileBase.set(id, this.versionOf(id));
+    this.fileBaseBytes.set(id, bytes);
     return { id, path };
   }
 
@@ -614,7 +781,70 @@ export class Vault {
     if (b64 == null) throw new Error('missing');
     const bytes = await C.decryptBytes(this.dek, C.fromB64(b64.trim()), id);
     this.fileCache.set(id, bytes);
+    this.fileBase.set(id, this.versionOf(id));
+    this.fileBaseBytes.set(id, bytes);
     return bytes;
+  }
+
+  // Guarda una versión nueva de un adjunto (un dibujo). Si cambió en otro dispositivo desde que se
+  // leyó aquí, `merge(base, mío, suyo)` puede juntar las dos versiones ({ bytes, conflict }); si no se
+  // puede, o si chocan, la otra versión se guarda como copia al lado.
+  // Devuelve { merged?: bytes guardados, conflict?: { id, path } }.
+  async saveFile(id, bytes, { merge = null } = {}) {
+    const meta = this.index.files?.[id];
+    if (!meta) throw new Error('missing');
+    this.checkAttachment(meta.path, bytes);
+    const mine = { ...meta };
+    let conflict = null;
+    let out = bytes;
+    await this.apply('Snowlog: guardar dibujo', (idx) => {
+      const now = new Date().toISOString();
+      if (!idx.files[id]) idx.files[id] = { ...mine };
+      idx.files[id].updated = now;
+      idx.files[id].size = out.length;
+      if (conflict) {
+        const name = baseName(idx.files[id].path);
+        const ext = extOf(name);
+        conflict.path = this.freeFilePath(parentPath(idx.files[id].path), `${conflictName(name.slice(0, -(ext.length + 1)))}.${ext}`);
+        idx.files[conflict.id] = { path: conflict.path, type: idx.files[id].type, size: conflict.bytes.length, created: now };
+      }
+    }, async () => {
+      conflict = null;
+      out = bytes;
+      const changes = [];
+      const remote = this.index.files?.[id];
+      const base = this.fileBase.get(id);
+      if (remote && base !== undefined && (remote.updated || remote.created) !== base) {
+        const theirs = await this.repo.readText(filePath(id));
+        if (theirs) {
+          const plain = await C.decryptBytes(this.dek, C.fromB64(theirs.trim()), id);
+          if (!sameBytes(plain, bytes)) {
+            const baseBytes = this.fileBaseBytes.get(id);
+            let joined = null;
+            try {
+              joined = merge && baseBytes ? merge(baseBytes, bytes, plain) : null;
+            } catch { /* no se pudo juntar: copia */ }
+            if (joined?.bytes) out = joined.bytes;
+            if (!joined?.bytes || joined.conflict) {
+              conflict = { id: C.randomId(), bytes: plain };
+              changes.push({ path: filePath(conflict.id), content: C.toB64(await C.encryptBytes(this.dek, plain, conflict.id)) });
+            }
+          }
+        }
+      }
+      this.checkAttachment(meta.path, out);
+      changes.unshift({ path: filePath(id), content: C.toB64(await C.encryptBytes(this.dek, out, id)) });
+      return changes;
+    });
+    this.fileCache.set(id, out);
+    this.fileBase.set(id, this.versionOf(id));
+    this.fileBaseBytes.set(id, out);
+    const res = out !== bytes ? { merged: out } : {};
+    if (!conflict) return res;
+    this.fileCache.set(conflict.id, conflict.bytes);
+    this.fileBase.set(conflict.id, this.versionOf(conflict.id));
+    this.fileBaseBytes.set(conflict.id, conflict.bytes);
+    return { ...res, conflict: { id: conflict.id, path: conflict.path } };
   }
 
   async deleteFile(id) {

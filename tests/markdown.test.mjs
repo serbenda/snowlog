@@ -117,3 +117,7 @@ test('![[adjunto]] deja un hueco seguro para la imagen o el PDF', () => {
   assert.ok(html.includes('class="internal-link" href="#" data-target="Otra nota"'), html);
   assert.ok(!html.includes('" onerror="'), html);
 });
+
+test('![[dibujo.sketch]] deja un hueco para el dibujo', () => {
+  assert.ok(render('![[plano.sketch]]').includes('<span class="embed" data-embed="plano.sketch">'));
+});

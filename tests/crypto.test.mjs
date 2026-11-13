@@ -79,3 +79,17 @@ test('generar un código de recuperación nuevo invalida el anterior', async () 
   assert.ok(dek);
   assert.deepEqual(updated.keys.passphrase, vault.keys.passphrase);
 });
+
+test('rotar: DEK nueva, misma frase, código nuevo y la antigua sale para el llavero', async () => {
+  const { vault, dek: oldDek, recoveryCode } = await C.createVault('frase de paso de prueba', ITER);
+  const viejo = await C.encryptText(oldDek, 'antes', 'n1');
+  await assert.rejects(C.rotateVault(vault, 'mal', ITER), /bad_secret/);
+  const r = await C.rotateVault(vault, 'frase de paso de prueba', ITER);
+  const nueva = await C.unlockVault(r.vault, 'frase de paso de prueba');
+  await assert.rejects(C.decryptText(nueva, viejo, 'n1'), 'la clave nueva no abre lo antiguo');
+  assert.equal(await C.decryptText(await C.importKey(r.oldKey), viejo, 'n1'), 'antes');
+  await assert.rejects(C.recoverVault(r.vault, recoveryCode, 'otra frase nueva'), /bad_secret/);
+  assert.ok((await C.recoverVault(r.vault, r.recoveryCode, 'otra frase nueva')).dek);
+  assert.ok(r.vault.rotated);
+  assert.ok(!JSON.stringify(r.vault).includes(r.oldKey));
+});

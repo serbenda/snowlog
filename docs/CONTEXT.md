@@ -52,9 +52,9 @@ aunque se robe no puede modificar el código de la web.
 - Cada fichero: `base64(IV de 12 bytes || cifrado)`, con su id como dato autenticado (AAD).
 - Las credenciales de GitHub se guardan en `localStorage` cifradas con la DEK.
 - Cambiar la frase o el código de recuperación solo reenvuelve la DEK (`changePassphrase`, `renewRecoveryCode`).
-  **Límite:** los `vault.json` antiguos siguen en el historial de git, así que quien tenga acceso al repo y la
-  frase antigua aún podría sacar la DEK. Para ese caso haría falta rotar la DEK (recifrar todo); está anotado
-  como pendiente en la revisión de seguridad.
+  Rotar la DEK (`Vault.rotate`, `C.rotateVault`) recifra todo en un commit; las DEK antiguas van a
+  `.snowlog/keyring.enc` (cifrado con la actual; `index.hasKeyring`) para leer el historial. Otros dispositivos
+  detectan `key_changed` al leer el índice, guardan lo pendiente en `outbox` y piden la frase.
 
 ## Decisiones vigentes
 
@@ -65,8 +65,9 @@ aunque se robe no puede modificar el código de la web.
 - Un commit por guardado (4 s sin escribir o 30 s como mucho), con un reintento si otro dispositivo escribió antes.
 - Caché cifrada (`cache.js`, IndexedDB `snowlog-cache`): guarda el texto cifrado de `n/` y `a/` tal cual está en
   el repo, con la versión del índice (`updated`). Si coincide, no se descarga; si no descifra (dañada o
-  manipulada), se vuelve a pedir. Medido con 1.000 notas: entrar 0,3 s; índice listo 0,6 s con caché y 3,8 s sin
-  ella contra un GitHub simulado sin latencia (con GitHub real, unos 15 s en segundo plano la primera vez).
+  manipulada), se vuelve a pedir. Lo que falta se baja en bloques de 100 con GraphQL (`readMany`/`prefetch`);
+  si GraphQL falla, uno a uno. Medido con 1.000 notas y 150 ms de latencia: entrar 0,3 s; índice completo 2,9 s
+  en un dispositivo nuevo (antes 17,5 s) y 1,2 s con la caché.
 - Sin conexión: `sw.js` guarda solo la web (mismo origen; nunca GitHub ni el login), red primero y caché si
   falla. Las notas salen de la caché cifrada. Si un commit falla por red (`TypeError`), `Vault` pasa a
   `offline` y los guardados y notas nuevas van a `outbox` (cifrada con la DEK en IndexedDB, junto con el índice
@@ -78,7 +79,8 @@ aunque se robe no puede modificar el código de la web.
 - Historial: online, `GET /commits?path=n/<id>.enc` y cada versión se descifra al elegirla; restaurar es un
   guardado más. Local: copias en `.history/<ruta>/<fecha>.md` (oculta, no se carga como nota), que siguen a la
   nota al renombrarla.
-- Conflictos: cada nota recuerda la fecha `updated` con la que se leyó (`Vault.base`). Si al guardar el índice
+- Conflictos: primero se intenta fusionar a tres bandas por líneas (`merge.js`, base = texto leído aquí,
+  `baseText`); solo si chocan las mismas líneas se guarda la copia. Cada nota recuerda la fecha `updated` con la que se leyó (`Vault.base`). Si al guardar el índice
   trae otra, la versión remota se guarda como copia «(otro dispositivo …)» en el mismo commit; gana la de aquí
   porque es la que se está viendo. En local se compara el fichero con lo que se leyó.
 - Bloqueo automático a los 10 minutos sin actividad.
@@ -121,11 +123,20 @@ dependen de alguien más:
   [SEGURIDAD.md](SEGURIDAD.md)).
 - Probar la versión portátil en Firefox y Safari reales (está probada en Chrome simulando esos navegadores).
 
-Ideas para después: rotar la DEK (recifrar todo), PKCE en el login, firmar el índice para detectar que alguien
+Ideas para después: PKCE en el login, firmar el índice para detectar que alguien
 reponga versiones antiguas, y un CLI para que scripts externos escriban notas cifradas.
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
 
 ## Proyectos relacionados
 
-- Pizarra estilo Excalidraw (repo por crear): reutilizará login y cifrado de Snowlog.
+- [sketch](https://github.com/serbenda/sketch): pizarra a mano alzada, web propia sin red. Su motor
+  (`js/{trazo,escena,pintar,editor}.js` y `css/sketch.css`) se copia en `public/js/sketch-*.js` y
+  `public/css/sketch.css`, y su letra a mano (Caveat, OFL) en `public/fonts/`, con
+  `node scripts/update-sketch.mjs <ruta-a-sketch>`; no se editan aquí. La portátil quita el `@font-face` (sin
+  `font-src`) y usa la cursiva del sistema. Los dibujos
+  son adjuntos `.sketch` (JSON) cifrados como cualquier otro; se incrustan con `![[x.sketch]]` como SVG hecho
+  con DOM (sin innerHTML). Si un dibujo cambia en dos dispositivos se fusiona por elemento
+  (`mergeScenes` de sketch, que `app.js` pasa a `saveFile` como `merge`); solo si chocan en el mismo elemento
+  se guarda además la otra versión como copia. La búsqueda descifra los dibujos para buscar en sus textos
+  (`S.drawText`, solo en memoria; se vacía al bloquear).

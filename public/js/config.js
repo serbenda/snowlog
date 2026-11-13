@@ -21,6 +21,7 @@ export const CONFIG = {
     dailyFolder: 'Diario', // carpeta de las notas diarias (AAAA-MM-DD)
     templatesFolder: 'Plantillas', // carpeta de plantillas (no aparecen en las consultas)
     attachmentsFolder: 'Adjuntos', // donde van las imágenes y PDF que se pegan
+    drawingsFolder: 'Dibujos', // donde se crean los dibujos (sketch)
     dailyTemplate: 'Plantillas/Nota diaria',
     openDailyOnStart: true, // abrir la nota de hoy al entrar, si existe la carpeta del diario
   },

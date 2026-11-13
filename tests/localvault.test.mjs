@@ -184,3 +184,55 @@ test('detecta lo que cambia en la carpeta desde fuera, sin perder los ids', asyn
   assert.equal(await v.read(inicio), 'cambiado con otro editor');
   assert.equal(v.findByTitle('Reforma').id, reforma, 'los ids se conservan');
 });
+
+test('cambios de fuera en otras líneas se juntan con los de aquí', async () => {
+  const root = sampleFolder();
+  root.put('Lista.md', 'uno\ndos\ntres');
+  const v = await new LocalVault(root).load();
+  const id = v.findByTitle('Lista').id;
+  await v.read(id);
+  root.put('Lista.md', 'uno\ndos\ntres\ncuatro (de OneDrive)');
+  root.children.get('Lista.md').mtime = Date.now() + 5;
+  await v.rescan(); // la ve cambiada mientras aquí se sigue escribiendo
+  const res = await v.saveNote(id, 'UNO\ndos\ntres');
+  assert.equal(res.conflict, undefined);
+  assert.equal(res.merged, 'UNO\ndos\ntres\ncuatro (de OneDrive)');
+  assert.equal(root.text('Lista.md'), 'UNO\ndos\ntres\ncuatro (de OneDrive)');
+});
+
+test('dibujos en local: se reescriben y lo cambiado fuera se guarda como copia', async () => {
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  const enc = (s) => new TextEncoder().encode(s);
+  const { id } = await v.addFile('Dibujos', 'esquema.sketch', enc('uno'));
+  await v.saveFile(id, enc('dos'));
+  assert.equal(root.text('Dibujos/esquema.sketch'), 'dos');
+  root.put('Dibujos/esquema.sketch', 'cambiado fuera');
+  const res = await v.saveFile(id, enc('tres'));
+  assert.ok(res.conflict);
+  assert.equal(root.text('Dibujos/esquema.sketch'), 'tres');
+  assert.equal(root.text(res.conflict.path), 'cambiado fuera');
+});
+
+test('dibujos en local: lo cambiado fuera en otros elementos se junta', async () => {
+  const { mergeScenes, parseScene, serializeScene, emptyScene } = await import('../public/js/sketch-escena.js');
+  const enc = (scene) => new TextEncoder().encode(serializeScene(scene));
+  const dec = (b) => parseScene(new TextDecoder().decode(b));
+  const merge = (b, m, t) => {
+    const r = mergeScenes(dec(b), dec(m), dec(t));
+    return { bytes: enc(r.scene), conflict: r.conflict };
+  };
+  const box = (id, x) => ({ id, type: 'rectangle', x, y: 0, w: 10, h: 10, seed: 1 });
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  const base = { ...emptyScene(), elements: [box('a', 0)] };
+  const { id } = await v.addFile('Dibujos', 'esquema.sketch', enc(base));
+  root.put('Dibujos/esquema.sketch', serializeScene({ ...base, elements: [box('a', 0), box('fuera', 50)] }));
+  const res = await v.saveFile(id, enc({ ...base, elements: [box('a', 9)] }), { merge });
+  assert.equal(res.conflict, undefined);
+  assert.deepEqual(dec(new TextEncoder().encode(root.text('Dibujos/esquema.sketch'))).elements.map((e) => [e.id, e.x]), [['a', 9], ['fuera', 50]]);
+  // Si no se puede juntar (no es un dibujo), copia como antes.
+  root.put('Dibujos/esquema.sketch', 'esto no es json');
+  const res2 = await v.saveFile(id, enc(base), { merge });
+  assert.ok(res2.conflict);
+});

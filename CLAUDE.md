@@ -48,14 +48,19 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/backup.js     copia de seguridad cifrada (.snowlog)
   js/cache.js      caché local (IndexedDB) de ficheros cifrados del repo
   js/links.js      reescribir [[enlaces]] al renombrar o mover
+  js/merge.js      fusión a tres bandas por líneas (conflictos entre dispositivos)
   js/search.js     búsqueda de texto completo y recuento de etiquetas
   js/kanban.js     tableros Kanban sobre Markdown (leer, cambiar y escribir)
   js/graph.js      grafo de notas y disposición por fuerzas
   js/editor.js     ayudas del editor: listas, sangría, atajos, autocompletar [[ y resaltado
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)
+  js/sketch-*.js   motor de dibujo copiado de serbenda/sketch (no editar aquí; scripts/update-sketch.mjs)
+  css/sketch.css   estilos del editor de dibujo (copiado igual)
+  fonts/           letra a mano de los dibujos (Caveat, OFL; copiada igual)
   sw.js            service worker: guarda la web para abrirla sin conexión (nunca datos de GitHub)
 scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
+scripts/update-sketch.mjs   copia el motor de sketch a public/
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)
 tests/             node --test; incluye un GitHub falso en memoria
 tests/e2e/         recorridos en Chrome por el protocolo de DevTools (cdp.mjs), sin dependencias

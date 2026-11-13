@@ -338,3 +338,141 @@ test('los ajustes se guardan cifrados en el índice y se ven desde otro disposit
   await other.loadIndex();
   assert.deepEqual(other.getSettings(), { dailyFolder: 'Bitácora secreta', lockAfterMinutes: 5 });
 });
+
+test('prefetch: descarga muchas notas en pocas peticiones y deja la caché lista', async () => {
+  const { memoryCache } = await import('../public/js/cache.js');
+  const items = Array.from({ length: 230 }, (_, i) => ({ path: `Lote grande/N${i}`, text: `texto ${i}` }));
+  const created = await vault.importNotes(items, { batchSize: 300 });
+  const store = memoryCache();
+  const fresh = new Vault(newRepo(), vault.dek, { store });
+  await fresh.loadIndex();
+  let rest = 0;
+  globalThis.fetch = async (url, opts) => {
+    if (url.includes('/contents/n/')) rest += 1;
+    return fake.fetch(url, opts);
+  };
+  try {
+    const before = fake.graphqlCalls();
+    const n = await fresh.prefetch(created.map((c) => c.id));
+    assert.equal(n, 230);
+    assert.equal(fake.graphqlCalls() - before, 3, '230 notas = 3 peticiones');
+    assert.equal(await fresh.read(created[229].id), 'texto 229');
+    assert.equal(rest, 0, 'ya no hace falta pedirlas una a una');
+    assert.equal(await fresh.prefetch(created.map((c) => c.id)), 0, 'lo que ya está no se vuelve a pedir');
+    // Si GraphQL falla, no pasa nada: se leen una a una.
+    const other = new Vault(newRepo(), vault.dek);
+    await other.loadIndex();
+    globalThis.fetch = async (url, opts) => (url.endsWith('/graphql') ? new Response('{}', { status: 502 }) : fake.fetch(url, opts));
+    assert.equal(await other.prefetch([created[0].id]), 0);
+    assert.equal(await other.read(created[0].id), 'texto 0');
+  } finally {
+    globalThis.fetch = fake.fetch;
+  }
+});
+
+test('si dos dispositivos cambian partes distintas de una nota, se juntan sin copia', async () => {
+  const id = await vault.createNote('Fusión/Lista', '# Compra\n- leche\n- pan\n\n## Notas\nnada');
+  const movil = new Vault(newRepo(), vault.dek);
+  await movil.loadIndex();
+  await movil.read(id);
+  await vault.saveNote(id, '# Compra\n- leche sin lactosa\n- pan\n\n## Notas\nnada');
+  const res = await movil.saveNote(id, '# Compra\n- leche\n- pan\n\n## Notas\nllamar al fontanero');
+  assert.equal(res.conflict, undefined);
+  assert.equal(res.merged, '# Compra\n- leche sin lactosa\n- pan\n\n## Notas\nllamar al fontanero');
+  const check = new Vault(newRepo(), vault.dek);
+  await check.loadIndex();
+  assert.equal(await check.read(id), res.merged);
+  assert.equal(check.notes().filter((n) => n.path.startsWith('Fusión/')).length, 1, 'sin copias');
+});
+
+test('rotar la clave: todo se recifra, el historial se sigue leyendo y la clave antigua ya no sirve', async () => {
+  const id = await vault.createNote('Rotar/Secreta', 'versión 1');
+  await vault.saveNote(id, 'versión 2');
+  const att = await vault.addFile('Rotar', 'foto.png', new Uint8Array([1, 2, 3, 4]));
+  const before = new Map(fake.files());
+  const oldDek = vault.dek;
+  const vaultFile = await Vault.fetchVaultFile(newRepo());
+  await assert.rejects(vault.rotate(vaultFile, 'no es la frase', ITER), /bad_secret/);
+  const progress = [];
+  const { vaultFile: rotated, recoveryCode } = await vault.rotate(vaultFile, 'frase nueva de prueba', ITER, (d, t) => progress.push(`${d}/${t}`));
+  assert.ok(progress.length > 0);
+  const after = fake.files();
+  // Cada nota y adjunto se ha vuelto a cifrar.
+  for (const [path, content] of after) {
+    if (/^[na]\//.test(path)) assert.notEqual(content, before.get(path), path);
+  }
+  assert.ok(after.has('.snowlog/keyring.enc'));
+  // Con la frase se abre la bóveda nueva y se lee todo.
+  const fresh = Vault.fetchVaultFile(newRepo());
+  const dek = await C.unlockVault(await fresh, 'frase nueva de prueba');
+  const other = new Vault(newRepo(), dek);
+  await other.loadIndex();
+  assert.equal(await other.read(id), 'versión 2');
+  assert.deepEqual(await other.readFile(att.id), new Uint8Array([1, 2, 3, 4]));
+  // El historial (cifrado con la clave antigua) se sigue leyendo gracias al llavero.
+  const versions = await other.history(id);
+  assert.deepEqual(await Promise.all(versions.map((v) => other.readVersion(id, v.ref))), ['versión 2', 'versión 2', 'versión 1']);
+  // La clave antigua ya no abre nada nuevo: otro dispositivo con ella tiene que volver a desbloquear.
+  const stale = new Vault(newRepo(), oldDek);
+  await assert.rejects(stale.loadIndex(), /key_changed/);
+  // El código de recuperación nuevo funciona; el vault.json devuelto es el del repo.
+  assert.deepEqual(rotated, await Vault.fetchVaultFile(newRepo()));
+  const { dek: viaCode } = await C.recoverVault(rotated, recoveryCode, 'otra frase de prueba');
+  const third = new Vault(newRepo(), viaCode);
+  await third.loadIndex();
+  assert.equal(await third.read(id), 'versión 2');
+  // El propio dispositivo sigue funcionando con la clave nueva.
+  await vault.saveNote(id, 'versión 3');
+  await other.repo.fetchHead();
+  assert.equal(await other.readVersion(id, (await other.history(id))[0].ref), 'versión 3');
+});
+
+test('dibujos: se guardan cifrados, se actualizan y si cambian en dos sitios se guarda copia', async () => {
+  const enc = (s) => new TextEncoder().encode(s);
+  const { id, path } = await vault.addFile('Dibujos', 'plano casa.sketch', enc('{"type":"sketch","elements":[]}'));
+  assert.equal(path, 'Dibujos/plano casa.sketch');
+  for (const [p, c] of fake.files()) assert.ok(!p.includes('plano') && !c.includes('plano') && !c.includes('"sketch"'), p);
+  await vault.saveFile(id, enc('v2'));
+  const otro = new Vault(newRepo(), vault.dek);
+  await otro.loadIndex();
+  assert.equal(new TextDecoder().decode(await otro.readFile(id)), 'v2');
+  await vault.saveFile(id, enc('v3 portátil'));
+  const res = await otro.saveFile(id, enc('v3 móvil'));
+  assert.match(res.conflict.path, /^Dibujos\/plano casa \(otro dispositivo .+\)\.sketch$/);
+  const check = new Vault(newRepo(), vault.dek);
+  await check.loadIndex();
+  assert.equal(new TextDecoder().decode(await check.readFile(id)), 'v3 móvil');
+  assert.equal(new TextDecoder().decode(await check.readFile(res.conflict.id)), 'v3 portátil');
+  // Sin cambios de otros: sin copia.
+  assert.deepEqual(await otro.saveFile(id, enc('v4')), {});
+});
+
+test('dibujos: los cambios de dos dispositivos en elementos distintos se juntan', async () => {
+  const { mergeScenes, parseScene, serializeScene, emptyScene } = await import('../public/js/sketch-escena.js');
+  const enc = (scene) => new TextEncoder().encode(serializeScene(scene));
+  const dec = (b) => parseScene(new TextDecoder().decode(b));
+  const merge = (b, m, t) => {
+    const r = mergeScenes(dec(b), dec(m), dec(t));
+    return { bytes: enc(r.scene), conflict: r.conflict };
+  };
+  const box = (id, x) => ({ id, type: 'rectangle', x, y: 0, w: 10, h: 10, seed: 1 });
+  const base = { ...emptyScene(), elements: [box('a', 0), box('b', 20)] };
+  const { id } = await vault.addFile('Dibujos', 'juntar.sketch', enc(base));
+  const otro = new Vault(newRepo(), vault.dek);
+  await otro.loadIndex();
+  await otro.readFile(id);
+  await vault.saveFile(id, enc({ ...base, elements: [box('a', 100), box('b', 20)] }), { merge });
+  const res = await otro.saveFile(id, enc({ ...base, elements: [box('a', 0), box('b', 20), box('c', 40)] }), { merge });
+  assert.equal(res.conflict, undefined, 'sin copia');
+  assert.ok(res.merged);
+  const check = new Vault(newRepo(), vault.dek);
+  await check.loadIndex();
+  const got = dec(await check.readFile(id));
+  assert.deepEqual(got.elements.map((e) => [e.id, e.x]), [['a', 100], ['b', 20], ['c', 40]]);
+  // Mismo elemento cambiado en los dos: se juntan y además se guarda la otra versión aparte.
+  await check.saveFile(id, enc({ ...got, elements: [box('a', 1), box('b', 20), box('c', 40)] }), { merge });
+  const res2 = await otro.saveFile(id, enc({ ...got, elements: [box('a', 2), box('b', 20), box('c', 40)] }), { merge });
+  assert.ok(res2.conflict);
+  assert.equal(dec(res2.merged).elements[0].x, 2);
+  for (const [p, c] of fake.files()) assert.ok(!c.includes('juntar') && !c.includes('rectangle'), p);
+});

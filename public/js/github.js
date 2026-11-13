@@ -26,9 +26,9 @@ export class GitHubRepo {
     return `${API}/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(this.repo)}`;
   }
 
-  async request(method, path, { body, accept = 'application/vnd.github+json', retry = true } = {}) {
+  async request(method, path, { body, accept = 'application/vnd.github+json', retry = true, graphql = false } = {}) {
     const token = await this.getToken();
-    const res = await fetch(`${this.base}${path}`, {
+    const res = await fetch(graphql ? `${API}/graphql` : `${this.base}${path}`, {
       method,
       cache: 'no-store',
       headers: {
@@ -40,7 +40,7 @@ export class GitHubRepo {
       body: body ? JSON.stringify(body) : undefined,
     });
     if (res.status === 401 && retry && this.onUnauthorized && (await this.onUnauthorized())) {
-      return this.request(method, path, { body, accept, retry: false });
+      return this.request(method, path, { body, accept, retry: false, graphql });
     }
     if (!res.ok) {
       let msg = res.statusText;
@@ -86,6 +86,27 @@ export class GitHubRepo {
     }
   }
 
+  // Lee muchos ficheros de texto de una vez (GraphQL, hasta 100 por petición).
+  // Devuelve Map(path → texto | null). Si GraphQL no está disponible, lanza y el que llama lee uno a uno.
+  async readMany(paths, ref) {
+    if (!ref && !this.head) await this.fetchHead();
+    const at = ref || this.head;
+    const out = new Map();
+    if (!at) return out;
+    for (let i = 0; i < paths.length; i += 100) {
+      const chunk = paths.slice(i, i + 100);
+      const fields = chunk.map((p, j) => `f${j}: object(expression: ${JSON.stringify(`${at}:${p}`)}) { ... on Blob { text isTruncated } }`).join('\n');
+      const query = `query($o: String!, $r: String!) { repository(owner: $o, name: $r) {\n${fields}\n} }`;
+      const res = await this.request('POST', '', { body: { query, variables: { o: this.owner, r: this.repo } }, graphql: true });
+      if (res.errors?.length && !res.data) throw new GitHubError(400, res.errors[0].message);
+      chunk.forEach((p, j) => {
+        const blob = res.data?.repository?.[`f${j}`];
+        out.set(p, blob && !blob.isTruncated && typeof blob.text === 'string' ? blob.text : null);
+      });
+    }
+    return out;
+  }
+
   // Commits que cambiaron un fichero, del más reciente al más antiguo: [{ sha, date }].
   async history(path, { perPage = 50, page = 1 } = {}) {
     if (!this.head) await this.fetchHead();
@@ -104,15 +125,31 @@ export class GitHubRepo {
 
   // changes: [{ path, content }] para crear o cambiar, [{ path, delete: true }] para borrar.
   // Lanza GitHubError(409) si alguien ha escrito antes (no es avance rápido).
-  async commit(changes, message) {
+  // blobs: true sube antes cada fichero por separado (para commits muy grandes, como rotar la clave).
+  async commit(changes, message, { blobs = false } = {}) {
     if (!this.head) await this.fetchHead();
     const parent = await this.request('GET', `/git/commits/${this.head}`);
+    const shas = new Map();
+    if (blobs) {
+      const todo = changes.filter((c) => !c.delete);
+      let i = 0;
+      const worker = async () => {
+        while (i < todo.length) {
+          const c = todo[i++];
+          const res = await this.request('POST', '/git/blobs', { body: { content: c.content, encoding: 'utf-8' } });
+          shas.set(c.path, res.sha);
+        }
+      };
+      await Promise.all(Array.from({ length: 8 }, worker));
+    }
     const tree = await this.request('POST', '/git/trees', {
       body: {
         base_tree: parent.tree.sha,
-        tree: changes.map((c) => (c.delete
-          ? { path: c.path, mode: '100644', type: 'blob', sha: null }
-          : { path: c.path, mode: '100644', type: 'blob', content: c.content })),
+        tree: changes.map((c) => {
+          if (c.delete) return { path: c.path, mode: '100644', type: 'blob', sha: null };
+          if (shas.has(c.path)) return { path: c.path, mode: '100644', type: 'blob', sha: shas.get(c.path) };
+          return { path: c.path, mode: '100644', type: 'blob', content: c.content };
+        }),
       },
     });
     const commit = await this.request('POST', '/git/commits', {

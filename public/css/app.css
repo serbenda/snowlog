@@ -185,6 +185,10 @@ button { cursor: pointer; }
   border-radius: 10px; padding: 12px; font: inherit; cursor: pointer;
 }
 .kanban-new-lane:hover { background: var(--hover); }
+@media (max-width: 700px) {
+  .kanban { scroll-snap-type: x mandatory; }
+  .kanban-lane { flex-basis: 84vw; scroll-snap-align: start; }
+}
 @media (hover: none) {
   .kanban-card-actions { position: static; display: flex; grid-column: 1 / -1; justify-content: flex-end; box-shadow: none; border: 0; background: none; }
 }
@@ -348,7 +352,25 @@ button { cursor: pointer; }
 .view-actions { display: flex; gap: 2px; }
 .mobile-only { display: none; }
 
-.view-content { flex: 1; overflow: auto; }
+.view-content { flex: 1; overflow: auto; position: relative; }
+.view-content:has(> .drawing:not([hidden])) { overflow: hidden; }
+.drawing { position: absolute; inset: 0; }
+/* El editor de dibujos con los colores de Snowlog */
+.drawing .sk-editor {
+  --sk-ui: var(--bg-elevated);
+  --sk-text: var(--text-normal);
+  --sk-muted: var(--text-muted);
+  --sk-border: var(--border);
+  --sk-accent: var(--accent);
+  --sk-active: var(--active);
+  --sk-shadow: var(--shadow);
+}
+.embed-sketch {
+  display: block; max-width: 100%; margin: 8px 0; padding: 0; border: 1px solid var(--border); border-radius: 8px;
+  background: #ffffff; cursor: zoom-in; overflow: hidden;
+}
+.embed-sketch svg { display: block; max-width: 100%; height: auto; }
+.embed-sketch-empty { display: block; padding: 24px 32px; color: #6b6e76; font-size: 14px; }
 .note { max-width: var(--line-w); margin: 0 auto; padding: 32px 32px 120px; }
 .inline-title {
   width: 100%;
