@@ -1,6 +1,9 @@
 // Configuración de Snowlog. Ningún valor de aquí es secreto:
 // el client secret de la GitHub App vive solo en el Worker.
 export const CONFIG = {
+  // 'online': notas cifradas en GitHub. 'portable': la versión de un solo fichero (la pone el empaquetador).
+  mode: 'online',
+
   // Repo privado donde se guardan las notas cifradas.
   notesRepo: { owner: 'serbenda', repo: 'snowlog-notes', branch: 'main' },
 

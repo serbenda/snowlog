@@ -7,6 +7,8 @@ import { Vault, baseName, parentPath, normalizePath } from './vault.js';
 import { render, outline, wordCount } from './markdown.js';
 import { planImport, formatBytes } from './import.js';
 import { exampleSpace } from './examples.js';
+import { LocalVault } from './localvault.js';
+import { makeZip } from './zip.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
 import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
@@ -37,6 +39,7 @@ const ICONS = {
   setup: 'M12 3l8 4.5v9L12 21l-8-4.5v-9z M12 12l8-4.5 M12 12v9 M12 12L4 7.5',
   chevronLeft: 'M15 6l-6 6 6 6',
   example: 'M9 4h6l-1 5 4 9a2 2 0 0 1-2 3H8a2 2 0 0 1-2-3l4-9z M8 15h8',
+  download: 'M12 4v11 M7 10l5 5 5-5 M5 20h14',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
@@ -69,6 +72,7 @@ const S = {
   saving: Promise.resolve(),
   expanded: new Set(JSON.parse(localStorage.getItem('snowlog.expanded') || '[]')),
   lastActivity: Date.now(),
+  local: false, // true = notas en una carpeta local o en el navegador (sin GitHub)
   notesIdx: new Map(), // id -> nota analizada (solo en memoria)
   indexReady: null,
   calMonth: null,
@@ -95,6 +99,9 @@ function errText(e) {
     vault_exists: 'Ya hay una bóveda en el repo.',
   };
   if (map[m]) return map[m];
+  if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') return 'El navegador no ha dado permiso para usar la carpeta.';
+  if (e?.name === 'NotFoundError') return 'No encuentro el fichero o la carpeta. ¿Se ha movido o borrado fuera de Snowlog?';
+  if (e?.name === 'QuotaExceededError') return 'No queda espacio en el almacenamiento del navegador.';
   if (e?.status === 401) return 'GitHub ha rechazado el acceso: la sesión o el token han caducado.';
   if (e?.status === 403) return 'GitHub deniega el permiso. Revisa que el acceso incluya el repo de notas con permiso de escritura.';
   if (e?.status === 404) return `No encuentro ${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}. Comprueba que existe y que tienes acceso.`;
@@ -166,10 +173,156 @@ function showLogin(message) {
     githubBtn,
     oauthHint,
     h('div', { class: 'lock-links' },
-      h('button', { class: 'link-btn', type: 'button', onclick: () => { tokenForm.hidden = false; tokenInput.focus(); } }, 'Usar un token personal')),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => { tokenForm.hidden = false; tokenInput.focus(); } }, 'Usar un token personal'),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => showLocalStart() }, 'Usar notas de este ordenador, sin GitHub'),
+      h('a', { class: 'link-btn', href: 'snowlog-portable.html', download: 'snowlog-portable.html' }, 'Descargar la versión portátil')),
     tokenForm,
     err,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Modo local: carpeta del ordenador o almacenamiento del navegador (sin red)
+const IDB_NAME = 'snowlog';
+function idb(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const tx = req.result.transaction('kv', mode);
+      const r = fn(tx.objectStore('kv'));
+      tx.oncomplete = () => resolve(r && 'result' in r ? r.result : undefined);
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+}
+const rememberHandle = (handle) => idb('readwrite', (st) => st.put(handle, 'localHandle')).catch(() => {});
+const recallHandle = () => idb('readonly', (st) => st.get('localHandle')).catch(() => null);
+const forgetHandle = () => idb('readwrite', (st) => st.delete('localHandle')).catch(() => {});
+
+const canPickFolder = () => typeof window.showDirectoryPicker === 'function';
+// El almacenamiento del navegador no existe para ficheros abiertos desde disco (file://).
+async function canUseBrowser() {
+  if (!(navigator.storage && navigator.storage.getDirectory)) return false;
+  try {
+    await navigator.storage.getDirectory();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function showLocalStart(message) {
+  const err = errorLine();
+  if (message) showError(err, message);
+  const remembered = canPickFolder() ? await recallHandle() : null;
+  const browserOk = await canUseBrowser();
+  if (!canPickFolder() && !browserOk) {
+    lockScreen(
+      h('h1', {}, 'Abre Snowlog con Chrome o Edge'),
+      h('p', {}, 'Este navegador no permite guardar notas desde un fichero abierto en el disco. Abre snowlog-portable.html con Google Chrome o Microsoft Edge (clic derecho → Abrir con).'),
+      CONFIG.mode === 'portable' ? null
+        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Volver al acceso con GitHub')),
+    );
+    return;
+  }
+  const pick = h('button', { class: 'btn primary', type: 'button' }, remembered ? 'Elegir otra carpeta' : 'Abrir una carpeta');
+  pick.addEventListener('click', async () => {
+    try {
+      const handle = await window.showDirectoryPicker({ id: 'snowlog', mode: 'readwrite' });
+      await rememberHandle(handle);
+      await openLocal(handle, 'folder', pick);
+    } catch (e) {
+      if (e?.name !== 'AbortError') showError(err, e);
+    }
+  });
+  const again = remembered && h('button', { class: 'btn primary', type: 'button' }, `Continuar con «${remembered.name}»`);
+  if (again) {
+    pick.classList.remove('primary');
+    again.addEventListener('click', async () => {
+      try {
+        const perm = await remembered.requestPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') throw Object.assign(new Error('denied'), { name: 'NotAllowedError' });
+        await openLocal(remembered, 'folder', again);
+      } catch (e) {
+        showError(err, e);
+      }
+    });
+  }
+  const browser = h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, 'Guardar en este navegador');
+  browser.addEventListener('click', async () => {
+    try {
+      await openLocal(await navigator.storage.getDirectory(), 'browser', browser);
+    } catch (e) {
+      showError(err, e);
+    }
+  });
+  lockScreen(
+    h('h1', {}, 'Tus notas, en este ordenador'),
+    h('p', {}, canPickFolder()
+      ? 'Elige una carpeta: cada nota es un fichero .md normal, como en Obsidian. Nada sale de tu ordenador.'
+      : 'Este navegador no deja elegir carpetas (usa Chrome o Edge para eso). Puedes guardar las notas dentro del navegador y exportarlas en .zip cuando quieras.'),
+    again || null,
+    canPickFolder() ? pick : null,
+    browserOk ? browser : null,
+    h('p', { class: 'hint' }, 'Sin internet y sin instalar nada. Las notas no se cifran: quedan protegidas por tu sesión del ordenador.'),
+    CONFIG.mode === 'portable' ? null
+      : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Volver al acceso con GitHub')),
+    err,
+  );
+}
+
+async function openLocal(handle, kind, button) {
+  const done = button ? busy(button, 'Abriendo…') : () => {};
+  try {
+    const vault = await new LocalVault(handle, { kind, label: kind === 'browser' ? 'este navegador' : handle.name }).load();
+    S.local = true;
+    S.vault = vault;
+    S.dek = null;
+    S.cred = null;
+    S.repo = null;
+    enterApp();
+  } finally {
+    done();
+  }
+}
+
+async function reloadLocal() {
+  if (!S.local) return;
+  await saveNow();
+  const { root, kind, label } = S.vault;
+  S.vault = await new LocalVault(root, { kind, label }).load();
+  S.current = null;
+  enterApp();
+  notice('Carpeta recargada.');
+}
+
+async function exportZip() {
+  if (!S.vault) return;
+  if (!S.local) {
+    const ok = await confirmModal('Exportar copia sin cifrar',
+      'La copia .zip tendrá todas tus notas en claro. Guárdala en un sitio seguro.', 'Exportar', false);
+    if (!ok) return;
+  }
+  await saveNow();
+  setStatus('');
+  $('st-sync').textContent = 'Preparando la copia…';
+  try {
+    const files = [];
+    for (const n of S.vault.notes()) files.push({ path: `${n.path}.md`, text: await S.vault.read(n.id) });
+    const blob = new Blob([makeZip(files)], { type: 'application/zip' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: `snowlog-${isoDate(new Date())}.zip` });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    notice(`Copia exportada: ${files.length} notas.`);
+  } catch (e) {
+    notice(errText(e), 'error');
+  } finally {
+    $('st-sync').textContent = '';
+  }
 }
 
 // Tras tener credenciales: comprobar el repo y abrir o crear la bóveda.
@@ -403,6 +556,12 @@ function wipe() {
 async function lock() {
   if (!S.vault) return;
   await saveNow();
+  if (S.local) {
+    wipe();
+    S.local = false;
+    showLocalStart();
+    return;
+  }
   wipe();
   const cached = Auth.cachedVault();
   if (cached) showUnlock(cached);
@@ -410,6 +569,16 @@ async function lock() {
 }
 
 async function logout() {
+  if (S.local) {
+    const ok = await confirmModal('¿Olvidar esta carpeta?', 'Snowlog dejará de recordarla en este navegador. Tus ficheros no se tocan.', 'Olvidar', false);
+    if (!ok) return;
+    await saveNow();
+    await forgetHandle();
+    wipe();
+    S.local = false;
+    showLocalStart();
+    return;
+  }
   const ok = await confirmModal('¿Cerrar sesión?', 'Se bloquea Snowlog y se olvida este dispositivo. Tus notas en GitHub no se tocan.', 'Cerrar sesión');
   if (!ok) return;
   await saveNow();
@@ -422,7 +591,7 @@ function trackActivity() {
   const mark = () => { S.lastActivity = Date.now(); };
   for (const ev of ['keydown', 'pointerdown', 'wheel', 'touchstart']) addEventListener(ev, mark, { passive: true });
   setInterval(() => {
-    if (S.vault && Date.now() - S.lastActivity > CONFIG.lockAfterMinutes * 60000) lock();
+    if (S.vault && !S.local && Date.now() - S.lastActivity > CONFIG.lockAfterMinutes * 60000) lock();
   }, 15000);
 }
 
@@ -435,6 +604,13 @@ function enterApp() {
   S.notesIdx.clear();
   S.indexReady = null;
   S.calMonth = null;
+  $('st-place').textContent = S.local
+    ? (S.vault.kind === 'browser' ? 'En este navegador' : `Carpeta «${S.vault.label}»`)
+    : 'GitHub · cifrado';
+  for (const [action, label] of [['lock', S.local ? 'Cerrar carpeta' : 'Bloquear'], ['logout', S.local ? 'Olvidar esta carpeta' : 'Cerrar sesión']]) {
+    const b = document.querySelector(`.ribbon [data-action=${action}]`);
+    if (b) { b.title = label; b.setAttribute('aria-label', label); }
+  }
   renderTree();
   // El índice completo (para consultas y enlaces entrantes) se carga en segundo plano.
   ensureIndex().then(() => {
@@ -1478,9 +1654,13 @@ function noteMenu(x, y) {
     ['setup', 'Configurar mi espacio…', () => setupSpace()],
     ['example', 'Cargar ejemplos…', () => loadExamples()],
     ['import', 'Importar carpeta…', () => ACTIONS.import()],
+    ['download', 'Exportar copia (.zip)', () => exportZip()],
   );
+  if (S.local) items.push(['collapse', 'Recargar la carpeta', () => reloadLocal()]);
   if (S.current) items.push(null, ['trash', 'Eliminar nota', () => deleteNote(S.current), 'danger']);
-  items.push(null, ['lock', 'Bloquear', () => lock()], ['logout', 'Cerrar sesión', () => logout()]);
+  items.push(null,
+    ['lock', S.local ? 'Cerrar carpeta' : 'Bloquear', () => lock()],
+    ['logout', S.local ? 'Olvidar esta carpeta' : 'Cerrar sesión', () => logout()]);
   openMenu(x, y, items);
 }
 
@@ -1591,6 +1771,10 @@ function setupUi() {
 async function boot() {
   setupUi();
   trackActivity();
+  if (CONFIG.mode === 'portable') {
+    showLocalStart();
+    return undefined;
+  }
   try {
     const cred = await Auth.finishOAuth();
     if (cred) {
