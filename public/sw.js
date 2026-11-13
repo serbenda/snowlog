@@ -21,6 +21,7 @@ const SHELL = [
   'js/graph.js',
   'js/import.js',
   'js/kanban.js',
+  'js/kvdir.js',
   'js/links.js',
   'js/localvault.js',
   'js/markdown.js',

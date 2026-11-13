@@ -161,3 +161,26 @@ test('ajustes en local: un JSON en .snowlog que viaja con la carpeta', async () 
   assert.deepEqual(again.getSettings(), { dailyFolder: 'Bitácora' });
   assert.ok(!again.index.folders.includes('.snowlog'));
 });
+
+test('detecta lo que cambia en la carpeta desde fuera, sin perder los ids', async () => {
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  const inicio = v.findByTitle('Inicio').id;
+  const reforma = v.findByTitle('Reforma').id;
+  await v.read(inicio);
+  const mine = await v.createNote('Mía', 'escrita aquí');
+  await v.saveNote(reforma, 'guardada aquí');
+  assert.deepEqual(await v.rescan(), { added: [], removed: [], changed: [] }, 'lo que escribimos nosotros no cuenta');
+  await new Promise((r) => setTimeout(r, 5));
+  root.put('Inicio.md', 'cambiado con otro editor');
+  root.children.get('Inicio.md').mtime = Date.now();
+  root.put('Nueva de fuera.md', 'hola');
+  await root.removeEntry('Mía.md');
+  const res = await v.rescan();
+  assert.deepEqual(res.changed, [inicio]);
+  assert.deepEqual(res.removed, [mine]);
+  assert.equal(res.added.length, 1);
+  assert.equal(v.index.notes[res.added[0]].path, 'Nueva de fuera');
+  assert.equal(await v.read(inicio), 'cambiado con otro editor');
+  assert.equal(v.findByTitle('Reforma').id, reforma, 'los ids se conservan');
+});

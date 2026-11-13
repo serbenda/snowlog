@@ -1,7 +1,8 @@
 # Snowlog portátil
 
 Un único fichero, `snowlog-portable.html`, que se abre con doble clic. **No se instala nada y no necesita
-internet.** Sirve en Windows y en Mac, con Google Chrome o Microsoft Edge.
+internet.** Sirve en Windows y en Mac. Con Google Chrome o Microsoft Edge guarda las notas en una carpeta;
+con Firefox o Safari, dentro del navegador.
 
 ## Conseguirlo
 
@@ -11,7 +12,8 @@ internet.** Sirve en Windows y en Mac, con Google Chrome o Microsoft Edge.
 
 ## Usarlo
 
-1. Abre `snowlog-portable.html` con Chrome o Edge. Si se abre con otro navegador: clic derecho → *Abrir con*.
+1. Abre `snowlog-portable.html` con Chrome o Edge (clic derecho → *Abrir con*). Con Firefox o Safari también
+   funciona: ver más abajo.
 2. Pulsa **Abrir una carpeta** y elige (o crea) la carpeta de tus notas. El navegador te pedirá permiso
    para modificarla: acéptalo.
 3. La próxima vez verás **Continuar con «tu carpeta»**: un clic y estás dentro.
@@ -27,8 +29,21 @@ enlaces entrantes e importar carpeta.
   cualquier editor, copiarlas o hacer copia de seguridad como cualquier documento.
 - Lo que borras va a la subcarpeta `.trash`, de donde puedes recuperarlo a mano.
 - No toca lo que no son notas (imágenes, PDF, `.obsidian`…).
-- **Exportar copia (.zip)** en el menú ⋯ descarga todas las notas en un zip.
-- Si cambias ficheros desde fuera mientras Snowlog está abierto, usa **Recargar la carpeta** (menú ⋯).
+- **Copia de seguridad (.zip)** en el menú ⋯ descarga todas las notas y adjuntos en un zip.
+- Si cambias ficheros desde fuera mientras Snowlog está abierto (otro editor, OneDrive, Dropbox…), Snowlog
+  lo ve al volver a la ventana y cada 10 segundos. **Recargar la carpeta** (menú ⋯) fuerza a mirarla entera.
+- Cada nota guarda versiones anteriores en `.history` (como mucho una cada 10 minutos): menú ⋯ →
+  **Historial de versiones**.
+
+## Con Firefox o Safari
+
+Estos navegadores no dejan elegir carpetas del disco. Snowlog ofrece **Guardar dentro del navegador**: las
+notas se guardan en el almacenamiento del navegador de ese ordenador y siguen ahí la próxima vez que abras el
+fichero. Ten en cuenta:
+
+- Si borras los datos del navegador (o usas una ventana privada), se borran también las notas.
+- Haz **Copia de seguridad (.zip)** de vez en cuando; Snowlog te lo recuerda.
+- Para pasarlas a una carpeta o a la versión online, usa esa copia (ver *Pasar notas* más abajo).
 
 ## Seguridad
 
@@ -47,6 +62,6 @@ enlaces entrantes e importar carpeta.
 | Instalación | Ninguna | Ninguna |
 | Varios dispositivos | Sí | No (es una carpeta local) |
 | Cifrado | De extremo a extremo | No (protección del sistema) |
-| Navegadores | Cualquiera moderno | Chrome o Edge |
+| Navegadores | Cualquiera moderno | Chrome o Edge (carpeta); Firefox o Safari (dentro del navegador) |
 
 Desde la versión online también puedes usar una carpeta local con *Usar notas de este ordenador, sin GitHub*.

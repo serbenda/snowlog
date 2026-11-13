@@ -15,6 +15,7 @@ import { searchNotes, tagCounts, fold } from './search.js';
 import { makeBackup, openBackup, parseBackup } from './backup.js';
 import { openCache } from './cache.js';
 import * as K from './kanban.js';
+import { openKvDir, browserBackend } from './kvdir.js';
 import { buildGraph, localGraph, initLayout, step as graphStep } from './graph.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
@@ -266,6 +267,31 @@ async function showLocalStart(message) {
   if (message) showError(err, message);
   const remembered = canPickFolder() ? await recallHandle() : null;
   const browserOk = await canUseBrowser();
+  // Firefox, Safari (y Chrome abriendo el fichero desde el disco): sin carpetas ni OPFS, las notas
+  // pueden guardarse igualmente dentro del navegador (IndexedDB o localStorage).
+  const kv = browserOk ? null : await browserBackend();
+  const inside = kv && h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, 'Guardar dentro del navegador');
+  if (inside) {
+    inside.addEventListener('click', async () => {
+      try {
+        await openLocal(await openKvDir(kv), 'memory', inside);
+      } catch (e) {
+        showError(err, e);
+      }
+    });
+  }
+  if (!canPickFolder() && !browserOk && inside) {
+    lockScreen(
+      h('h1', {}, 'Tus notas, en este navegador'),
+      h('p', {}, 'Este navegador no deja elegir carpetas del disco (eso solo lo hacen Chrome y Edge). Las notas se guardan dentro del navegador, en este ordenador, y siguen aquí la próxima vez que abras este fichero.'),
+      inside,
+      h('p', { class: 'hint' }, 'Para llevarlas a otro sitio o tener copia, usa «Copia de seguridad (.zip)» en el menú ⋯. Si borras los datos del navegador, se borran también las notas.'),
+      CONFIG.mode === 'portable' ? null
+        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Volver al acceso con GitHub')),
+      err,
+    );
+    return;
+  }
   if (!canPickFolder() && !browserOk) {
     lockScreen(
       h('h1', {}, 'Abre Snowlog con Chrome o Edge'),
@@ -313,7 +339,7 @@ async function showLocalStart(message) {
       : 'Este navegador no deja elegir carpetas (usa Chrome o Edge para eso). Puedes guardar las notas dentro del navegador y exportarlas en .zip cuando quieras.'),
     again || null,
     canPickFolder() ? pick : null,
-    browserOk ? browser : null,
+    browserOk ? browser : inside,
     h('p', { class: 'hint' }, 'Sin internet y sin instalar nada. Las notas no se cifran: quedan protegidas por tu sesión del ordenador.'),
     CONFIG.mode === 'portable' ? null
       : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Volver al acceso con GitHub')),
@@ -324,7 +350,7 @@ async function showLocalStart(message) {
 async function openLocal(handle, kind, button) {
   const done = button ? busy(button, 'Abriendo…') : () => {};
   try {
-    const vault = await new LocalVault(handle, { kind, label: kind === 'browser' ? 'este navegador' : handle.name }).load();
+    const vault = await new LocalVault(handle, { kind, label: kind === 'folder' ? handle.name : 'este navegador' }).load();
     S.local = true;
     S.vault = vault;
     S.dek = null;
@@ -1635,7 +1661,7 @@ function updatePlace() {
   const el = $('st-place');
   if (!S.vault) return;
   if (S.local) {
-    el.textContent = S.vault.kind === 'browser' ? 'En este navegador' : `Carpeta «${S.vault.label}»`;
+    el.textContent = S.vault.kind === 'folder' ? `Carpeta «${S.vault.label}»` : 'En este navegador';
     el.className = '';
     return;
   }
@@ -1644,6 +1670,49 @@ function updatePlace() {
     ? `Sin conexión${n ? ` · ${n} cambio${n === 1 ? '' : 's'} por subir` : ''}`
     : (n ? `Subiendo ${n} cambio${n === 1 ? '' : 's'}…` : 'GitHub · cifrado');
   el.className = S.vault.offline ? 'offline' : '';
+}
+
+// Carpeta del ordenador: mirar si algo cambió desde fuera (otro editor, OneDrive, Dropbox…).
+let rescanning = false;
+async function rescanLocal() {
+  if (!S.local || S.vault?.kind !== 'folder' || rescanning || document.hidden) return;
+  rescanning = true;
+  const vault = S.vault;
+  try {
+    const res = await vault.rescan();
+    if (S.vault !== vault || !(res.added.length || res.removed.length || res.changed.length)) return;
+    const cur = S.current;
+    if (cur && res.removed.includes(cur)) {
+      const text = $('editor').value;
+      S.current = null;
+      if (S.dirty) {
+        // La borraron o movieron fuera mientras se escribía: no se pierde lo escrito.
+        const path = vault.freePath('', 'Recuperada');
+        const id = await vault.createNote(path, text);
+        S.dirty = false;
+        notice(`La nota se borró o se movió fuera de Snowlog. Lo que estabas escribiendo está en «${path}».`, 'error');
+        await openNote(id);
+      } else {
+        notice('La nota que tenías abierta se ha borrado o movido fuera de Snowlog.');
+        showEmpty();
+      }
+    } else if (cur && res.changed.includes(cur) && !S.dirty) {
+      const text = await vault.read(cur);
+      if (S.current === cur && !S.dirty) {
+        $('editor').value = text;
+        autosize();
+        if (S.mode === 'read') setMode('read');
+        refreshSide();
+        notice('La nota ha cambiado fuera de Snowlog y se ha actualizado.');
+      }
+    }
+    renderTree();
+    syncIndex();
+    S.indexReady = null;
+    ensureIndex().catch(() => {});
+  } catch { /* la carpeta puede no estar accesible un momento */ } finally {
+    rescanning = false;
+  }
 }
 
 // Cuando vuelve la red: recarga el índice y sube lo que se escribió sin conexión.
@@ -3283,6 +3352,8 @@ function setupUi() {
   });
 
   addEventListener('online', () => trySync());
+  addEventListener('focus', () => rescanLocal());
+  setInterval(() => rescanLocal(), 10000);
   addEventListener('offline', () => { if (S.vault && !S.local) { S.vault.offline = true; updatePlace(); } });
   setInterval(() => { if (S.vault?.offline && navigator.onLine) trySync(); }, 30000);
   // Al cambiar de pestaña o de app (móvil) se guarda enseguida.

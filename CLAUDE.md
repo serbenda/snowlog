@@ -43,6 +43,7 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/import.js     importar carpeta de Markdown
   js/examples.js   proyecto de ejemplo (Cargar ejemplos)
   js/localvault.js bóveda local: .md en una carpeta (File System Access) o en el navegador (OPFS)
+  js/kvdir.js      carpeta guardada dentro del navegador (portátil en Firefox y Safari)
   js/zip.js        crear y leer .zip sin dependencias
   js/backup.js     copia de seguridad cifrada (.snowlog)
   js/cache.js      caché local (IndexedDB) de ficheros cifrados del repo

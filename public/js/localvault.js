@@ -27,12 +27,14 @@ async function getDir(root, path, create = false) {
   return dir;
 }
 
+// Escribe y devuelve la fecha de modificación que queda (para no confundir lo nuestro con cambios de fuera).
 async function writeFile(root, path, data) {
   const dir = await getDir(root, parentPath(path), true);
   const fh = await dir.getFileHandle(baseName(path), { create: true });
   const w = await fh.createWritable();
   await w.write(data);
   await w.close();
+  return (await fh.getFile()).lastModified;
 }
 
 async function readFile(root, path) {
@@ -106,9 +108,27 @@ export class LocalVault {
 
   // Lee la carpeta: notas (.md) y subcarpetas, sin entrar en las ocultas.
   async load() {
+    await this.scan(false);
+    this.cache.clear();
+    this.fileCache.clear();
+    return this;
+  }
+
+  // Vuelve a mirar la carpeta por si algo cambió desde fuera (otro editor, OneDrive, Dropbox…).
+  // Conserva los ids de lo que sigue igual. Devuelve { added, removed, changed } con ids de notas.
+  async rescan() {
+    return this.scan(true);
+  }
+
+  async scan(keep) {
+    const old = this.index;
+    const byPath = new Map(Object.entries(old.notes || {}).map(([id, n]) => [n.path.toLowerCase(), id]));
+    const filesByPath = new Map(Object.entries(old.files || {}).map(([id, f]) => [f.path.toLowerCase(), id]));
     const notes = {};
     const folders = [];
     const files = {};
+    const changed = [];
+    const added = [];
     const walk = async (dir, prefix) => {
       for await (const [name, h] of dir.entries()) {
         if (HIDDEN.test(name)) continue;
@@ -118,10 +138,29 @@ export class LocalVault {
           await walk(h, path);
         } else if (/\.md$/i.test(name)) {
           const file = await h.getFile();
-          notes[randomId()] = { path: path.replace(/\.md$/i, ''), created: iso(file.lastModified), updated: iso(file.lastModified) };
+          const p = path.replace(/\.md$/i, '');
+          const id = keep && byPath.get(p.toLowerCase());
+          if (!id) {
+            notes[randomId()] = { path: p, created: iso(file.lastModified), updated: iso(file.lastModified), mtime: file.lastModified };
+            if (keep) added.push(p);
+            continue;
+          }
+          const meta = { ...old.notes[id], path: p };
+          if (meta.mtime !== file.lastModified) {
+            meta.mtime = file.lastModified;
+            meta.updated = iso(file.lastModified);
+            // Solo cuenta como cambio si el texto es distinto del que tenemos (un «touch» no lo es).
+            if (!this.cache.has(id) || this.cache.get(id) !== await file.text()) {
+              changed.push(id);
+              this.cache.delete(id);
+            }
+          }
+          notes[id] = meta;
         } else if (isAttachmentName(name)) {
           const file = await h.getFile();
-          files[randomId()] = { path, type: ATTACHMENT_TYPES[extOf(name)], size: file.size, created: iso(file.lastModified) };
+          const id = (keep && filesByPath.get(path.toLowerCase())) || randomId();
+          files[id] = { path, type: ATTACHMENT_TYPES[extOf(name)], size: file.size, created: iso(file.lastModified) };
+          if (keep && old.files?.[id]?.size !== file.size) this.fileCache.delete(id);
         }
       }
     };
@@ -131,9 +170,10 @@ export class LocalVault {
       settings = JSON.parse(await readFile(this.root, SETTINGS));
     } catch { /* sin ajustes propios */ }
     this.index = { v: 1, notes, folders, files, settings };
-    this.cache.clear();
-    this.fileCache.clear();
-    return this;
+    const removed = keep ? Object.keys(old.notes || {}).filter((id) => !notes[id]) : [];
+    for (const id of removed) this.cache.delete(id);
+    const addedIds = Object.entries(notes).filter(([, n]) => added.includes(n.path)).map(([id]) => id);
+    return { added: addedIds, removed, changed };
   }
 
   file(id) { return `${this.index.notes[id].path}.md`; }
@@ -149,10 +189,10 @@ export class LocalVault {
     const p = normalizePath(path);
     validName(p);
     this.ensureFree(p);
-    await writeFile(this.root, `${p}.md`, text);
+    const mtime = await writeFile(this.root, `${p}.md`, text);
     const id = randomId();
     const now = iso();
-    this.index.notes[id] = { path: p, created: now, updated: now };
+    this.index.notes[id] = { path: p, created: now, updated: now, mtime };
     this.addFolderChain(this.index, parentPath(p));
     this.cache.set(id, text);
     return id;
@@ -173,7 +213,7 @@ export class LocalVault {
       const path = this.freePath(parentPath(note.path), conflictName(baseName(note.path)));
       conflict = { id: await this.createNote(path, disk), path };
     }
-    await writeFile(this.root, this.file(id), text);
+    this.index.notes[id].mtime = await writeFile(this.root, this.file(id), text);
     this.index.notes[id].updated = iso();
     this.cache.set(id, text);
     return conflict ? { conflict } : {};
@@ -191,7 +231,7 @@ export class LocalVault {
     if (!note) throw new Error('missing');
     if (note.path === p) return;
     const text = await this.read(id);
-    await writeFile(this.root, `${p}.md`, text);
+    note.mtime = await writeFile(this.root, `${p}.md`, text);
     if (note.path.toLowerCase() !== p.toLowerCase()) {
       await removeEntry(this.root, this.file(id));
       // El historial acompaña a la nota.

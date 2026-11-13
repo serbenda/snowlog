@@ -6,6 +6,8 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- Versión portátil en Firefox y Safari (y en cualquier navegador que no deje elegir carpetas): «Guardar dentro del navegador» guarda las notas en IndexedDB (o en localStorage si no hay) y siguen ahí al volver a abrir el fichero.
+- Carpetas del ordenador: Snowlog detecta lo que cambia desde fuera (otro editor, OneDrive, Dropbox…) al volver a la ventana y cada 10 s. Actualiza el explorador y la nota abierta; si la nota abierta se borra fuera mientras escribes, lo escrito se guarda en «Recuperada».
 - **Tableros Kanban** sobre Markdown normal (`## Columna` y `- [ ] tarjeta`, con `kanban-plugin: basic` o `kanban: true` en las propiedades): arrastrar tarjetas entre columnas, añadir, editar, marcar y borrar tarjetas, y crear, renombrar, mover y borrar columnas. «Nuevo tablero Kanban» en el menú y en la paleta. El texto sigue siendo editable con Ctrl+E.
 - **Vista de grafo** (Ctrl+G o el botón del ribbon): notas y enlaces con disposición por fuerzas, zoom, arrastrar, resaltar vecinas al pasar el ratón y abrir una nota al pulsarla. «Grafo de esta nota» muestra solo la nota y sus vecinas (1 a 3 saltos); se pueden ocultar las notas sin enlaces.
 - **Paleta de comandos** (Ctrl+P o el botón `>_`): todas las acciones por nombre, sin acentos ni mayúsculas, con las últimas usadas primero. Ctrl+O sigue abriendo notas.
