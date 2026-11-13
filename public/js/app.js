@@ -11,7 +11,7 @@ import { LocalVault } from './localvault.js';
 import { makeZip } from './zip.js';
 import { rewriteLinks, linkChanges } from './links.js';
 import * as Ed from './editor.js';
-import { searchNotes, tagCounts } from './search.js';
+import { searchNotes, tagCounts, fold } from './search.js';
 import { makeBackup, openBackup, parseBackup } from './backup.js';
 import { openCache } from './cache.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
@@ -47,6 +47,8 @@ const ICONS = {
   download: 'M12 4v11 M7 10l5 5 5-5 M5 20h14',
   tag: 'M4 4h7l9 9-7 7-9-9z M8 8h.01',
   history: 'M4 12a8 8 0 1 0 2.3-5.6 M4 4v4h4 M12 8v4l3 2',
+  bookmark: 'M7 4h10v16l-5-4-5 4z',
+  command: 'M4 6l5 6-5 6 M12 18h8',
   settings: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1',
   settings: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M5.6 18.4l2.1-2.1 M16.3 7.7l2.1-2.1',
   key: 'M14 10a4 4 0 1 0-1.2 2.8L20 20 M17 17l2-2',
@@ -709,6 +711,8 @@ function wipe() {
   $('notices').replaceChildren();
   $('search-results').replaceChildren();
   $('tag-list').replaceChildren();
+  $('bookmark-list').replaceChildren();
+  hidePreview();
   closeSuggest();
   $('title').value = '';
   $('breadcrumb').replaceChildren();
@@ -1071,6 +1075,7 @@ function rowMenu(row, x, y) {
     openMenu(x, y, [
       ['rename', 'Renombrar', () => renameNotePrompt(id)],
       ['move', 'Mover a…', () => moveNotePrompt(id)],
+      ['bookmark', isBookmarked(id) ? 'Quitar de marcadores' : 'Añadir a marcadores', () => toggleBookmark(id)],
       null,
       ['trash', 'Eliminar', () => deleteNote(id), 'danger'],
     ]);
@@ -1276,6 +1281,7 @@ async function renameNoteTo(id, path) {
 
 // Tras renombrar o mover, reescribe los [[enlaces]] de todas las notas que apuntaban a lo movido.
 async function updateLinks(moves, allPaths) {
+  await moveBookmarks(moves);
   try {
     await ensureIndex();
     const changes = linkChanges(moves, allPaths);
@@ -2082,6 +2088,177 @@ async function importFolder(files) {
 }
 
 // --- Paneles ---
+// --- Marcadores (rutas de notas, en los ajustes de la bóveda: se comparten entre dispositivos) ---
+const bookmarks = () => (Array.isArray(WS.bookmarks) ? WS.bookmarks : []);
+const isBookmarked = (id) => !!S.vault?.index.notes[id] && bookmarks().includes(S.vault.index.notes[id].path);
+
+async function setBookmarks(list) {
+  try {
+    await S.vault.saveSettings({ ...S.vault.getSettings(), bookmarks: list });
+  } catch (e) {
+    notice(`No se pudieron guardar los marcadores: ${errText(e)}`, 'error');
+    return false;
+  }
+  applySettings();
+  renderBookmarks();
+  return true;
+}
+
+async function toggleBookmark(id) {
+  const path = S.vault?.index.notes[id]?.path;
+  if (!path) return;
+  const list = bookmarks();
+  const on = !list.includes(path);
+  if (await setBookmarks(on ? [...list, path] : list.filter((p) => p !== path))) {
+    notice(on ? `«${baseName(path)}» añadida a marcadores.` : `«${baseName(path)}» quitada de marcadores.`);
+  }
+}
+
+// Al renombrar o mover, los marcadores siguen a sus notas.
+async function moveBookmarks(moves) {
+  const list = bookmarks();
+  const next = list.map((p) => moves.find((m) => m.from === p)?.to || p);
+  if (next.some((p, i) => p !== list[i])) await setBookmarks(next);
+}
+
+function renderBookmarks() {
+  const box = $('bookmark-list');
+  if (!box || !S.vault) return;
+  const items = bookmarks().map((p) => ({ path: p, note: S.vault.findByPath(p) }));
+  box.replaceChildren(...(items.length
+    ? items.map(({ path, note }) => h('div', { class: 'bookmark-row', role: 'listitem' },
+      h('button', { class: `bookmark-open${note ? '' : ' missing'}`, type: 'button', title: path, disabled: !note, onclick: () => { closeMobilePanels(); openNote(note.id); } },
+        h('span', { class: 'search-name' }, baseName(path)), parentPath(path) ? h('span', { class: 'search-folder' }, parentPath(path)) : null),
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Quitar «${baseName(path)}» de marcadores`, title: 'Quitar', onclick: () => setBookmarks(bookmarks().filter((x) => x !== path)) }, '×')))
+    : [h('p', { class: 'search-empty' }, 'Sin marcadores. Usa «Añadir a marcadores» en el menú ⋯ de una nota.')]));
+}
+
+// --- Paleta de comandos (Ctrl+P) ---
+function commands() {
+  const cur = S.current && S.vault?.index.notes[S.current] ? S.current : null;
+  const list = [
+    ['open', 'Abrir nota', 'Ctrl+O', () => quickSwitcher()],
+    ['search', 'Buscar en todas las notas', 'Ctrl+Mayús+F', () => openSearch()],
+    ['new', 'Nueva nota', 'Ctrl+N', () => newNote()],
+    ['new-tpl', 'Nueva nota desde plantilla', '', () => newFromTemplate()],
+    ['today', 'Nota de hoy', 'Ctrl+D', () => openDaily()],
+    ['home', 'Panel principal', '', () => openHome()],
+    ['mode', 'Cambiar entre edición y lectura', 'Ctrl+E', () => ACTIONS['toggle-mode']()],
+    ['save', 'Guardar ahora', 'Ctrl+S', () => saveNow()],
+    cur && ['tpl', 'Insertar plantilla', '', () => insertTemplate()],
+    cur && ['attach', 'Adjuntar imagen o PDF', '', () => $('attach-input').click()],
+    cur && ['bookmark', isBookmarked(cur) ? 'Quitar de marcadores' : 'Añadir a marcadores', '', () => toggleBookmark(cur)],
+    cur && ['rename', 'Renombrar nota', '', () => renameNotePrompt(cur)],
+    cur && ['move', 'Mover nota', '', () => moveNotePrompt(cur)],
+    cur && ['history', 'Historial de versiones', '', () => historyModal(cur)],
+    cur && ['delete', 'Eliminar nota', '', () => deleteNote(cur)],
+    ['files', 'Ver archivos', '', () => showLeftPane('files')],
+    ['tags', 'Ver etiquetas', '', () => showLeftPane('tags')],
+    ['bookmarks', 'Ver marcadores', '', () => showLeftPane('bookmarks')],
+    ['left', 'Mostrar u ocultar el panel izquierdo', '', () => togglePanel('left')],
+    ['right', 'Mostrar u ocultar el panel derecho', '', () => togglePanel('right')],
+    ['collapse', 'Plegar todas las carpetas', '', () => ACTIONS['collapse-all']()],
+    ['settings', 'Ajustes', '', () => settingsModal()],
+    ['theme-light', 'Tema claro', '', () => { try { localStorage.setItem('snowlog.theme', 'light'); } catch { /* */ } applyTheme('light'); }],
+    ['theme-dark', 'Tema oscuro', '', () => { try { localStorage.setItem('snowlog.theme', 'dark'); } catch { /* */ } applyTheme('dark'); }],
+    ['theme-auto', 'Tema automático', '', () => { try { localStorage.setItem('snowlog.theme', 'auto'); } catch { /* */ } applyTheme('auto'); }],
+    ['setup', 'Configurar mi espacio', '', () => setupSpace()],
+    ['examples', 'Cargar ejemplos', '', () => loadExamples()],
+    ['import', 'Importar carpeta de Markdown', '', () => ACTIONS.import()],
+    ['backup', S.local ? 'Copia de seguridad (.zip)' : 'Copia de seguridad cifrada', '', () => backupNow()],
+    ['restore', 'Abrir copia de seguridad', '', () => $('backup-input').click()],
+    !S.local && ['export', 'Exportar sin cifrar (.zip)', '', () => exportZip()],
+    !S.local && ['security', 'Frase de paso y recuperación', '', () => securityModal()],
+    ['lock', S.local ? 'Cerrar carpeta' : 'Bloquear', '', () => lock()],
+  ];
+  return list.filter(Boolean).map(([id, label, keys, run]) => ({ id, label, keys, run }));
+}
+
+function recentCommands() {
+  try { return JSON.parse(localStorage.getItem('snowlog.recentCommands') || '[]'); } catch { return []; }
+}
+
+function commandPalette() {
+  if (!S.vault) return;
+  const all = commands();
+  const recent = recentCommands();
+  modal((close) => {
+    const input = h('input', { class: 'input', placeholder: 'Escribe un comando…', 'aria-label': 'Buscar comando', autocomplete: 'off', spellcheck: 'false' });
+    const list = h('div', { class: 'switcher-list', role: 'listbox' });
+    let items = [];
+    let sel = 0;
+    const draw = () => {
+      const words = fold(input.value.trim()).split(/\s+/).filter(Boolean);
+      items = all.filter((c) => words.every((w) => fold(c.label).includes(w)));
+      if (!words.length) items.sort((a, b) => (recent.indexOf(a.id) + 1 || 99) - (recent.indexOf(b.id) + 1 || 99));
+      sel = Math.min(sel, Math.max(0, items.length - 1));
+      list.replaceChildren(...(items.length ? items.map((c, i) => h('button', {
+        class: `switcher-item command-item${i === sel ? ' sel' : ''}`, type: 'button', role: 'option', 'aria-selected': String(i === sel), onclick: () => pick(i),
+      }, h('span', {}, c.label), c.keys ? h('kbd', {}, c.keys) : null)) : [h('p', { class: 'search-empty' }, 'Ningún comando coincide.')]));
+      list.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+    };
+    const pick = (i) => {
+      const c = items[i];
+      if (!c) return;
+      try { localStorage.setItem('snowlog.recentCommands', JSON.stringify([c.id, ...recent.filter((x) => x !== c.id)].slice(0, 8))); } catch { /* */ }
+      close(null);
+      setTimeout(() => c.run(), 0);
+    };
+    input.addEventListener('input', () => { sel = 0; draw(); });
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); sel = Math.min(sel + 1, items.length - 1); draw(); }
+      if (ev.key === 'ArrowUp') { ev.preventDefault(); sel = Math.max(sel - 1, 0); draw(); }
+      if (ev.key === 'Enter') { ev.preventDefault(); pick(sel); }
+    });
+    draw();
+    return h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Paleta de comandos' },
+      input, list, h('div', { class: 'switcher-hint' }, '↑↓ para moverte · Intro para ejecutar · Esc para cerrar'));
+  });
+}
+
+// --- Vista previa al pasar sobre un [[enlace]] ---
+let previewTimer = null;
+function hidePreview() {
+  clearTimeout(previewTimer);
+  $('hover-preview').hidden = true;
+  $('hover-preview').replaceChildren();
+}
+
+function setupHoverPreview() {
+  const box = $('hover-preview');
+  if (!matchMedia('(hover: hover)').matches) return; // en pantallas táctiles, no
+  document.addEventListener('mouseover', (ev) => {
+    const link = ev.target.closest?.('a.internal-link');
+    if (!link || !S.vault || link.closest('#hover-preview')) return;
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(async () => {
+      const note = S.vault?.findByTitle(link.dataset.target || '');
+      if (!note || !link.isConnected) return;
+      let text;
+      try { text = await S.vault.read(note.id); } catch { return; }
+      if (!link.matches(':hover')) return;
+      const body = h('div', { class: 'markdown' });
+      body.innerHTML = trusted(render(text.length > 4000 ? `${text.slice(0, 4000)}\n\n…` : text, { frontmatter: true }));
+      box.replaceChildren(h('div', { class: 'hover-title' }, baseName(note.path)), body);
+      const r = link.getBoundingClientRect();
+      box.hidden = false;
+      const w = box.offsetWidth;
+      const hgt = box.offsetHeight;
+      box.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
+      box.style.top = `${r.bottom + 6 + hgt > innerHeight ? Math.max(8, r.top - hgt - 6) : r.bottom + 6}px`;
+    }, 450);
+  });
+  document.addEventListener('mouseout', (ev) => {
+    const link = ev.target.closest?.('a.internal-link');
+    if (!link) return;
+    if (ev.relatedTarget && box.contains(ev.relatedTarget)) return;
+    clearTimeout(previewTimer);
+    setTimeout(() => { if (!box.matches(':hover')) hidePreview(); }, 150);
+  });
+  box.addEventListener('mouseleave', hidePreview);
+  addEventListener('scroll', hidePreview, true);
+}
+
 // --- Ajustes ---
 async function settingsModal() {
   if (!S.vault) return;
@@ -2469,7 +2646,16 @@ function showLeftTab(tab) {
   document.querySelectorAll('.left-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
   document.querySelectorAll('#left [data-pane]').forEach((el) => { el.hidden = el.dataset.pane !== tab; });
   if (tab === 'tags') renderTags();
+  if (tab === 'bookmarks') renderBookmarks();
   if (tab === 'search') runSearch();
+}
+
+function showLeftPane(tab) {
+  const app = $('app');
+  if (isMobile()) {
+    if (!app.classList.contains('mobile-left')) togglePanel('left');
+  } else if (app.classList.contains('left-closed')) togglePanel('left');
+  showLeftTab(tab);
 }
 
 function openSearch(text) {
@@ -2586,10 +2772,12 @@ function noteMenu(x, y) {
   const items = [];
   if (S.current) {
     const id = S.current;
-    items.push(['rename', 'Renombrar', () => renameNotePrompt(id)], ['move', 'Mover a…', () => moveNotePrompt(id)], ['history', 'Historial de versiones…', () => historyModal(id)]);
+    items.push(['rename', 'Renombrar', () => renameNotePrompt(id)], ['move', 'Mover a…', () => moveNotePrompt(id)], ['history', 'Historial de versiones…', () => historyModal(id)],
+      ['bookmark', isBookmarked(id) ? 'Quitar de marcadores' : 'Añadir a marcadores', () => toggleBookmark(id)]);
   }
   if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()], ['import', 'Adjuntar imagen o PDF…', () => $('attach-input').click()]);
   items.push(
+    ['command', 'Paleta de comandos (Ctrl+P)', () => commandPalette()],
     ['search', 'Abrir nota (Ctrl+O)', () => quickSwitcher()],
     ['search', 'Buscar en todas las notas (Ctrl+Mayús+F)', () => openSearch()],
     ['filePlus', 'Nueva nota', () => newNote()],
@@ -2616,6 +2804,7 @@ function noteMenu(x, y) {
 
 // --- Acciones y atajos ---
 const ACTIONS = {
+  palette: () => commandPalette(),
   settings: () => settingsModal(),
   'toggle-left': () => togglePanel('left'),
   'toggle-right': () => togglePanel('right'),
@@ -2634,7 +2823,7 @@ const ACTIONS = {
 
 const BUTTON_ICONS = {
   'toggle-left': 'files', switcher: 'search', 'new-note': 'filePlus', 'new-folder': 'folderPlus', 'collapse-all': 'collapse', import: 'import', today: 'today', home: 'home',
-  lock: 'lock', logout: 'logout', settings: 'settings', 'note-menu': 'more', 'toggle-right': 'sidebarRight', 'toggle-mode': 'read',
+  lock: 'lock', logout: 'logout', settings: 'settings', palette: 'command', 'note-menu': 'more', 'toggle-right': 'sidebarRight', 'toggle-mode': 'read',
 };
 
 function setupUi() {
@@ -2649,7 +2838,8 @@ function setupUi() {
   if (localStorage.getItem('snowlog.rightClosed')) app.classList.add('right-closed');
   $('backdrop').addEventListener('click', closeMobilePanels);
 
-  const tabIcons = { files: 'files', search: 'search', tags: 'tag' };
+  const tabIcons = { files: 'files', search: 'search', tags: 'tag', bookmarks: 'bookmark' };
+  setupHoverPreview();
   document.querySelectorAll('.left-tab').forEach((b) => {
     b.innerHTML = trusted(icon(tabIcons[b.dataset.tab]));
     b.addEventListener('click', () => showLeftTab(b.dataset.tab));
@@ -2743,7 +2933,8 @@ function setupUi() {
     const k = ev.key.toLowerCase();
     if (k === 'f' && ev.shiftKey) { ev.preventDefault(); openSearch(); return; }
     if (k === 'e') { ev.preventDefault(); ACTIONS['toggle-mode'](); }
-    else if (k === 'o' || k === 'p') { ev.preventDefault(); quickSwitcher(); }
+    else if (k === 'o') { ev.preventDefault(); quickSwitcher(); }
+    else if (k === 'p') { ev.preventDefault(); commandPalette(); }
     else if (k === 'n') { ev.preventDefault(); newNote(); }
     else if (k === 's') { ev.preventDefault(); saveNow(); }
     else if (k === 'd') { ev.preventDefault(); openDaily(); }
