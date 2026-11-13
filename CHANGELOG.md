@@ -6,6 +6,8 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- **Cambiar la clave de cifrado** («Frase de paso y recuperación…» → «Cambiar la clave de cifrado»): todas las notas, adjuntos y el índice se vuelven a cifrar con una clave nueva en un solo commit, y se genera un código de recuperación nuevo. Las claves anteriores se guardan cifradas con la nueva en un llavero, así el historial se sigue leyendo. Los demás dispositivos piden la frase al guardar o al entrar, y lo que estuvieran escribiendo no se pierde: se sube tras desbloquear.
+- Si la frase de paso se cambia en otro dispositivo, este pide la nueva al desbloquear (antes seguía valiendo la antigua aquí).
 - **Fusión automática:** si la misma nota cambia en dos dispositivos (o fuera de Snowlog, en la versión portátil) en partes distintas, se juntan los dos cambios sin crear copias. Si los dos añaden líneas en el mismo sitio, se quedan ambas. Solo cuando cambian las mismas líneas de forma distinta se guarda la otra versión como copia, como antes.
 - Primera entrada en un dispositivo nuevo mucho más rápida: las notas se descargan en bloques de 100 (GraphQL de GitHub) en lugar de una a una. Con 1.000 notas y 150 ms de latencia, el índice completo pasa de 17,5 s a 2,9 s. Si GraphQL no está disponible, se sigue como antes.
 - **Tests en el navegador** (`npm run test:e2e`, y en la CI en cada push y PR): crear bóveda, escribir, bloquear y volver a entrar sin nada en claro en el repo; que el HTML de una nota no se ejecute y la CSP no se queje; ejemplos, búsqueda y renombrar con enlaces; y la versión portátil desde el disco sin ninguna conexión. Usan Chrome directamente por el protocolo de DevTools, sin dependencias.

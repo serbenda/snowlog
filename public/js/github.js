@@ -125,15 +125,31 @@ export class GitHubRepo {
 
   // changes: [{ path, content }] para crear o cambiar, [{ path, delete: true }] para borrar.
   // Lanza GitHubError(409) si alguien ha escrito antes (no es avance rápido).
-  async commit(changes, message) {
+  // blobs: true sube antes cada fichero por separado (para commits muy grandes, como rotar la clave).
+  async commit(changes, message, { blobs = false } = {}) {
     if (!this.head) await this.fetchHead();
     const parent = await this.request('GET', `/git/commits/${this.head}`);
+    const shas = new Map();
+    if (blobs) {
+      const todo = changes.filter((c) => !c.delete);
+      let i = 0;
+      const worker = async () => {
+        while (i < todo.length) {
+          const c = todo[i++];
+          const res = await this.request('POST', '/git/blobs', { body: { content: c.content, encoding: 'utf-8' } });
+          shas.set(c.path, res.sha);
+        }
+      };
+      await Promise.all(Array.from({ length: 8 }, worker));
+    }
     const tree = await this.request('POST', '/git/trees', {
       body: {
         base_tree: parent.tree.sha,
-        tree: changes.map((c) => (c.delete
-          ? { path: c.path, mode: '100644', type: 'blob', sha: null }
-          : { path: c.path, mode: '100644', type: 'blob', content: c.content })),
+        tree: changes.map((c) => {
+          if (c.delete) return { path: c.path, mode: '100644', type: 'blob', sha: null };
+          if (shas.has(c.path)) return { path: c.path, mode: '100644', type: 'blob', sha: shas.get(c.path) };
+          return { path: c.path, mode: '100644', type: 'blob', content: c.content };
+        }),
       },
     });
     const commit = await this.request('POST', '/git/commits', {

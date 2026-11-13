@@ -75,15 +75,20 @@ Portátil: `script-src` y `style-src` por hash, `connect-src 'none'`, mismas reg
 | 4 | Los nombres de las carpetas abiertas se guardaban en claro en `localStorage` | Baja | **Resuelto:** cifrados con la DEK (en local siguen en claro, como los propios ficheros) |
 | 5 | Sin Trusted Types: un `innerHTML` nuevo descuidado podría abrir un XSS | Baja (defensa en profundidad) | **Resuelto:** CSP con Trusted Types y test que lo vigila |
 | 6 | Los avisos podían mostrar nombres de notas después de bloquear | Baja | **Resuelto:** se vacían al bloquear |
+| 7 | Tras cambiar la frase en otro dispositivo, aquí seguía valiendo la antigua (por el `vault.json` guardado) | Media | **Resuelto:** al desbloquear se compara con el del repo y se exige la nueva |
+| 8 | No había forma de dejar inservible una clave que pudo conocerse | Media | **Resuelto:** rotación de la DEK desde la app |
 
 ## Riesgos aceptados y pendientes
 
 - **Reposición de versiones antiguas:** quien pueda escribir en el repo podría volver a poner una versión
   anterior cifrada de una nota o del índice. No puede leerla ni falsificar contenido nuevo. Detectarlo
   exigiría firmar el índice con un contador; se deja para más adelante.
-- **Cambiar la frase no rota la DEK:** los `vault.json` antiguos siguen en el historial de git. Si alguien
-  conoce la frase antigua **y** tiene acceso al repo, aún puede sacar la DEK. Si eso pasa: crear una bóveda
-  nueva en otro repo, importar una copia `.snowlog` y borrar el repo antiguo. Pendiente: rotación de la DEK.
+- **Rotar la clave:** «Cambiar la clave de cifrado» recifra todo con una DEK nueva (un commit, ficheros subidos
+  como blobs) y renueva el código de recuperación. Lo que se escriba después no se puede abrir con la frase o la
+  DEK antiguas. **Límite:** las versiones antiguas siguen en el historial de git cifradas con la clave de entonces;
+  quien tenga la frase antigua y acceso al repo aún podría leer esas versiones antiguas (no las nuevas). Para
+  borrarlas haría falta reescribir el historial del repo (fuera de la app). Las claves antiguas se guardan en
+  `.snowlog/keyring.enc`, cifradas con la actual, para que la app pueda seguir mostrando el historial.
 - **Login sin PKCE:** el login con GitHub usa `state`, pero no PKCE. GitHub ya lo admite; añadirlo requiere
   cambiar también el Worker. Gravedad baja (el `code` solo sirve con el client secret, que está en el Worker).
 - **Metadatos visibles en GitHub:** número de ficheros, tamaños aproximados y horas de los commits.

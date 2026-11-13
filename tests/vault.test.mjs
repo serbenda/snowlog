@@ -384,3 +384,45 @@ test('si dos dispositivos cambian partes distintas de una nota, se juntan sin co
   assert.equal(await check.read(id), res.merged);
   assert.equal(check.notes().filter((n) => n.path.startsWith('Fusión/')).length, 1, 'sin copias');
 });
+
+test('rotar la clave: todo se recifra, el historial se sigue leyendo y la clave antigua ya no sirve', async () => {
+  const id = await vault.createNote('Rotar/Secreta', 'versión 1');
+  await vault.saveNote(id, 'versión 2');
+  const att = await vault.addFile('Rotar', 'foto.png', new Uint8Array([1, 2, 3, 4]));
+  const before = new Map(fake.files());
+  const oldDek = vault.dek;
+  const vaultFile = await Vault.fetchVaultFile(newRepo());
+  await assert.rejects(vault.rotate(vaultFile, 'no es la frase', ITER), /bad_secret/);
+  const progress = [];
+  const { vaultFile: rotated, recoveryCode } = await vault.rotate(vaultFile, 'frase nueva de prueba', ITER, (d, t) => progress.push(`${d}/${t}`));
+  assert.ok(progress.length > 0);
+  const after = fake.files();
+  // Cada nota y adjunto se ha vuelto a cifrar.
+  for (const [path, content] of after) {
+    if (/^[na]\//.test(path)) assert.notEqual(content, before.get(path), path);
+  }
+  assert.ok(after.has('.snowlog/keyring.enc'));
+  // Con la frase se abre la bóveda nueva y se lee todo.
+  const fresh = Vault.fetchVaultFile(newRepo());
+  const dek = await C.unlockVault(await fresh, 'frase nueva de prueba');
+  const other = new Vault(newRepo(), dek);
+  await other.loadIndex();
+  assert.equal(await other.read(id), 'versión 2');
+  assert.deepEqual(await other.readFile(att.id), new Uint8Array([1, 2, 3, 4]));
+  // El historial (cifrado con la clave antigua) se sigue leyendo gracias al llavero.
+  const versions = await other.history(id);
+  assert.deepEqual(await Promise.all(versions.map((v) => other.readVersion(id, v.ref))), ['versión 2', 'versión 2', 'versión 1']);
+  // La clave antigua ya no abre nada nuevo: otro dispositivo con ella tiene que volver a desbloquear.
+  const stale = new Vault(newRepo(), oldDek);
+  await assert.rejects(stale.loadIndex(), /key_changed/);
+  // El código de recuperación nuevo funciona; el vault.json devuelto es el del repo.
+  assert.deepEqual(rotated, await Vault.fetchVaultFile(newRepo()));
+  const { dek: viaCode } = await C.recoverVault(rotated, recoveryCode, 'otra frase de prueba');
+  const third = new Vault(newRepo(), viaCode);
+  await third.loadIndex();
+  assert.equal(await third.read(id), 'versión 2');
+  // El propio dispositivo sigue funcionando con la clave nueva.
+  await vault.saveNote(id, 'versión 3');
+  await other.repo.fetchHead();
+  assert.equal(await other.readVersion(id, (await other.history(id))[0].ref), 'versión 3');
+});

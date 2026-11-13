@@ -139,6 +139,9 @@ function errText(e) {
     no_worker: 'Falta configurar el servicio de login (authWorker).',
     session_expired: 'La sesión de GitHub ha caducado. Vuelve a entrar.',
     vault_exists: 'Ya hay una bóveda en el repo.',
+    key_changed: 'La clave de cifrado se ha cambiado en otro dispositivo. Vuelve a desbloquear con tu frase de paso.',
+    pending: 'Hay cambios sin subir. Espera a tener conexión y a que se suban antes de cambiar la clave.',
+    busy: 'Otro dispositivo ha guardado mientras tanto. No se ha cambiado nada: vuelve a intentarlo.',
     offline: 'Sin conexión: esto se podrá hacer cuando vuelva la red. Lo que escribes en las notas sí se guarda.',
     bad_backup: 'Ese fichero no es una copia de seguridad de Snowlog o está dañado.',
     bad_zip: 'El contenido de la copia está dañado.',
@@ -628,8 +631,9 @@ function showRecoveryCode(code) {
   );
 }
 
-function showUnlock(vaultFile, { fresh = false } = {}) {
+function showUnlock(vaultFile, { fresh = false, message = '' } = {}) {
   const err = errorLine();
+  if (message) showError(err, message);
   const [f1, p1] = passField('pp', 'Frase de paso');
   const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Desbloquear');
   const form = h('form', {}, f1, btn, err);
@@ -637,10 +641,11 @@ function showUnlock(vaultFile, { fresh = false } = {}) {
     ev.preventDefault();
     const done = busy(btn, 'Descifrando…');
     try {
-      S.dek = await C.unlockVault(vaultFile, p1.value);
+      const pass = p1.value;
+      S.dek = await C.unlockVault(vaultFile, pass);
       p1.value = '';
       S.vaultFile = vaultFile;
-      await afterUnlock(fresh);
+      await afterUnlock(fresh, pass);
     } catch (e) {
       S.dek = null;
       done();
@@ -658,7 +663,7 @@ function showUnlock(vaultFile, { fresh = false } = {}) {
 }
 
 // Con la DEK ya descifrada: recuperar credenciales guardadas si hace falta y abrir.
-async function afterUnlock(fresh) {
+async function afterUnlock(fresh, pass = null) {
   if (!fresh) {
     S.cred = await Auth.loadCred(S.dek);
     if (!S.cred) {
@@ -682,6 +687,16 @@ async function afterUnlock(fresh) {
     try {
       const remote = await Vault.fetchVaultFile(S.repo);
       if (remote) {
+        // Si en otro dispositivo se cambió la frase o se rotó la clave, se abre con el vault.json nuevo.
+        if (pass && JSON.stringify(remote.keys.passphrase) !== JSON.stringify(S.vaultFile.keys.passphrase)) {
+          try {
+            S.dek = await C.unlockVault(remote, pass);
+          } catch {
+            S.dek = null;
+            Auth.cacheVault(remote);
+            return showUnlock(remote, { message: 'La frase de paso se cambió en otro dispositivo: usa la nueva.' });
+          }
+        }
         Auth.cacheVault(remote);
         S.vaultFile = remote;
       }
@@ -785,9 +800,9 @@ function wipe() {
   S.indexReady = null;
 }
 
-async function lock() {
+async function lock(message = '') {
   if (!S.vault) return;
-  await saveNow();
+  if (!message) await saveNow();
   if (S.local) {
     wipe();
     S.local = false;
@@ -796,8 +811,14 @@ async function lock() {
   }
   wipe();
   const cached = Auth.cachedVault();
-  if (cached) showUnlock(cached);
-  else showLogin();
+  if (cached) showUnlock(cached, { message });
+  else showLogin(message);
+}
+
+// La clave se rotó en otro dispositivo: lo pendiente queda guardado aquí (cifrado) y se sube tras
+// volver a desbloquear con la frase.
+function keyChanged() {
+  lock(errText(new Error('key_changed')));
 }
 
 async function logout() {
@@ -1775,7 +1796,8 @@ function trySync() {
       S.indexReady = null;
       ensureIndex().catch(() => {});
     } catch (e) {
-      if (e.message !== 'offline') notice(`No se pudo sincronizar: ${errText(e)}`, 'error');
+      if (e.message === 'key_changed') keyChanged();
+      else if (e.message !== 'offline') notice(`No se pudo sincronizar: ${errText(e)}`, 'error');
     } finally {
       syncing = null;
       updatePlace();
@@ -1861,6 +1883,11 @@ function saveNow() {
       if (S.current === id) {
         S.dirty = true;
         setStatus('error');
+      }
+      if (e?.message === 'key_changed') {
+        S.dirty = false;
+        keyChanged();
+        return;
       }
       notice(`No se pudo guardar: ${errText(e)}`, 'error');
     });
@@ -2821,10 +2848,58 @@ async function securityModal() {
     h('p', {}, 'La clave que cifra tus notas no cambia: solo cambia cómo se abre. No hace falta recifrar nada.'),
     h('div', { class: 'security-options' },
       h('button', { class: 'btn', type: 'button', onclick: () => close('pass') }, 'Cambiar la frase de paso'),
-      h('button', { class: 'btn', type: 'button', onclick: () => close('recovery') }, 'Generar un código de recuperación nuevo')),
+      h('button', { class: 'btn', type: 'button', onclick: () => close('recovery') }, 'Generar un código de recuperación nuevo'),
+      h('button', { class: 'btn', type: 'button', onclick: () => close('rotate') }, 'Cambiar la clave de cifrado (recifrar todo)')),
     h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cerrar'))));
   if (choice === 'pass') changePassphraseModal();
   else if (choice === 'recovery') renewRecoveryModal();
+  else if (choice === 'rotate') rotateKeyModal();
+}
+
+function showNewRecoveryCode(code, title = 'Tu código de recuperación nuevo') {
+  return modal((close) => {
+    const check = h('input', { type: 'checkbox', id: 'saved2' });
+    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => close(true) }, 'Hecho');
+    check.addEventListener('change', () => { btn.disabled = !check.checked; });
+    return h('div', { class: 'modal', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': title },
+      h('h2', {}, title),
+      h('p', {}, 'Apúntalo en papel y guárdalo en un sitio seguro. El anterior ya no sirve. No se volverá a mostrar.'),
+      h('div', { class: 'recovery-code' }, code),
+      h('label', { class: 'check', for: 'saved2' }, check, 'Lo he guardado en un sitio seguro'),
+      h('div', { class: 'modal-actions' }, btn));
+  });
+}
+
+// Rotar la clave: todo se vuelve a cifrar con una clave nueva. Para cuando alguien pudo conocer la
+// frase antigua: desde ahora, ni esa frase ni la clave antigua abren lo que se escriba.
+async function rotateKeyModal() {
+  const result = await secretForm('Cambiar la clave de cifrado',
+    'Se vuelven a cifrar todas tus notas y adjuntos con una clave nueva, en un solo paso, y se genera un código de recuperación nuevo. Tu frase de paso sigue siendo la misma (cámbiala después si quieres). Los demás dispositivos pedirán la frase la próxima vez. No uses Snowlog en otro dispositivo mientras tanto.',
+    [passField('rk0', 'Frase de paso actual')],
+    'Recifrar todo',
+    async ([pass]) => {
+      await saveNow();
+      const st = $('st-sync');
+      try {
+        const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
+        const res = await S.vault.rotate(current, pass, CONFIG.kdfIterations, (d, t) => {
+          S.lastActivity = Date.now();
+          st.textContent = `Recifrando ${d}/${t}…`;
+        });
+        st.textContent = 'Subiendo…';
+        return res;
+      } finally {
+        st.textContent = '';
+      }
+    });
+  if (!result) return;
+  S.dek = S.vault.dek;
+  S.vaultFile = result.vaultFile;
+  Auth.cacheVault(result.vaultFile);
+  await Auth.saveCred(S.dek, S.cred);
+  await saveExpanded();
+  await showNewRecoveryCode(result.recoveryCode);
+  notice('Clave cambiada: todo está cifrado con la clave nueva.');
 }
 
 function secretForm(title, text, fields, okText, onSubmit) {
@@ -2883,17 +2958,7 @@ async function renewRecoveryModal() {
       return recoveryCode;
     });
   if (!code) return;
-  await modal((close) => {
-    const check = h('input', { type: 'checkbox', id: 'saved2' });
-    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => close(true) }, 'Hecho');
-    check.addEventListener('change', () => { btn.disabled = !check.checked; });
-    return h('div', { class: 'modal', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': 'Tu código de recuperación nuevo' },
-      h('h2', {}, 'Tu código de recuperación nuevo'),
-      h('p', {}, 'Apúntalo en papel y guárdalo en un sitio seguro. No se volverá a mostrar.'),
-      h('div', { class: 'recovery-code' }, code),
-      h('label', { class: 'check', for: 'saved2' }, check, 'Lo he guardado en un sitio seguro'),
-      h('div', { class: 'modal-actions' }, btn));
-  });
+  await showNewRecoveryCode(code);
 }
 
 // --- Historial de versiones ---

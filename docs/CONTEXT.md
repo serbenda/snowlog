@@ -52,9 +52,9 @@ aunque se robe no puede modificar el código de la web.
 - Cada fichero: `base64(IV de 12 bytes || cifrado)`, con su id como dato autenticado (AAD).
 - Las credenciales de GitHub se guardan en `localStorage` cifradas con la DEK.
 - Cambiar la frase o el código de recuperación solo reenvuelve la DEK (`changePassphrase`, `renewRecoveryCode`).
-  **Límite:** los `vault.json` antiguos siguen en el historial de git, así que quien tenga acceso al repo y la
-  frase antigua aún podría sacar la DEK. Para ese caso haría falta rotar la DEK (recifrar todo); está anotado
-  como pendiente en la revisión de seguridad.
+  Rotar la DEK (`Vault.rotate`, `C.rotateVault`) recifra todo en un commit; las DEK antiguas van a
+  `.snowlog/keyring.enc` (cifrado con la actual; `index.hasKeyring`) para leer el historial. Otros dispositivos
+  detectan `key_changed` al leer el índice, guardan lo pendiente en `outbox` y piden la frase.
 
 ## Decisiones vigentes
 
@@ -123,7 +123,7 @@ dependen de alguien más:
   [SEGURIDAD.md](SEGURIDAD.md)).
 - Probar la versión portátil en Firefox y Safari reales (está probada en Chrome simulando esos navegadores).
 
-Ideas para después: rotar la DEK (recifrar todo), PKCE en el login, firmar el índice para detectar que alguien
+Ideas para después: PKCE en el login, firmar el índice para detectar que alguien
 reponga versiones antiguas, y un CLI para que scripts externos escriban notas cifradas.
 
 Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).

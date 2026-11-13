@@ -169,3 +169,57 @@ test('versión portátil: funciona desde el disco y sin ninguna conexión', { sk
   assert.deepEqual(realErrors(page), []);
   await page.close();
 });
+
+test('rotar la clave en un dispositivo: el otro pide la frase y no pierde lo que estaba escribiendo', { skip, timeout: 180000 }, async () => {
+  const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+  const a = await browser.newPage({ intercept: fake.fetch });
+  await newVault(a);
+  await a.press('N', { ctrl: true });
+  await a.waitFor('document.activeElement?.id === "title"');
+  await a.eval('document.getElementById("title").value = ""');
+  await a.type('Compartida\n');
+  await a.fill('#editor', 'línea uno\nlínea dos\nlínea tres');
+  await a.press('S', { ctrl: true });
+  await a.waitFor('document.getElementById("st-sync").textContent === "Guardado"');
+
+  // Segundo dispositivo con la nota abierta.
+  const b = await browser.newPage({ intercept: fake.fetch });
+  await b.goto(base);
+  await b.click('button.link-btn', 'Usar un token personal');
+  await b.fill('#pat', 'github_pat_prueba');
+  await b.click('button', 'Continuar');
+  await unlock(b);
+  await b.click('.tree-row', 'Compartida');
+  await b.waitFor('document.getElementById("editor").value.includes("línea dos")');
+
+  // A rota la clave.
+  const before = new Map(fake.files());
+  await a.click('.view-actions [data-action=note-menu]');
+  await a.click('.menu-item', 'Frase de paso y recuperación');
+  await a.click('.modal button', 'Cambiar la clave de cifrado');
+  await a.fill('#rk0', PASS);
+  await a.click('.modal button', 'Recifrar todo');
+  await a.waitFor('!!document.querySelector(".modal .recovery-code")', 60000);
+  await a.click('#saved2');
+  await a.click('.modal button', 'Hecho');
+  for (const [path, content] of fake.files()) if (/^n\//.test(path)) assert.notEqual(content, before.get(path));
+
+  // B, que no sabe nada, sigue escribiendo y guarda: se bloquea pidiendo la frase…
+  await b.fill('#editor', 'línea uno\nlínea dos\nlínea tres\nescrito en B');
+  await b.press('S', { ctrl: true });
+  await b.waitFor('!!document.querySelector("#pp") && document.querySelector(".lock-card").textContent.includes("clave de cifrado se ha cambiado")', 30000);
+  // …y al volver a entrar, lo que escribió se sube (con la clave nueva).
+  await unlock(b);
+  await b.waitFor('[...document.querySelectorAll(".notice")].some((n) => n.textContent.includes("Conexión recuperada") || n.textContent.includes("subido"))', 30000);
+  await b.click('.tree-row', 'Compartida');
+  await b.waitFor('document.getElementById("editor").value.includes("escrito en B")', 15000);
+  // A también lo ve, y el historial anterior a la rotación se sigue leyendo.
+  await a.click('.ribbon [data-action=lock]');
+  await unlock(a);
+  await a.click('.tree-row', 'Compartida');
+  await a.waitFor('document.getElementById("editor").value.includes("escrito en B")', 15000);
+  assert.deepEqual(realErrors(a), []);
+  assert.deepEqual(realErrors(b).filter((e) => !e.includes('OperationError')), []);
+  await a.close();
+  await b.close();
+});

@@ -7,6 +7,7 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
   let head = null;
   let n = 0;
   let graphqlCalls = 0;
+  const blobs = new Map();
   const sha = (p) => `${p}${(n += 1).toString(16).padStart(8, '0')}`;
   const base = `https://api.github.com/repos/${owner}/${repo}`;
 
@@ -72,11 +73,17 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
       const files = new Map(trees.get(body.base_tree));
       for (const e of body.tree) {
         if (e.sha === null) files.delete(e.path);
+        else if (e.sha) files.set(e.path, blobs.get(e.sha));
         else files.set(e.path, e.content);
       }
       const t = sha('t');
       trees.set(t, files);
       return json(201, { sha: t });
+    }
+    if (path === '/git/blobs' && method === 'POST') {
+      const b = sha('b');
+      blobs.set(b, body.content);
+      return json(201, { sha: b });
     }
     if (path === '/git/commits' && method === 'POST') {
       return json(201, { sha: commitFiles(trees.get(body.tree), body.parents[0]) });

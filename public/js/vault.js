@@ -11,6 +11,8 @@ import { merge3 } from './merge.js';
 
 export const VAULT_FILE = '.snowlog/vault.json';
 export const INDEX_FILE = '.snowlog/index.enc';
+// Claves anteriores (tras rotar), cifradas con la actual: para seguir leyendo el historial.
+export const KEYRING_FILE = '.snowlog/keyring.enc';
 const notePath = (id) => `n/${id}.enc`;
 const filePath = (id) => `a/${id}.enc`;
 
@@ -142,7 +144,14 @@ export class Vault {
       this.offline = true;
     }
     await this.loadOutbox();
-    if (text) this.index = JSON.parse(await C.decryptText(this.dek, text, 'index'));
+    if (text) {
+      try {
+        this.index = JSON.parse(await C.decryptText(this.dek, text, 'index'));
+      } catch {
+        // La clave se rotó en otro dispositivo: hay que volver a desbloquear con la frase.
+        throw new Error('key_changed');
+      }
+    }
     if (!this.index.folders) this.index.folders = [];
     // Lo que otro dispositivo cambió se vuelve a leer del repo (la versión de aquí ya no es la última).
     for (const id of [...this.cache.keys()]) {
@@ -399,6 +408,11 @@ export class Vault {
     try {
       return await this.saveOnline(id, text);
     } catch (e) {
+      if (e.message === 'key_changed') {
+        // Se rotó la clave en otro dispositivo: lo escrito se guarda aquí para subirlo tras desbloquear.
+        await this.queue(id, text);
+        throw e;
+      }
       if (e.message !== 'offline') throw e;
       return this.queue(id, text);
     }
@@ -436,9 +450,91 @@ export class Vault {
   async loadOutbox() {
     const hit = this.store && await this.store.get('outbox');
     if (!hit) return;
+    // Puede estar cifrada con una clave anterior (si se rotó en otro dispositivo mientras había cambios
+    // pendientes aquí): se prueba también con el llavero para no perderlos.
     try {
       this.outbox = new Map(JSON.parse(await C.decryptText(this.dek, hit.content, 'outbox')));
-    } catch { /* de otra clave o dañada: se ignora */ }
+      return;
+    } catch { /* quizá de antes de rotar */ }
+    for (const key of await this.loadKeyring(true).catch(() => [])) {
+      try {
+        this.outbox = new Map(JSON.parse(await C.decryptText(key, hit.content, 'outbox')));
+        await this.saveOutbox();
+        return;
+      } catch { /* siguiente */ }
+    }
+  }
+
+  // Claves anteriores de la bóveda (CryptoKey), de la más reciente a la más antigua.
+  // Solo existe si alguna vez se rotó (el índice lo indica); `force` lo busca igualmente.
+  async loadKeyring(force = false) {
+    if (this.keyring) return this.keyring;
+    if (!force && !this.index.hasKeyring) return [];
+    let text = null;
+    try {
+      text = await this.repo.readText(KEYRING_FILE);
+    } catch {
+      return [];
+    }
+    if (!text) {
+      this.keyring = [];
+      return this.keyring;
+    }
+    const list = JSON.parse(await C.decryptText(this.dek, text, 'keyring'));
+    this.keyring = await Promise.all(list.map((k) => C.importKey(k.key)));
+    this.keyringRaw = list;
+    return this.keyring;
+  }
+
+  // Rota la clave: todo (notas, adjuntos, índice) se vuelve a cifrar con una DEK nueva en un solo
+  // commit. La DEK antigua va al llavero, cifrada con la nueva, para poder leer el historial.
+  // Devuelve { vaultFile, recoveryCode }. Mientras se hace no debe escribir nadie más.
+  async rotate(vaultFile, passphrase, iterations, onProgress = () => {}) {
+    if (this.offline) throw new Error('offline');
+    if (this.outbox.size) throw new Error('pending');
+    await this.repo.fetchHead();
+    await this.loadIndex();
+    await this.loadKeyring();
+    const { vault: next, dek, recoveryCode, oldKey } = await C.rotateVault(vaultFile, passphrase, iterations);
+    const notes = this.notes();
+    const files = this.files();
+    const total = notes.length + files.length;
+    let done = 0;
+    await this.prefetch(notes.map((n) => n.id));
+    const changes = [];
+    for (const n of notes) {
+      changes.push({ path: notePath(n.id), content: await C.encryptText(dek, await this.read(n.id), n.id) });
+      onProgress(++done, total);
+    }
+    for (const f of files) {
+      changes.push({ path: filePath(f.id), content: C.toB64(await C.encryptBytes(dek, await this.readFile(f.id), f.id)) });
+      onProgress(++done, total);
+    }
+    const ring = [{ key: oldKey, until: next.rotated }, ...(this.keyringRaw || [])];
+    this.index.hasKeyring = true;
+    changes.push({ path: KEYRING_FILE, content: await C.encryptText(dek, JSON.stringify(ring), 'keyring') });
+    changes.push({ path: INDEX_FILE, content: await C.encryptText(dek, JSON.stringify(this.index), 'index') });
+    changes.push({ path: VAULT_FILE, content: `${JSON.stringify(next, null, 2)}\n` });
+    try {
+      await this.repo.commit(changes, 'Snowlog: rotar la clave', { blobs: true });
+    } catch (e) {
+      if (e.status === 409) throw new Error('busy');
+      if (isNetworkError(e)) throw new Error('offline');
+      throw e;
+    }
+    const old = this.dek;
+    this.dek = dek;
+    this.keyring = [old, ...(this.keyring || [])];
+    this.keyringRaw = ring;
+    if (this.store) {
+      await this.store.clear();
+      for (const c of changes) {
+        const m = c.path.match(/^[na]\/([^/]+)\.enc$/);
+        if (m) await this.store.put(c.path, { v: this.versionOf(m[1]), content: c.content });
+      }
+      await this.store.put('index', { content: changes.find((c) => c.path === INDEX_FILE).content });
+    }
+    return { vaultFile: next, recoveryCode };
   }
 
   // Vuelve a conectar (recarga el índice) y sube lo pendiente. Cada nota se guarda como un guardado normal, con la detección de
@@ -608,7 +704,18 @@ export class Vault {
 
   async readVersion(id, ref) {
     const text = await this.repo.readText(notePath(id), ref);
-    return text ? C.decryptText(this.dek, text, id) : '';
+    if (!text) return '';
+    try {
+      return await C.decryptText(this.dek, text, id);
+    } catch (e) {
+      // Versión de antes de rotar la clave: se abre con la clave de entonces (del llavero).
+      for (const key of await this.loadKeyring()) {
+        try {
+          return await C.decryptText(key, text, id);
+        } catch { /* siguiente */ }
+      }
+      throw e;
+    }
   }
 
   // --- Adjuntos ---

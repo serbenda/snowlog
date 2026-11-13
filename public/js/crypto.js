@@ -179,6 +179,38 @@ export async function unlockVault(vault, passphrase) {
   return dek;
 }
 
+// Rota la clave: DEK nueva al azar, envuelta con la frase (que se comprueba) y con un código de
+// recuperación nuevo. Devuelve también la DEK antigua en base64 (`oldKey`) para guardarla cifrada con
+// la nueva en el llavero, y así poder seguir leyendo el historial.
+export async function rotateVault(vault, passphrase, iterations = 0) {
+  let raw;
+  try {
+    raw = await unwrapWith(vault.keys.passphrase, passphrase);
+  } catch {
+    throw new Error('bad_secret');
+  }
+  const fresh = randomBytes(32);
+  const recoveryCode = newRecoveryCode();
+  const updated = structuredClone(vault);
+  updated.rotated = new Date().toISOString();
+  updated.keys = {
+    passphrase: await wrapSlot(fresh, passphrase, Math.max(iterations, vault.keys.passphrase.kdf.iterations)),
+    recovery: await wrapSlot(fresh, normalizeRecoveryCode(recoveryCode), Math.max(iterations, vault.keys.recovery.kdf.iterations)),
+  };
+  const dek = await importDek(fresh);
+  const oldKey = toB64(raw);
+  fresh.fill(0);
+  raw.fill(0);
+  return { vault: updated, dek, recoveryCode, oldKey };
+}
+
+export async function importKey(b64) {
+  const raw = fromB64(b64);
+  const key = await importDek(raw);
+  raw.fill(0);
+  return key;
+}
+
 // Abre la DEK con la frase de paso o, si no encaja, con el código de recuperación.
 export async function unlockWithAny(vault, secret) {
   for (const [slot, value] of [[vault.keys.passphrase, secret], [vault.keys.recovery, normalizeRecoveryCode(secret)]]) {
