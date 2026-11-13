@@ -19,6 +19,7 @@ function safeUrl(url) {
   return /^(https?:\/\/|mailto:|#)/i.test(u) ? u : null;
 }
 
+const EMBED_RE = /\.(png|jpe?g|gif|webp|avif|bmp|pdf)$/i;
 const TAG_RE = /(^|[\s(])#([\p{L}_][\p{L}\p{N}_/-]*)/gu;
 
 export function inline(raw) {
@@ -28,6 +29,14 @@ export function inline(raw) {
 
   // Código en línea: su contenido no se formatea.
   s = s.replace(/`([^`]+)`/g, (_, code) => keep(`<code>${code}</code>`));
+
+  // ![[foto.png]] y ![[foto.png|300]]: hueco que la app rellena con el adjunto descifrado.
+  s = s.replace(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, target, alias) => {
+    const name = target.trim();
+    if (!EMBED_RE.test(name)) return m.slice(1);
+    const width = /^\d{1,4}$/.test((alias || '').trim()) ? ` data-width="${alias.trim()}"` : '';
+    return keep(`<span class="embed" data-embed="${name}"${width}>${name}</span>`);
+  });
 
   // [[Nota]] y [[Nota|alias]]
   s = s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => keep(
@@ -273,7 +282,7 @@ export function render(md, { frontmatter = false } = {}) {
       const items = [];
       while (i < lines.length && LIST_RE.test(lines[i])) {
         const [, indent, marker, itemText] = lines[i].match(LIST_RE);
-        items.push({ depth: Math.floor(indent.replace(/\t/g, '    ').length / 2), ordered: /\d/.test(marker), text: itemText });
+        items.push({ indent: indent.replace(/\t/g, '    ').length, ordered: /\d/.test(marker), text: itemText });
         i += 1;
       }
       out.push(renderList(items));
@@ -299,14 +308,22 @@ export function render(md, { frontmatter = false } = {}) {
 }
 
 function renderList(items) {
+  // Los niveles salen de la sangría real: da igual usar 2, 4 espacios o tabuladores.
   let html = '';
-  const stack = [];
+  const stack = []; // [{ tag, indent }]
   for (const item of items) {
-    const depth = Math.min(item.depth, stack.length);
-    while (stack.length > depth + 1) html += `</li></${stack.pop()}>`;
-    if (stack.length === depth) {
+    while (stack.length > 1 && item.indent < stack[stack.length - 1].indent) {
+      // Sangría intermedia: sigue en el mismo nivel en vez de abrir otra lista.
+      if (item.indent > stack[stack.length - 2].indent) {
+        stack[stack.length - 1].indent = item.indent;
+        break;
+      }
+      html += `</li></${stack.pop().tag}>`;
+    }
+    const top = stack[stack.length - 1];
+    if (!top || item.indent > top.indent) {
       const tag = item.ordered ? 'ol' : 'ul';
-      stack.push(tag);
+      stack.push({ tag, indent: item.indent });
       html += `<${tag}>`;
     } else {
       html += '</li>';
@@ -319,7 +336,7 @@ function renderList(items) {
       html += `<li>${inline(item.text)}`;
     }
   }
-  while (stack.length) html += `</li></${stack.pop()}>`;
+  while (stack.length) html += `</li></${stack.pop().tag}>`;
   return html;
 }
 

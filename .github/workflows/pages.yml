@@ -26,6 +26,8 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      - name: Construir la versión portátil
+        run: node scripts/build-portable.mjs public/snowlog-portable.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

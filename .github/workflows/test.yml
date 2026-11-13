@@ -17,6 +17,26 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      - name: Construir la versión portátil
+        run: node scripts/build-portable.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snowlog-portable
+          path: dist/snowlog-portable.html
+
+  navegador:
+    name: Recorridos en el navegador
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Chrome ya viene en las máquinas de GitHub; los tests no usan dependencias.
+      - run: google-chrome --version
+      - run: npm run test:e2e
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
 
   autoria:
     name: Autoría de los commits

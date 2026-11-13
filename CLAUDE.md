@@ -37,10 +37,28 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/vault.js      bóveda: índice cifrado + una nota cifrada por fichero con id aleatorio
   js/auth.js       login (GitHub App vía Worker, o token personal); credenciales locales cifradas
   js/markdown.js   Markdown seguro: frontmatter, tablas, callouts, tareas, etiquetas, [[enlaces]]
+  js/noteindex.js  índice en memoria de notas descifradas (tareas, etiquetas, enlaces)
+  js/query.js      consultas tipo Dataview
+  js/templates.js  plantillas, nota diaria y espacio inicial
+  js/import.js     importar carpeta de Markdown
+  js/examples.js   proyecto de ejemplo (Cargar ejemplos)
+  js/localvault.js bóveda local: .md en una carpeta (File System Access) o en el navegador (OPFS)
+  js/kvdir.js      carpeta guardada dentro del navegador (portátil en Firefox y Safari)
+  js/zip.js        crear y leer .zip sin dependencias
+  js/backup.js     copia de seguridad cifrada (.snowlog)
+  js/cache.js      caché local (IndexedDB) de ficheros cifrados del repo
+  js/links.js      reescribir [[enlaces]] al renombrar o mover
+  js/search.js     búsqueda de texto completo y recuento de etiquetas
+  js/kanban.js     tableros Kanban sobre Markdown (leer, cambiar y escribir)
+  js/graph.js      grafo de notas y disposición por fuerzas
+  js/editor.js     ayudas del editor: listas, sangría, atajos, autocompletar [[ y resaltado
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)
+  sw.js            service worker: guarda la web para abrirla sin conexión (nunca datos de GitHub)
+scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)
 tests/             node --test; incluye un GitHub falso en memoria
+tests/e2e/         recorridos en Chrome por el protocolo de DevTools (cdp.mjs), sin dependencias
 docs/              contexto, Definition of Done y puesta en marcha
 ```
 
@@ -48,7 +66,9 @@ docs/              contexto, Definition of Done y puesta en marcha
 
 ```bash
 npm test                                  # tests (Node 20+), deben pasar siempre
+npm run test:e2e                          # recorridos en Chrome (Node 22+; CHROME_BIN si no está en /usr/bin)
 python3 -m http.server 8000 -d public     # probar la web en local
+npm run build:portable                    # versión portátil en dist/snowlog-portable.html
 ```
 
 ## Reglas de seguridad (no negociables)
@@ -61,7 +81,10 @@ python3 -m http.server 8000 -d public     # probar la web en local
   formato. Los enlaces solo admiten `http(s)`, `mailto` y anclas.
 - La clave y la frase de paso solo viven en memoria. No las escribas en `localStorage`, logs ni errores.
 - Ningún secreto en el código: el client secret va solo como secreto del Worker.
-- Cada cambio en `crypto.js`, `vault.js` o `markdown.js` lleva tests nuevos.
+- Cada cambio en `crypto.js`, `vault.js`, `localvault.js` o `markdown.js` lleva tests nuevos.
+- **Versión portátil sin red:** su CSP lleva `connect-src 'none'` y hashes del script y del estilo. Nunca
+  añadas conexiones, CDN ni `unsafe-inline`. Todo módulo nuevo debe usar `import { … } from './x.js'` o
+  `import * as X from './x.js'` y `export function|const|class`, que es lo que entiende el empaquetador.
 
 ## Cómo trabajar
 

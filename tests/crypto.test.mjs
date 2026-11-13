@@ -54,3 +54,28 @@ test('base64 aguanta datos grandes', () => {
   const big = C.randomBytes(300000);
   assert.deepEqual(C.fromB64(C.toB64(big)), big);
 });
+
+test('cambiar la frase de paso: la nueva abre, la antigua no, y las notas siguen legibles', async () => {
+  const { vault, dek } = await C.createVault('frase antigua de prueba', ITER);
+  const nota = await C.encryptText(dek, 'contenido', 'n1');
+  await assert.rejects(C.changePassphrase(vault, 'no es esta', 'frase nueva de prueba'), /bad_secret/);
+  const updated = await C.changePassphrase(vault, 'frase antigua de prueba', 'frase nueva de prueba', ITER * 2);
+  assert.equal(updated.keys.passphrase.kdf.iterations, ITER * 2);
+  assert.notEqual(updated.keys.passphrase.kdf.salt, vault.keys.passphrase.kdf.salt);
+  assert.deepEqual(updated.keys.recovery, vault.keys.recovery, 'el código de recuperación sigue igual');
+  await assert.rejects(C.unlockVault(updated, 'frase antigua de prueba'), /bad_secret/);
+  const dek2 = await C.unlockVault(updated, 'frase nueva de prueba');
+  assert.equal(await C.decryptText(dek2, nota, 'n1'), 'contenido');
+  assert.equal(vault.keys.passphrase.kdf.iterations, ITER, 'no modifica el original');
+});
+
+test('generar un código de recuperación nuevo invalida el anterior', async () => {
+  const { vault, recoveryCode } = await C.createVault('frase de paso de prueba', ITER);
+  await assert.rejects(C.renewRecoveryCode(vault, 'mal', ITER), /bad_secret/);
+  const { vault: updated, recoveryCode: nuevo } = await C.renewRecoveryCode(vault, 'frase de paso de prueba');
+  assert.notEqual(nuevo, recoveryCode);
+  await assert.rejects(C.recoverVault(updated, recoveryCode, 'otra frase nueva'), /bad_secret/);
+  const { dek } = await C.recoverVault(updated, nuevo, 'otra frase nueva');
+  assert.ok(dek);
+  assert.deepEqual(updated.keys.passphrase, vault.keys.passphrase);
+});

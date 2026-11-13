@@ -71,18 +71,27 @@ export class GitHubRepo {
     return this.head;
   }
 
-  // Lee un fichero de texto en el commit actual. Devuelve null si no existe.
-  async readText(path) {
-    if (!this.head) await this.fetchHead();
-    if (!this.head) return null;
+  // Lee un fichero de texto en el commit actual (o en `ref`). Devuelve null si no existe.
+  async readText(path, ref) {
+    if (!ref && !this.head) await this.fetchHead();
+    const at = ref || this.head;
+    if (!at) return null;
     try {
-      return await this.request('GET', `/contents/${encodePath(path)}?ref=${this.head}`, {
+      return await this.request('GET', `/contents/${encodePath(path)}?ref=${encodeURIComponent(at)}`, {
         accept: 'application/vnd.github.raw+json',
       });
     } catch (e) {
       if (e.status === 404) return null;
       throw e;
     }
+  }
+
+  // Commits que cambiaron un fichero, del más reciente al más antiguo: [{ sha, date }].
+  async history(path, { perPage = 50, page = 1 } = {}) {
+    if (!this.head) await this.fetchHead();
+    if (!this.head) return [];
+    const list = await this.request('GET', `/commits?path=${encodeURIComponent(path)}&sha=${encodeURIComponent(this.head)}&per_page=${perPage}&page=${page}`);
+    return list.map((c) => ({ sha: c.sha, date: c.commit?.committer?.date || c.commit?.author?.date || '' }));
   }
 
   // Primer commit de un repo vacío.

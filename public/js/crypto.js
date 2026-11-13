@@ -122,6 +122,45 @@ export async function createVault(passphrase, iterations) {
   return { vault, dek, recoveryCode };
 }
 
+async function wrapSlot(raw, secret, iterations) {
+  const salt = randomBytes(16);
+  const kek = await deriveKek(secret, salt, iterations);
+  return {
+    kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations, salt: toB64(salt) },
+    wrapped: toB64(await encryptBytes(kek, raw, 'dek')),
+  };
+}
+
+// Cambia la frase de paso: comprueba la actual y vuelve a envolver la misma DEK con la nueva
+// (las notas no se recifran). Sube las iteraciones si `iterations` es mayor que las guardadas.
+export async function changePassphrase(vault, oldPassphrase, newPassphrase, iterations = 0) {
+  let raw;
+  try {
+    raw = await unwrapWith(vault.keys.passphrase, oldPassphrase);
+  } catch {
+    throw new Error('bad_secret');
+  }
+  const updated = structuredClone(vault);
+  updated.keys.passphrase = await wrapSlot(raw, newPassphrase, Math.max(iterations, vault.keys.passphrase.kdf.iterations));
+  raw.fill(0);
+  return updated;
+}
+
+// Genera un código de recuperación nuevo (el anterior deja de servir). Pide la frase actual.
+export async function renewRecoveryCode(vault, passphrase, iterations = 0) {
+  let raw;
+  try {
+    raw = await unwrapWith(vault.keys.passphrase, passphrase);
+  } catch {
+    throw new Error('bad_secret');
+  }
+  const recoveryCode = newRecoveryCode();
+  const updated = structuredClone(vault);
+  updated.keys.recovery = await wrapSlot(raw, normalizeRecoveryCode(recoveryCode), Math.max(iterations, vault.keys.recovery.kdf.iterations));
+  raw.fill(0);
+  return { vault: updated, recoveryCode };
+}
+
 async function unwrapWith(slot, secret) {
   const kek = await deriveKek(secret, fromB64(slot.kdf.salt), slot.kdf.iterations);
   return decryptBytes(kek, fromB64(slot.wrapped), 'dek');
@@ -138,6 +177,19 @@ export async function unlockVault(vault, passphrase) {
   const dek = await importDek(raw);
   raw.fill(0);
   return dek;
+}
+
+// Abre la DEK con la frase de paso o, si no encaja, con el código de recuperación.
+export async function unlockWithAny(vault, secret) {
+  for (const [slot, value] of [[vault.keys.passphrase, secret], [vault.keys.recovery, normalizeRecoveryCode(secret)]]) {
+    try {
+      const raw = await unwrapWith(slot, value);
+      const dek = await importDek(raw);
+      raw.fill(0);
+      return dek;
+    } catch { /* probar el siguiente */ }
+  }
+  throw new Error('bad_secret');
 }
 
 // Con el código de recuperación se fija una frase de paso nueva.

@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src https://api.github.com https://*.workers.dev; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src https://api.github.com https://snowlog-auth.serbenda.workers.dev; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types snowlog">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#141518">
 <title>Snowlog</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="css/app.css">
 <script type="module" src="js/app.js"></script>
 </head>
@@ -22,22 +23,47 @@
   <nav class="ribbon" aria-label="Acciones">
     <button class="ribbon-btn" data-action="toggle-left" aria-label="Mostrar u ocultar archivos" title="Archivos"></button>
     <button class="ribbon-btn" data-action="switcher" aria-label="Abrir nota (Ctrl+O)" title="Abrir nota (Ctrl+O)"></button>
+    <button class="ribbon-btn" data-action="palette" aria-label="Paleta de comandos (Ctrl+P)" title="Paleta de comandos (Ctrl+P)"></button>
     <button class="ribbon-btn" data-action="new-note" aria-label="Nueva nota (Ctrl+N)" title="Nueva nota (Ctrl+N)"></button>
+    <button class="ribbon-btn" data-action="today" aria-label="Nota de hoy (Ctrl+D)" title="Nota de hoy (Ctrl+D)"></button>
+    <button class="ribbon-btn" data-action="home" aria-label="Panel principal" title="Panel principal"></button>
+    <button class="ribbon-btn" data-action="graph" aria-label="Vista de grafo (Ctrl+G)" title="Vista de grafo (Ctrl+G)"></button>
     <span class="ribbon-spacer"></span>
+    <button class="ribbon-btn" data-action="settings" aria-label="Ajustes" title="Ajustes"></button>
     <button class="ribbon-btn" data-action="lock" aria-label="Bloquear" title="Bloquear"></button>
     <button class="ribbon-btn" data-action="logout" aria-label="Cerrar sesión en este dispositivo" title="Cerrar sesión"></button>
   </nav>
 
   <aside class="sidebar sidebar-left" id="left" aria-label="Archivos">
-    <div class="sidebar-header">
+    <div class="left-tabs" role="tablist" aria-label="Panel izquierdo">
+      <button class="icon-btn left-tab" role="tab" data-tab="files" aria-label="Archivos" title="Archivos" aria-selected="true"></button>
+      <button class="icon-btn left-tab" role="tab" data-tab="search" aria-label="Buscar (Ctrl+Mayús+F)" title="Buscar (Ctrl+Mayús+F)" aria-selected="false"></button>
+      <button class="icon-btn left-tab" role="tab" data-tab="tags" aria-label="Etiquetas" title="Etiquetas" aria-selected="false"></button>
+      <button class="icon-btn left-tab" role="tab" data-tab="bookmarks" aria-label="Marcadores" title="Marcadores" aria-selected="false"></button>
+    </div>
+    <div class="sidebar-header" data-pane="files">
       <span class="sidebar-title">Archivos</span>
       <span class="sidebar-actions">
         <button class="icon-btn" data-action="new-note" aria-label="Nueva nota" title="Nueva nota"></button>
         <button class="icon-btn" data-action="new-folder" aria-label="Nueva carpeta" title="Nueva carpeta"></button>
+        <button class="icon-btn" data-action="import" aria-label="Importar carpeta de Markdown" title="Importar carpeta"></button>
         <button class="icon-btn" data-action="collapse-all" aria-label="Plegar todo" title="Plegar todo"></button>
       </span>
     </div>
-    <div class="tree" id="tree" role="tree" tabindex="-1"></div>
+    <div class="tree" id="tree" role="tree" tabindex="-1" data-pane="files"></div>
+    <div class="left-pane" data-pane="search" hidden>
+      <input class="search-input" id="search-input" type="search" placeholder="Buscar en todas las notas" aria-label="Buscar en todas las notas" autocomplete="off" spellcheck="false">
+      <p class="search-help" id="search-info">Sin acentos ni mayúsculas. También <code>"frase"</code>, <code>-palabra</code>, <code>tag:#etiqueta</code> y <code>path:carpeta</code>.</p>
+      <div class="search-results" id="search-results" role="list"></div>
+    </div>
+    <div class="left-pane" data-pane="bookmarks" hidden>
+      <div class="sidebar-header"><span class="sidebar-title">Marcadores</span></div>
+      <div class="tag-list" id="bookmark-list" role="list"></div>
+    </div>
+    <div class="left-pane" data-pane="tags" hidden>
+      <div class="sidebar-header"><span class="sidebar-title">Etiquetas</span></div>
+      <div class="tag-list" id="tag-list" role="list"></div>
+    </div>
   </aside>
 
   <main class="workspace">
@@ -59,27 +85,46 @@
       </div>
       <div class="note" id="note" hidden>
         <input class="inline-title" id="title" aria-label="Título de la nota" spellcheck="false" autocomplete="off">
-        <textarea class="editor" id="editor" aria-label="Contenido de la nota" spellcheck="true"></textarea>
+        <div class="editor-wrap" id="editor-wrap">
+          <pre class="editor-hl" id="editor-hl" aria-hidden="true"></pre>
+          <textarea class="editor" id="editor" aria-label="Contenido de la nota" spellcheck="true"></textarea>
+          <pre class="editor-mirror" id="editor-mirror" aria-hidden="true"></pre>
+          <div class="suggest" id="suggest" role="listbox" aria-label="Notas para enlazar" hidden></div>
+        </div>
         <article class="reading markdown" id="reading" hidden></article>
       </div>
     </div>
 
     <footer class="status-bar" aria-live="polite">
+      <span id="st-place"></span>
       <span id="st-sync"></span>
       <span id="st-words"></span>
       <span id="st-chars"></span>
     </footer>
   </main>
 
-  <aside class="sidebar sidebar-right" id="right" aria-label="Esquema">
-    <div class="sidebar-header"><span class="sidebar-title">Esquema</span></div>
-    <nav class="outline" id="outline"></nav>
+  <aside class="sidebar sidebar-right" id="right" aria-label="Panel lateral">
+    <div class="right-scroll">
+      <section class="side-section" aria-label="Calendario"><div class="calendar" id="calendar"></div></section>
+      <section class="side-section">
+        <div class="sidebar-header"><span class="sidebar-title">Esquema</span></div>
+        <nav class="outline" id="outline" aria-label="Esquema"></nav>
+      </section>
+      <section class="side-section">
+        <div class="sidebar-header"><span class="sidebar-title">Enlaces entrantes</span></div>
+        <nav class="outline" id="backlinks" aria-label="Enlaces entrantes"></nav>
+      </section>
+    </div>
   </aside>
 
   <div class="backdrop" id="backdrop" hidden></div>
 </div>
 
 <div class="menu" id="menu" role="menu" hidden></div>
+<input type="file" id="import-input" webkitdirectory multiple hidden>
+<input type="file" id="backup-input" accept=".snowlog,.zip,application/json,application/zip" hidden>
+<input type="file" id="attach-input" accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/bmp,application/pdf" multiple hidden>
+<div class="hover-preview" id="hover-preview" hidden></div>
 <div class="modal-root" id="modal-root"></div>
 <div class="notices" id="notices" aria-live="polite"></div>
 
