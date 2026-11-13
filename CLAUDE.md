@@ -58,6 +58,7 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
 scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)
 tests/             node --test; incluye un GitHub falso en memoria
+tests/e2e/         recorridos en Chrome por el protocolo de DevTools (cdp.mjs), sin dependencias
 docs/              contexto, Definition of Done y puesta en marcha
 ```
 
@@ -65,6 +66,7 @@ docs/              contexto, Definition of Done y puesta en marcha
 
 ```bash
 npm test                                  # tests (Node 20+), deben pasar siempre
+npm run test:e2e                          # recorridos en Chrome (Node 22+; CHROME_BIN si no está en /usr/bin)
 python3 -m http.server 8000 -d public     # probar la web en local
 npm run build:portable                    # versión portátil en dist/snowlog-portable.html
 ```

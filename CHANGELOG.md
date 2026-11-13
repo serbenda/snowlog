@@ -6,6 +6,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- **Tests en el navegador** (`npm run test:e2e`, y en la CI en cada push y PR): crear bóveda, escribir, bloquear y volver a entrar sin nada en claro en el repo; que el HTML de una nota no se ejecute y la CSP no se queje; ejemplos, búsqueda y renombrar con enlaces; y la versión portátil desde el disco sin ninguna conexión. Usan Chrome directamente por el protocolo de DevTools, sin dependencias.
 - **Pasar notas entre la versión portátil y la online:** «Importar copia (.snowlog o .zip)…» acepta la copia cifrada de la online y el .zip de la portátil (o de «Exportar sin cifrar»). Se puede importar en una carpeta aparte o tal cual, con sus carpetas y adjuntos.
 - Versión portátil en Firefox y Safari (y en cualquier navegador que no deje elegir carpetas): «Guardar dentro del navegador» guarda las notas en IndexedDB (o en localStorage si no hay) y siguen ahí al volver a abrir el fichero.
 - Carpetas del ordenador: Snowlog detecta lo que cambia desde fuera (otro editor, OneDrive, Dropbox…) al volver a la ventana y cada 10 s. Actualiza el explorador y la nota abierta; si la nota abierta se borra fuera mientras escribes, lo escrito se guarda en «Recuperada».
