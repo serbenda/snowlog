@@ -216,3 +216,19 @@ test('cambios en notas distintas no se consideran conflicto', async () => {
   assert.deepEqual(await otro.saveNote(b, 'b2'), {});
   assert.equal(otro.notes().filter((n) => n.path.includes('otro dispositivo')).length, 2, 'solo las copias de la prueba anterior');
 });
+
+test('historial: lista las versiones de una nota, las descifra y permite restaurar', async () => {
+  const id = await vault.createNote('Con historia', 'v1');
+  await vault.saveNote(id, 'v2');
+  await vault.createNote('Otra nota cualquiera', 'x');
+  await vault.saveNote(id, 'v3');
+  const versions = await vault.history(id);
+  assert.equal(versions.length, 3);
+  assert.ok(versions[0].date > versions[2].date);
+  assert.deepEqual(await Promise.all(versions.map((v) => vault.readVersion(id, v.ref))), ['v3', 'v2', 'v1']);
+  await vault.saveNote(id, await vault.readVersion(id, versions[2].ref));
+  const fresh = new Vault(newRepo(), vault.dek);
+  await fresh.loadIndex();
+  assert.equal(await fresh.read(id), 'v1');
+  assert.equal((await fresh.history(id)).length, 4, 'restaurar no borra el historial');
+});

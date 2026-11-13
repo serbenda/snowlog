@@ -41,7 +41,7 @@ La hoja de ruta completa, con el motivo de cada punto, está en [ROADMAP.md](ROA
 - [x] Un cambio hecho en otro dispositivo nunca se pierde: se detecta y se conservan las dos versiones.
 
 ### Fase 2: Confianza
-- [ ] Historial de una nota con vista de cada versión y botón de restaurar.
+- [x] Historial de una nota con vista de cada versión y botón de restaurar.
 - [ ] Cambiar la frase de paso desde la app (reenvolver la clave sin recifrar todo).
 - [ ] Recordatorio y copia de seguridad: exportar .zip cifrado de forma periódica.
 - [ ] Rendimiento: con 1.000 notas, entrar en menos de 3 s; guardados agrupados para no generar un commit por tecla.

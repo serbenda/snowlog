@@ -11,9 +11,10 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
 
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+  let clock = Date.UTC(2026, 10, 1);
   function commitFiles(files, parent) {
     const s = sha('c');
-    commits.set(s, { parent, files });
+    commits.set(s, { parent, files, date: new Date(clock += 60000).toISOString() });
     return s;
   }
 
@@ -36,6 +37,18 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
       files.set(path.slice('/contents/'.length), decodeURIComponent(escape(atob(body.content))));
       head = commitFiles(files, head);
       return json(201, { commit: { sha: head } });
+    }
+    if (path === '/commits' && method === 'GET') {
+      const file = u.searchParams.get('path');
+      const out = [];
+      for (let s = u.searchParams.get('sha') || head; s; s = commits.get(s).parent) {
+        const c = commits.get(s);
+        const before = c.parent ? commits.get(c.parent).files.get(file) : undefined;
+        if (c.files.get(file) !== before) out.push({ sha: s, commit: { committer: { date: c.date } } });
+      }
+      const per = Number(u.searchParams.get('per_page') || 30);
+      const page = Number(u.searchParams.get('page') || 1);
+      return json(200, out.slice((page - 1) * per, page * per));
     }
     if (path.startsWith('/git/commits/') && method === 'GET') {
       const s = path.slice('/git/commits/'.length);

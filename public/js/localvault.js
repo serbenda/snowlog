@@ -10,6 +10,13 @@ import { Vault, normalizePath, parentPath, baseName, validName, isAttachmentName
 
 const HIDDEN = /^\./; // .obsidian, .git, .trash… no se tocan
 const TRASH = '.trash';
+// Historial en local: copias de versiones anteriores en .history/<ruta de la nota>/<fecha>.md,
+// como mucho una cada 10 minutos y las 50 últimas por nota.
+const HISTORY = '.history';
+const SNAP_EVERY_MS = 10 * 60 * 1000;
+const SNAP_KEEP = 50;
+const stampOf = (ms) => `${new Date(ms).toISOString().replace(/:/g, '-')}.md`;
+const dateOfStamp = (name) => name.replace(/\.md$/, '').replace(/T(\d\d)-(\d\d)-(\d\d)/, 'T$1:$2:$3');
 const iso = (ms) => new Date(ms || Date.now()).toISOString();
 
 async function getDir(root, path, create = false) {
@@ -89,6 +96,7 @@ export class LocalVault {
     this.label = label || root.name || 'Snowlog';
     this.kind = kind; // 'folder' (carpeta del ordenador) | 'browser' (almacenamiento del navegador)
     this.local = true;
+    this.now = () => Date.now();
     this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
     this.fileCache = new Map();
@@ -153,6 +161,7 @@ export class LocalVault {
     try {
       disk = await readFile(this.root, this.file(id));
     } catch { /* borrado fuera: se vuelve a crear */ }
+    if (disk != null && disk !== text) await this.snapshot(this.index.notes[id].path, disk);
     if (before != null && disk != null && disk !== before && disk !== text) {
       const note = this.index.notes[id];
       const path = this.freePath(parentPath(note.path), conflictName(baseName(note.path)));
@@ -177,9 +186,48 @@ export class LocalVault {
     if (note.path === p) return;
     const text = await this.read(id);
     await writeFile(this.root, `${p}.md`, text);
-    if (note.path.toLowerCase() !== p.toLowerCase()) await removeEntry(this.root, this.file(id));
+    if (note.path.toLowerCase() !== p.toLowerCase()) {
+      await removeEntry(this.root, this.file(id));
+      // El historial acompaña a la nota.
+      if (await exists(this.root, `${HISTORY}/${note.path}`) && !await exists(this.root, `${HISTORY}/${p}`)) {
+        await copyTree(await getDir(this.root, `${HISTORY}/${note.path}`), await getDir(this.root, `${HISTORY}/${p}`, true));
+        await removeEntry(this.root, `${HISTORY}/${note.path}`, true);
+      }
+    }
     note.path = p;
     this.addFolderChain(this.index, parentPath(p));
+  }
+
+  async snapshot(path, text) {
+    const dir = await getDir(this.root, `${HISTORY}/${path}`, true);
+    const names = [];
+    for await (const [name, h] of dir.entries()) if (h.kind === 'file' && name.endsWith('.md')) names.push(name);
+    names.sort();
+    const last = names.at(-1);
+    if (last && this.now() - Date.parse(dateOfStamp(last)) < SNAP_EVERY_MS) return;
+    await writeFile(this.root, `${HISTORY}/${path}/${stampOf(this.now())}`, text);
+    names.push('');
+    for (const old of names.slice(0, Math.max(0, names.length - SNAP_KEEP))) await dir.removeEntry(old);
+  }
+
+  // Versiones: la actual y las copias del historial, de la más reciente a la más antigua.
+  async history(id) {
+    const note = this.index.notes[id];
+    const out = [{ ref: 'current', date: note.updated }];
+    try {
+      const dir = await getDir(this.root, `${HISTORY}/${note.path}`);
+      const names = [];
+      for await (const [name, h] of dir.entries()) if (h.kind === 'file' && name.endsWith('.md')) names.push(name);
+      names.sort().reverse();
+      for (const name of names) out.push({ ref: name, date: new Date(dateOfStamp(name)).toISOString() });
+    } catch { /* sin historial todavía */ }
+    return out;
+  }
+
+  async readVersion(id, ref) {
+    if (ref === 'current') return this.read(id);
+    if (!/^[\dTZ.-]+\.md$/.test(ref)) throw new Error('missing');
+    return readFile(this.root, `${HISTORY}/${this.index.notes[id].path}/${ref}`);
   }
 
   // Borrar = mover a .trash dentro de la carpeta (se puede recuperar a mano).

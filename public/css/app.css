@@ -126,6 +126,25 @@ button { cursor: pointer; }
 }
 .sidebar-actions { display: flex; gap: 2px; }
 
+/* ---------- Historial ---------- */
+.modal.history { width: min(980px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
+.history-body { display: grid; grid-template-columns: 220px 1fr; gap: 14px; min-height: 0; flex: 1; }
+.history-list { overflow: auto; max-height: 60vh; border-right: 1px solid var(--border); padding-right: 8px; }
+.history-list .switcher-item.sel { background: var(--active); }
+.history-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.history-info { margin: 0 0 8px !important; font-size: 13px !important; }
+.history-preview {
+  overflow: auto; max-height: 56vh; border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 16px; background: var(--bg-primary); font-size: 14px;
+}
+.history-hint { flex: 1; align-self: center; font-size: 12px; color: var(--text-faint); }
+@media (max-width: 700px) {
+  .history-body { grid-template-columns: 1fr; }
+  .history-list { max-height: 22vh; border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 8px; }
+  .history-preview { max-height: 40vh; }
+  .history-hint { display: none; }
+}
+
 /* ---------- Adjuntos ---------- */
 .tree-row.is-file .label { color: var(--text-muted); }
 .file-ext {

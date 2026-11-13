@@ -44,6 +44,8 @@ const ICONS = {
   example: 'M9 4h6l-1 5 4 9a2 2 0 0 1-2 3H8a2 2 0 0 1-2-3l4-9z M8 15h8',
   download: 'M12 4v11 M7 10l5 5 5-5 M5 20h14',
   tag: 'M4 4h7l9 9-7 7-9-9z M8 8h.01',
+  history: 'M4 12a8 8 0 1 0 2.3-5.6 M4 4v4h4 M12 8v4l3 2',
+  key: 'M14 10a4 4 0 1 0-1.2 2.8L20 20 M17 17l2-2',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
@@ -1839,6 +1841,97 @@ async function importFolder(files) {
 }
 
 // --- Paneles ---
+// --- Historial de versiones ---
+const dateFmt = new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+function whenText(iso) {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  if (ms < 60000) return 'hace un momento';
+  if (ms < 3600000) return `hace ${Math.round(ms / 60000)} min`;
+  if (ms < 86400000) return `hace ${Math.round(ms / 3600000)} h`;
+  return dateFmt.format(new Date(iso));
+}
+
+// Resumen de cambios entre dos textos por líneas: { added, removed }.
+function lineDiff(a, b) {
+  const count = (t) => t.split('\n').reduce((m, l) => m.set(l, (m.get(l) || 0) + 1), new Map());
+  const ca = count(a);
+  const cb = count(b);
+  let added = 0;
+  let removed = 0;
+  for (const [l, n] of cb) added += Math.max(0, n - (ca.get(l) || 0));
+  for (const [l, n] of ca) removed += Math.max(0, n - (cb.get(l) || 0));
+  return { added, removed };
+}
+
+async function historyModal(id) {
+  if (!S.vault?.history) return;
+  await saveNow();
+  const vault = S.vault;
+  const note = vault.index.notes[id];
+  if (!note) return;
+  let versions = [];
+  let sel = 0;
+  const texts = new Map();
+  const current = await vault.read(id);
+  const restored = await modal((close) => {
+    const list = h('div', { class: 'history-list', role: 'listbox', 'aria-label': 'Versiones' }, h('p', { class: 'search-empty' }, 'Cargando versiones…'));
+    const preview = h('article', { class: 'history-preview markdown' });
+    const info = h('p', { class: 'history-info' });
+    const restore = h('button', { class: 'btn primary', type: 'button', disabled: true }, 'Restaurar esta versión');
+    const show = async (i) => {
+      sel = i;
+      [...list.children].forEach((b, j) => { b.classList.toggle('sel', j === i); b.setAttribute('aria-selected', String(j === i)); });
+      const v = versions[i];
+      restore.disabled = true;
+      preview.replaceChildren(h('p', { class: 'search-empty' }, 'Descifrando…'));
+      try {
+        if (!texts.has(v.ref)) texts.set(v.ref, await vault.readVersion(id, v.ref));
+        if (sel !== i) return;
+        const text = texts.get(v.ref);
+        preview.innerHTML = render(text, { frontmatter: true });
+        const d = lineDiff(current, text);
+        info.textContent = i === 0 || text === current
+          ? 'Es la versión actual.'
+          : `Esta versión tiene ${d.added} línea${d.added === 1 ? '' : 's'} que la actual no tiene y le falta${d.removed === 1 ? '' : 'n'} ${d.removed}.`;
+        restore.disabled = i === 0 || text === current;
+      } catch (e) {
+        preview.replaceChildren(h('p', { class: 'embed-missing' }, `No se pudo abrir esta versión: ${errText(e)}`));
+      }
+    };
+    restore.addEventListener('click', () => close(texts.get(versions[sel].ref)));
+    const box = h('div', { class: 'modal history', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Historial de versiones' },
+      h('h2', {}, `Historial de «${baseName(note.path)}»`),
+      h('div', { class: 'history-body' }, list, h('div', { class: 'history-right' }, info, preview)),
+      h('div', { class: 'modal-actions' },
+        h('span', { class: 'history-hint' }, S.local ? 'Se guarda una copia como mucho cada 10 minutos.' : 'Cada versión sigue cifrada en el repo.'),
+        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cerrar'),
+        restore));
+    vault.history(id).then((vs) => {
+      versions = vs;
+      list.replaceChildren(...vs.map((v, i) => h('button', {
+        class: 'switcher-item', type: 'button', role: 'option', onclick: () => show(i),
+      }, h('span', {}, i === 0 ? 'Actual' : whenText(v.date)), h('span', { class: 'sub' }, dateFmt.format(new Date(v.date))))));
+      if (vs.length) show(0);
+      else list.replaceChildren(h('p', { class: 'search-empty' }, 'Sin versiones anteriores.'));
+    }).catch((e) => list.replaceChildren(h('p', { class: 'embed-missing' }, errText(e))));
+    return box;
+  });
+  if (restored == null || S.vault !== vault) return;
+  if (S.current === id) {
+    $('editor').value = restored;
+    autosize();
+    if (S.mode === 'read') setMode('read');
+    S.dirty = true;
+    await saveNow();
+  } else {
+    await run(() => vault.saveNote(id, restored));
+  }
+  syncIndex();
+  refreshSide();
+  notice('Versión restaurada. La que había sigue en el historial.');
+}
+
 // --- Adjuntos (imágenes y PDF) ---
 const fmtSize = (n) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 let blobUrls = [];
@@ -2079,7 +2172,7 @@ function noteMenu(x, y) {
   const items = [];
   if (S.current) {
     const id = S.current;
-    items.push(['rename', 'Renombrar', () => renameNotePrompt(id)], ['move', 'Mover a…', () => moveNotePrompt(id)]);
+    items.push(['rename', 'Renombrar', () => renameNotePrompt(id)], ['move', 'Mover a…', () => moveNotePrompt(id)], ['history', 'Historial de versiones…', () => historyModal(id)]);
   }
   if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()], ['import', 'Adjuntar imagen o PDF…', () => $('attach-input').click()]);
   items.push(

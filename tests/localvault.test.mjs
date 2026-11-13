@@ -126,3 +126,27 @@ test('si el fichero cambió fuera (carpeta sincronizada), se guarda una copia', 
   assert.equal(root.text(`${res.conflict.path}.md`), 'cambiado en el otro ordenador');
   assert.deepEqual(await v.saveNote(id, 'sin conflicto'), {});
 });
+
+test('historial en local: copias cada 10 minutos, las 50 últimas, y siguen a la nota al renombrar', async () => {
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  let t = Date.UTC(2026, 10, 13, 9, 0);
+  v.now = () => t;
+  const id = v.findByTitle('Inicio').id;
+  await v.read(id);
+  await v.saveNote(id, 'v2'); // guarda copia de la versión anterior
+  t += 60 * 1000;
+  await v.saveNote(id, 'v3'); // menos de 10 minutos: sin copia nueva
+  t += 11 * 60 * 1000;
+  await v.saveNote(id, 'v4');
+  const versions = await v.history(id);
+  assert.deepEqual(await Promise.all(versions.map((x) => v.readVersion(id, x.ref))), ['v4', 'v3', '# Inicio\n[[Reforma]]']);
+  assert.equal(v.notes().length, 3, 'el historial no aparece como notas');
+  await v.renameNote(id, 'Portada');
+  assert.equal((await v.history(id)).length, 3);
+  await assert.rejects(v.readVersion(id, '../../Inicio.md'), /missing/);
+  for (let i = 0; i < 55; i++) { t += 11 * 60 * 1000; await v.saveNote(id, `x${i}`); }
+  assert.equal((await v.history(id)).length, 51);
+  const again = await new LocalVault(root).load();
+  assert.equal(again.notes().length, 3);
+});

@@ -373,6 +373,18 @@ export class Vault {
     });
   }
 
+  // --- Historial ---
+  // Versiones de una nota, de la más reciente a la más antigua: [{ ref, date }].
+  // La primera es la actual. Git guarda cada versión cifrada; aquí solo se listan.
+  async history(id) {
+    return (await this.repo.history(notePath(id))).map((c) => ({ ref: c.sha, date: c.date }));
+  }
+
+  async readVersion(id, ref) {
+    const text = await this.repo.readText(notePath(id), ref);
+    return text ? C.decryptText(this.dek, text, id) : '';
+  }
+
   // --- Adjuntos ---
   files() {
     return Object.entries(this.index.files || {}).map(([id, f]) => ({ id, ...f }));
