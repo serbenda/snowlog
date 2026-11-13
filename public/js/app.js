@@ -9,6 +9,7 @@ import { planImport, formatBytes } from './import.js';
 import { exampleSpace } from './examples.js';
 import { LocalVault } from './localvault.js';
 import { makeZip } from './zip.js';
+import { rewriteLinks, linkChanges } from './links.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
 import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
@@ -1039,10 +1040,42 @@ async function renameNotePrompt(id) {
 }
 
 async function renameNoteTo(id, path) {
+  await saveNow();
+  const from = S.vault.index.notes[id]?.path;
+  const allPaths = S.vault.notes().map((n) => n.path);
   const ok = await run(() => S.vault.renameNote(id, path).then(() => true));
   renderTree();
   if (id === S.current) updateHeader();
+  if (ok && from && from !== S.vault.index.notes[id].path) {
+    await updateLinks([{ from, to: S.vault.index.notes[id].path }], allPaths);
+  }
   return ok;
+}
+
+// Tras renombrar o mover, reescribe los [[enlaces]] de todas las notas que apuntaban a lo movido.
+async function updateLinks(moves, allPaths) {
+  try {
+    await ensureIndex();
+    const changes = linkChanges(moves, allPaths);
+    const updates = [];
+    for (const n of S.vault.notes()) {
+      const text = await S.vault.read(n.id);
+      const next = rewriteLinks(text, changes);
+      if (next != null) updates.push({ id: n.id, text: next });
+    }
+    if (!updates.length) return;
+    await S.vault.saveMany(updates, 'actualizar enlaces');
+    const mine = updates.find((u) => u.id === S.current);
+    if (mine && !S.dirty) {
+      $('editor').value = mine.text;
+      if (S.mode === 'read') setMode('read');
+    }
+    syncIndex();
+    refreshBacklinks();
+    notice(`Enlaces actualizados en ${updates.length} nota${updates.length === 1 ? '' : 's'}.`);
+  } catch (e) {
+    notice(`La nota se ha renombrado, pero no se pudieron actualizar los enlaces: ${errText(e)}`, 'error');
+  }
 }
 
 async function moveNotePrompt(id) {
@@ -1081,11 +1114,14 @@ async function renameFolderPrompt(path) {
   if (name == null || name.trim() === baseName(path)) return;
   const to = normalizePath(`${parentPath(path)}/${name}`);
   await saveNow();
+  const allPaths = S.vault.notes().map((n) => n.path);
+  const moves = S.vault.notesUnder(path).map((n) => ({ from: n.path, to: to + n.path.slice(path.length) }));
   const ok = await run(() => S.vault.renameFolder(path, to).then(() => true));
   if (ok) {
     if (S.expanded.delete(path)) S.expanded.add(to);
     renderTree();
     if (S.current) updateHeader();
+    if (moves.length) await updateLinks(moves, allPaths);
   }
 }
 

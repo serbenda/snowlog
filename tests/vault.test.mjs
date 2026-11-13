@@ -133,3 +133,15 @@ test('importNotes puede crear carpetas vacías y usar otro mensaje', async () =>
   assert.ok(vault.index.folders.includes('Archivo'));
   assert.ok(vault.findByPath('Inicio'));
 });
+
+test('saveMany guarda varias notas en un solo commit', async () => {
+  const a = await vault.createNote('Lote/A', 'a');
+  const b = await vault.createNote('Lote/B', 'b');
+  const before = fake.commitCount();
+  await vault.saveMany([{ id: a, text: 'a2' }, { id: b, text: 'b2' }]);
+  assert.equal(fake.commitCount() - before, 1);
+  const fresh = new Vault(newRepo(), vault.dek);
+  await fresh.loadIndex();
+  assert.equal(await fresh.read(a), 'a2');
+  assert.equal(await fresh.read(b), 'b2');
+});

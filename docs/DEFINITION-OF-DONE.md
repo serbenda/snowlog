@@ -31,7 +31,7 @@ La hoja de ruta completa, con el motivo de cada punto, está en [ROADMAP.md](ROA
 - [x] Versión portátil en un solo fichero, sin red.
 
 ### Fase 1: Imprescindible (para dejar Obsidian)
-- [ ] Renombrar o mover una nota o carpeta actualiza todos los `[[enlaces]]` que apuntan a ella.
+- [x] Renombrar o mover una nota o carpeta actualiza todos los `[[enlaces]]` que apuntan a ella.
 - [ ] Editor: resaltado de Markdown mientras escribes, Intro continúa listas y tareas, Tab y Mayús+Tab sangran.
 - [ ] Editor: `[[` sugiere notas; un enlace a una nota que no existe permite crearla.
 - [ ] Editor: Ctrl+B, Ctrl+I, Ctrl+K (enlace) y Ctrl+Intro (marcar tarea).

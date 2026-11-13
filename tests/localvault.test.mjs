@@ -85,3 +85,11 @@ test('el .zip exportado se abre con herramientas estándar', () => {
     'import sys,zipfile;z=zipfile.ZipFile(sys.argv[1]);assert z.testzip() is None;print("|".join(n+"="+z.read(n).decode() for n in z.namelist()))', file]).toString().trim();
   assert.equal(out, 'Diario/2026-11-13.md=# Viernes ñ|Inicio.md=hola');
 });
+
+test('saveMany en local escribe cada fichero', async () => {
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  const id = v.findByTitle('Inicio').id;
+  await v.saveMany([{ id, text: 'nuevo' }]);
+  assert.equal(root.text('Inicio.md'), 'nuevo');
+});

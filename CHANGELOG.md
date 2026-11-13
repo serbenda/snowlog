@@ -6,6 +6,7 @@ y versiones según [SemVer](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- Renombrar o mover una nota o carpeta actualiza los `[[enlaces]]` que apuntan a ella en todas las notas (un solo commit en la versión online).
 - Modo lectura: el frontmatter se muestra como propiedades (con etiquetas, listas y casillas).
 - Tablas Markdown con alineación, celdas vacías y `\|` escapado.
 - Callouts (`> [!info]`, `[!warning]`, `[!danger]`…) con colores, alias y versión plegable (`+`/`-`).

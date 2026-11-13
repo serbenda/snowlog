@@ -228,6 +228,20 @@ export class Vault {
     return planned.map(({ id, path }) => ({ id, path }));
   }
 
+  // Guarda varias notas en un solo commit: [{ id, text }].
+  async saveMany(items, message = 'actualizar enlaces') {
+    if (!items.length) return;
+    const now = new Date().toISOString();
+    await this.apply(
+      `Snowlog: ${message}`,
+      (idx) => {
+        for (const { id } of items) if (idx.notes[id]) idx.notes[id].updated = now;
+      },
+      async () => Promise.all(items.map(async ({ id, text }) => ({ path: notePath(id), content: await C.encryptText(this.dek, text, id) }))),
+    );
+    for (const { id, text } of items) this.cache.set(id, text);
+  }
+
   async saveNote(id, text) {
     await this.apply(
       'Snowlog: guardar nota',

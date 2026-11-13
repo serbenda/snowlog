@@ -135,6 +135,10 @@ export class LocalVault {
     this.cache.set(id, text);
   }
 
+  async saveMany(items) {
+    for (const { id, text } of items) await this.saveNote(id, text);
+  }
+
   async renameNote(id, newPath) {
     const p = normalizePath(newPath);
     validName(p);

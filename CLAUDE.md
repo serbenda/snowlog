@@ -44,6 +44,7 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   js/examples.js   proyecto de ejemplo (Cargar ejemplos)
   js/localvault.js bóveda local: .md en una carpeta (File System Access) o en el navegador (OPFS)
   js/zip.js        exportar .zip sin dependencias
+  js/links.js      reescribir [[enlaces]] al renombrar o mover
   js/app.js        interfaz al estilo Obsidian
   js/config.js     configuración pública (nada secreto)
 scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
