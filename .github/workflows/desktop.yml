@@ -77,13 +77,16 @@ jobs:
       - name: Abrir la app (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y xvfb imagemagick
+          sudo apt-get install -y xvfb imagemagick x11-utils
           chmod +x salida/*.AppImage
           export APPIMAGE_EXTRACT_AND_RUN=1
+          # Sin tarjeta gráfica: que WebKit pinte por software
+          export WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1
           xvfb-run -a -s "-screen 0 1280x820x24" bash -c '
             salida/*.AppImage & pid=$!
             sleep 20
             kill -0 "$pid" || { echo "La app se ha cerrado al arrancar"; exit 1; }
+            xwininfo -root -tree | grep -E "\"[^\"]+\"" | head -5
             import -window root captura.png
             kill "$pid"
             convert captura.png -format "%[fx:standard_deviation]" info: > variacion.txt'
