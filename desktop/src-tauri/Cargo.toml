@@ -1,0 +1,24 @@
+# Versión de escritorio de Snowlog: una ventana propia (sin navegador) con la misma web dentro.
+# La compila GitHub Actions (.github/workflows/desktop.yml) para Windows, macOS y Linux.
+[package]
+name = "snowlog"
+version = "0.2.0"
+description = "Cuaderno de notas cifrado"
+authors = ["Sergio Santiago Bendaña Quesada"]
+edition = "2021"
+rust-version = "1.77"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+# Ejecutable pequeño
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

@@ -59,9 +59,14 @@ public/            web publicada (sin build: HTML + CSS + módulos ES)
   css/sketch.css   estilos del editor de dibujo (copiado igual)
   fonts/           letra a mano de los dibujos (Caveat, OFL; copiada igual)
   sw.js            service worker: guarda la web para abrirla sin conexión (nunca datos de GitHub)
+agent/             servidor MCP y acceso de scripts (Node, sin dependencias; ver docs/AGENTES.md)
+  gitdir.js        GitDirRepo: la interfaz de GitHubRepo sobre un clon local (plomería de git + push)
+  session.js       DEK solo en memoria, bloqueo por inactividad; askpass.js pide la frase (diálogo de macOS)
+  ops.js, mcp.js   operaciones y servidor JSON-RPC por stdio; test-vault.mjs crea una bóveda de prueba
 scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
 scripts/update-sketch.mjs   copia el motor de sketch a public/
 worker/            Cloudflare Worker del login OAuth (guarda el client secret)
+desktop/           versión de escritorio con Tauri (src-tauri/); la compila .github/workflows/desktop.yml
 tests/             node --test; incluye un GitHub falso en memoria
 tests/e2e/         recorridos en Chrome por el protocolo de DevTools (cdp.mjs), sin dependencias
 docs/              contexto, Definition of Done y puesta en marcha
@@ -74,7 +79,12 @@ npm test                                  # tests (Node 20+), deben pasar siempr
 npm run test:e2e                          # recorridos en Chrome (Node 22+; CHROME_BIN si no está en /usr/bin)
 python3 -m http.server 8000 -d public     # probar la web en local
 npm run build:portable                    # versión portátil en dist/snowlog-portable.html
+node agent/test-vault.mjs /ruta/nueva     # bóveda de prueba para el servidor MCP
 ```
+
+Para usar el servidor MCP desde Claude Code (nunca contra las notas reales sin que lo pida el dueño):
+`claude mcp add snowlog -- node <repo>/agent/mcp.js --dir <clon del repo de notas>`. La frase de paso la
+escribe siempre el dueño en el diálogo del sistema; no la pidas ni la pases por el chat, argumentos ni entorno.
 
 ## Reglas de seguridad (no negociables)
 

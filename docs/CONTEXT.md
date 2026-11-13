@@ -123,13 +123,19 @@ dependen de alguien más:
   [SEGURIDAD.md](SEGURIDAD.md)).
 - Probar la versión portátil en Firefox y Safari reales (está probada en Chrome simulando esos navegadores).
 
-Ideas para después: PKCE en el login, firmar el índice para detectar que alguien
-reponga versiones antiguas, y un CLI para que scripts externos escriban notas cifradas.
+Ideas para después: PKCE en el login y firmar el índice para detectar que alguien
+reponga versiones antiguas.
 
-Pendiente de decidir: cómo pueden escribir notas los scripts externos (un CLI que cifre y haga commit).
+Scripts y agentes externos: servidor MCP en `agent/` (fase 1 hecha: leer, buscar, enlaces, crear, añadir, nota
+diaria), sobre un clon del repo de notas con `GitDirRepo` y `Vault` tal cual. Ver [AGENTES.md](AGENTES.md). Fase 2:
+editar por sección, mover, borrar, tareas, consultas, huérfanas y un CLI.
 
 ## Proyectos relacionados
 
+- Escritorio (Tauri 2, `desktop/`): una ventana que carga `public/` tal cual, sin órdenes del sistema expuestas
+  a la web (`withGlobalTauri: false`, sin plugins). Usa el motor del sistema: en Windows (WebView2) funciona la
+  carpeta del ordenador; en macOS y Linux (WebKit) no hay File System Access y la bóveda local va dentro de la
+  app (kvdir). El login con GitHub App no sirve (su vuelta va a la web publicada): se entra con token personal.
 - [sketch](https://github.com/serbenda/sketch): pizarra a mano alzada, web propia sin red. Su motor
   (`js/{trazo,escena,pintar,editor}.js` y `css/sketch.css`) se copia en `public/js/sketch-*.js` y
   `public/css/sketch.css`, y su letra a mano (Caveat, OFL) en `public/fonts/`, con

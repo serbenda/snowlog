@@ -1,0 +1,94 @@
+# Versión de escritorio con Tauri: una ventana propia con la web dentro, sin navegador.
+# Compila un ejecutable para cada sistema y los deja como artefactos de la ejecución:
+#   Windows: snowlog-windows.exe (se abre sin instalar; usa el motor de Edge que trae Windows)
+#   macOS:   snowlog-macos.zip con Snowlog.app para Intel y Apple Silicon (sin firmar)
+#   Linux:   snowlog-linux.AppImage
+name: Escritorio
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - 'desktop/**'
+      - 'public/**'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compilar:
+    name: ${{ matrix.nombre }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: Windows
+            os: windows-latest
+            args: --no-bundle
+          - nombre: macOS
+            os: macos-latest
+            args: --bundles app --target universal-apple-darwin
+          - nombre: Linux
+            os: ubuntu-22.04
+            args: --bundles appimage
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Librerías de Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Rust para Intel y Apple Silicon
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Iconos
+        working-directory: desktop
+        run: npx --yes @tauri-apps/cli@2.12.4 icon icon.png
+
+      - name: Compilar
+        working-directory: desktop
+        run: npx --yes @tauri-apps/cli@2.12.4 build ${{ matrix.args }}
+
+      - name: Preparar el ejecutable
+        shell: bash
+        run: |
+          mkdir -p salida
+          T=desktop/src-tauri/target
+          case "${{ runner.os }}" in
+            Windows) cp "$T/release/snowlog.exe" salida/snowlog-windows.exe ;;
+            macOS) ditto -c -k --keepParent "$T/universal-apple-darwin/release/bundle/macos/Snowlog.app" salida/snowlog-macos.zip ;;
+            Linux) cp "$T"/release/bundle/appimage/*.AppImage salida/snowlog-linux.AppImage ;;
+          esac
+          ls -la salida
+
+      # Prueba de humo (Linux, pantalla virtual): la app abre su ventana y la web de dentro arranca.
+      # Se hace por WebDriver con tauri-driver, que pregunta a la página en vez de mirar píxeles.
+      - name: Abrir la app y comprobar la web (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb webkit2gtk-driver
+          cargo install tauri-driver --version 2.1.0 --locked
+          export WEBKIT_DISABLE_DMABUF_RENDERER=1
+          xvfb-run -a -s "-screen 0 1280x820x24" bash -c '
+            tauri-driver > driver.log 2>&1 &
+            node desktop/prueba.mjs "$PWD/desktop/src-tauri/target/release/snowlog" "$0" || { cat driver.log; exit 1; }' \
+            '!document.getElementById("lock").hidden || !document.getElementById("app").hidden'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snowlog-${{ matrix.nombre }}
+          path: salida/*
+          if-no-files-found: error
+          retention-days: 30
