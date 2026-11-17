@@ -45,7 +45,8 @@
   - First CI run: every job green except SAST. Semgrep flags the plain-HTTP `fetch` to `tauri-driver` on
     `127.0.0.1:4444` in `desktop/smoke-test.mjs` (`react-insecure-request`); it shows up now because SAST had never
     run on this code. Both requests now go through one `driver()` function, so a single line is left to suppress;
-    the `nosemgrep` with its reason is the owner's to commit. Also translated a few strings and comments the first
+    the `nosemgrep` with its reason was committed by the agent with `GUARDRAILS_OWNER_CHANGE=1` at the owner's
+    explicit request in chat (`3ae6626`); CI is green on every job. Also translated a few strings and comments the first
     pass missed (`mcp.js`, `session.js`, `kvdir.js`, `backup.js`, `markdown.js`, `links.js`, `cdp.mjs`) and the
     remaining Spanish test data (`editor.test.mjs`, `import.test.mjs`).
 - **Why:** the owner asked for both projects to use the template and for everything to be in English
@@ -65,7 +66,7 @@
   actionlint, `check-records.sh origin/main HEAD` and `npm test` pass (`test-scripts.sh` is skipped in projects, as
   in CI). Smoke test: run against a fake WebDriver server on 127.0.0.1:4444 (session, script and
   delete calls answered).
-- **Pending:** the owner's `nosemgrep` commit for the smoke test; the owner's review of the guardrail files on PR #6;
+- **Pending:** the owner's review of the guardrail files on PR #6; `setup-repo.sh` for the rules of `main`;
   PR #6's title and description in English.
 
 ## 2026-11-13 — Recorded afterwards: the work before the template (S0–S2)
