@@ -1,5 +1,34 @@
+# System
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Dependencies and builds
 node_modules/
+dist/
+build/
+.cache/
+__pycache__/
+
+# Secrets: never in the repo
+.env
+.env.*
+*.pem
+*.key
+
+# Logs
+*.log
+
+# Cloudflare Worker (wrangler): local state and secrets
 .wrangler/
 .dev.vars
-.DS_Store
-dist/
+
+# Desktop app (Tauri): build output
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/src-tauri/icons/
+desktop/src-tauri/Cargo.lock
+desktop/app/

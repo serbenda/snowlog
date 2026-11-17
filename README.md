@@ -1,114 +1,115 @@
 # Snowlog
 
-Cuaderno de notas personal al estilo Obsidian, **cifrado de extremo a extremo**, que vive en GitHub.
+> A personal Markdown notebook, **end-to-end encrypted**, that lives in a private GitHub repository. No server of
+> its own: GitHub only ever sees ciphertext.
 
-- La app es una web estática publicada en GitHub Pages (este repo, público, sin notas).
-- Las notas se guardan en un repo **privado** (`snowlog-notes`) como ficheros cifrados.
-- Se cifra en el navegador con AES-256-GCM. La clave sale de tu frase de paso y nunca abandona el dispositivo.
-- Cada guardado es un commit: tienes historial completo y copia de seguridad gratis.
+🔗 **Web:** https://snowlog.bendi.dev/
 
-## Dos versiones
+## What it does
+- Notes and folders in Markdown, with `[[links]]`, backlinks, tags, frontmatter properties, tables, callouts and
+  tasks; a reading mode and an editor with highlighting, list continuation and `[[` autocomplete.
+- **Day to day:** a daily note (Ctrl+D) from a template, a dashboard note, Dataview-style queries
+  (`TASK`, `LIST`, `TABLE`), a calendar, Kanban boards, a graph view and hand-drawn drawings
+  (engine from [sketch](https://github.com/serbenda/sketch)).
+- **Encrypted in the browser** with AES-256-GCM. The key comes from your passphrase and never leaves the device; a
+  recovery code can set a new passphrase. File names in the repository are random and reveal no titles.
+- Every save is a commit: full history with a restore button, and copies for free. Changes made on two devices are
+  merged line by line; only clashing lines keep a copy.
+- Works offline once opened (installable app), with encrypted backups (`.snowlog`) and import of a Markdown folder.
+- Search across all notes, a command palette (Ctrl+P), bookmarks, link previews and settings inside the app.
 
-- **Online** en <https://snowlog.bendi.dev>: notas cifradas en un repo privado de GitHub, desde cualquier dispositivo.
-- **Portátil**: un solo fichero `snowlog-portable.html` que se abre con doble clic en Chrome o Edge, sin instalar
-  nada y sin internet; las notas son ficheros `.md` en una carpeta de tu ordenador. Ver [docs/PORTATIL.md](docs/PORTATIL.md).
+## Three ways to use it
+- **Online** at <https://snowlog.bendi.dev>: notes encrypted in a private GitHub repository, from any device.
+- **Portable:** a single `snowlog-portable.html` that opens with a double click, with nothing to install and no
+  internet; notes are `.md` files in a folder on your computer (or inside the browser on Firefox and Safari). See
+  [docs/PORTABLE.md](docs/PORTABLE.md).
+- **Desktop** (Tauri): a window of its own for Windows, macOS and Linux, built by the "Desktop" workflow as
+  unsigned artifacts.
 
-## Interfaz
+Scripts and AI assistants can work with the vault through an MCP server: [docs/AGENT_ACCESS.md](docs/AGENT_ACCESS.md).
 
-La disposición se inspira en Obsidian: barra lateral de iconos (ribbon), explorador de archivos con carpetas,
-editor con título en línea, modo lectura, panel de esquema y barra de estado. Todo el código y los iconos son
-propios; no se usa código ni recursos de Obsidian.
+## Shortcuts
 
-| Atajo | Acción |
+| Key | Action |
 | --- | --- |
-| Ctrl/Cmd + N | Nota nueva |
-| Ctrl/Cmd + O (o P) | Selector rápido: abrir o crear nota |
-| Ctrl/Cmd + E | Cambiar entre editar y leer |
-| Ctrl/Cmd + S | Guardar ya |
-| Ctrl/Cmd + D | Nota de hoy |
-| F2 (en el árbol) | Renombrar |
+| Ctrl/Cmd + N | New note |
+| Ctrl/Cmd + O | Quick switcher: open or create a note |
+| Ctrl/Cmd + P | Command palette |
+| Ctrl/Cmd + E | Switch between editing and reading |
+| Ctrl/Cmd + S | Save now |
+| Ctrl/Cmd + D | Today's note |
+| Ctrl/Cmd + G | Graph view |
+| Ctrl/Cmd + Shift + F | Search all notes |
+| F2 (in the tree) | Rename |
 
-También: clic derecho en el árbol, arrastrar notas a carpetas, enlaces `[[Otra nota]]` que abren o crean notas.
+Also: right click in the tree, drag notes into folders, and `[[Another note]]` links that open or create notes.
 
-### Día a día
+A query, for example:
 
-- **Nota diaria** (Ctrl+D o el botón del calendario): `Diario/AAAA-MM-DD`, creada desde `Plantillas/Nota diaria`.
-- **Panel principal** (botón de la casa): la nota `Inicio`, con compromisos y pendientes de todas tus notas.
-- **Consultas** en bloques `dataview`:
-
-  ````markdown
-  ```dataview
-  TASK
-  WHERE contains(text, "#compromiso") AND !completed
-  GROUP BY file.link
-  ```
-  ````
-
-  También `LIST FROM "Diario" SORT file.name DESC LIMIT 7` o
-  `TABLE area, status FROM "Proyectos" WHERE status = "activo"`.
-- **Configurar mi espacio** (menú ⋯) crea Inicio, Diario, Proyectos, Plantillas y Archivo.
-- **Importar carpeta** (menú ⋯): trae una carpeta de Markdown; se cifra en el navegador.
-- **Cargar ejemplos** (menú ⋯): crea `Proyectos/Ejemplo - Web de recetas` con historias, tablero, reunión,
-  píldora y notas diarias enlazadas. Empieza por la nota «Cómo usar este ejemplo».
-
-## Cómo está montado
-
+````markdown
+```dataview
+TASK
+WHERE contains(text, "#commitment") AND !completed
+GROUP BY file.link
 ```
-public/            la web (lo que publica GitHub Pages)
-  js/crypto.js     cifrado con WebCrypto: clave de datos envuelta con frase de paso y con código de recuperación
-  js/github.js     cliente de la API de GitHub: un commit atómico por guardado
-  js/vault.js      bóveda: índice cifrado + notas cifradas
-  js/auth.js       login con GitHub (OAuth) o token personal; credenciales locales cifradas
-  js/markdown.js   Markdown seguro (todo se escapa antes de dar formato)
-  js/noteindex.js  índice en memoria: propiedades, etiquetas, tareas y enlaces
-  js/query.js      consultas tipo Dataview (TASK, LIST, TABLE)
-  js/templates.js  plantillas, nota diaria y espacio inicial
-  js/import.js     importar una carpeta de Markdown
-  js/examples.js   proyecto de ejemplo con historias
-  js/localvault.js notas como ficheros .md en una carpeta local (o en el navegador)
-  js/zip.js        exportar copia .zip
-scripts/build-portable.mjs  empaqueta todo en un único HTML sin red (versión portátil)
-  js/app.js        interfaz
-worker/            Cloudflare Worker para el login con GitHub (guarda el client secret)
-tests/             tests con node --test, incluido un GitHub falso en memoria
-```
+````
 
-En el repo de notas solo hay:
+## Data sources
+| Source | What it provides | License |
+|---|---|---|
+| GitHub API (your private repository) | Storage, history and sync of your encrypted notes | GitHub terms |
+| [Caveat](https://github.com/googlefonts/caveat) | The handwriting font in drawings, served from the site | SIL Open Font License ([public/fonts/OFL.txt](public/fonts/OFL.txt)) |
 
-```
-.snowlog/vault.json   parámetros del cifrado y la clave de datos envuelta (nada legible)
-.snowlog/index.enc    índice cifrado (títulos, carpetas, fechas)
-n/<id>.enc            una nota cifrada por fichero, con nombre aleatorio
-```
-
-## Puesta en marcha
-
-Ver [docs/PUESTA-EN-MARCHA.md](docs/PUESTA-EN-MARCHA.md). Resumen: activar Pages, y entrar con un token
-personal de momento, o crear la GitHub App y el Worker para el login con GitHub.
-
-## Desarrollo
-
+## Running locally
 ```bash
-npm test                                  # tests (Node 20+)
-python3 -m http.server 8000 -d public     # servir la web en local
-npm run build:portable                    # genera dist/snowlog-portable.html
-git config core.hooksPath .githooks       # una vez por clon: limpia atribuciones en los commits
+git clone https://github.com/serbenda/snowlog.git
+cd snowlog
+git switch development
+```
+How to start and verify it: [docs/SETUP.md](docs/SETUP.md). Publishing the site and setting up the sign-in:
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Structure
+```
+.
+├── public/            # the site, served as is from GitHub Pages (HTML, CSS, ES modules, service worker)
+│   └── js/            # crypto, github, vault, localvault, markdown, query, editor, app… (see docs/ARCHITECTURE.md)
+├── agent/             # MCP server and script access over a clone of the notes repository
+├── worker/            # Cloudflare Worker for the GitHub sign-in (holds the client secret)
+├── desktop/           # desktop version (Tauri): icon, smoke test and src-tauri/
+├── scripts/           # build-portable.mjs, update-sketch.mjs, and the template's setup, sync and check scripts
+├── tests/             # node --test with a fake GitHub; tests/e2e: walkthroughs in Chrome over DevTools
+├── docs/              # VISION, STATE, WORKLOG, ROADMAP, phases, decisions, ARCHITECTURE, THREAT_MODEL…
+├── .claude/ · .githooks/ · .github/
+├── AGENTS.md          # rules for any AI agent
+└── CLAUDE.md          # imports AGENTS.md and adds what is specific to Claude Code
 ```
 
-Contexto vivo del proyecto en [docs/CONTEXT.md](docs/CONTEXT.md), cambios en [CHANGELOG.md](CHANGELOG.md)
-y criterios de terminado en [docs/DEFINITION-OF-DONE.md](docs/DEFINITION-OF-DONE.md).
+The notes repository only holds:
 
-Se trabaja en la rama `development` y se pasa a `main` con una PR. Al fusionar en `main`, GitHub Actions
-pasa los tests y publica `public/` en GitHub Pages.
+```
+.snowlog/vault.json    encryption parameters and the wrapped data key (nothing readable)
+.snowlog/index.enc     the encrypted index (titles, folders, dates, settings)
+.snowlog/keyring.enc   earlier keys after a rotation, encrypted with the current one
+n/<id>.enc             one encrypted note per file, with a random name
+a/<id>.enc             one encrypted attachment per file
+```
 
-## Estado: fase 1 (núcleo seguro)
+## How to work with Claude
+Every flow, as diagrams: [docs/WORKFLOWS.md](docs/WORKFLOWS.md).
 
-- [x] Login con token personal y con GitHub OAuth (vía Worker), con renovación automática del token
-- [x] Frase de paso, código de recuperación y cifrado E2E de notas, índice y credenciales locales
-- [x] Crear, editar, renombrar, mover y borrar notas y carpetas; cada acción es un commit
-- [x] Nombres de fichero aleatorios: el repo no revela títulos
-- [x] Bloqueo automático tras 10 minutos sin actividad
-- [x] Interfaz tipo Obsidian en escritorio y móvil, tema claro y oscuro
-- [ ] Fase 2: backlinks, etiquetas, búsqueda de texto completo, editor con resaltado
-- [ ] Fase 3: PWA y uso sin conexión
-- [ ] Fase 4: grafo, notas diarias, plantillas, adjuntos
+```
+/status                      at the start of every session
+/new-phase <what>            phase file + plan → you approve → Claude implements on development
+(automatic)                  record-changes skill: WORKLOG after every change
+/close-phase                 criteria + DoD + updates STATE, ROADMAP and CHANGELOG (once per phase)
+/prepare-pr                  reviewers + development → main PR (you merge it)
+/decision <what>             when something hard to undo has to be chosen
+```
+
+## Contributing
+Read [AGENTS.md](AGENTS.md) and the [Definition of Done](docs/DEFINITION_OF_DONE.md).
+
+## License
+No license: © Sergio Santiago Bendaña Quesada. All rights reserved.
+The code may be viewed, but not copied, modified or redistributed without the author's written permission.

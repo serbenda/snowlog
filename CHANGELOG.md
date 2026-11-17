@@ -1,97 +1,97 @@
 # Changelog
 
-Todos los cambios relevantes de Snowlog. Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
-y versiones según [SemVer](https://semver.org/lang/es/).
+All notable changes to Snowlog. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+and versions follow [SemVer](https://semver.org/).
 
-## [Sin publicar]
+## [Unreleased]
 
-### Añadido
-- **Servidor MCP y acceso para scripts** (`agent/`, ver `docs/AGENTES.md`): listar, leer, buscar, seguir enlaces y enlaces entrantes, crear notas (también desde plantilla), añadir al final o a una sección y nota diaria, cifrando y descifrando en local con los mismos módulos que la web. Trabaja sobre un clon del repo de notas: cada cambio es un commit que se sube con push, y si la app escribió antes se fusiona como entre dos dispositivos. La frase de paso se pide en un diálogo del sistema y nunca llega al cliente; la clave solo vive en memoria y se olvida a los 10 minutos sin uso. `agent/test-vault.mjs` crea una bóveda de prueba.
-- **Versión de escritorio con Tauri** para Windows (`.exe` que se abre sin instalar), macOS (`.app` para Intel y Apple Silicon) y Linux (AppImage): una ventana propia con la web dentro, sin navegador. La compila el workflow «Escritorio» y la deja como artefacto. Sin firmar: en equipos de empresa el antivirus puede bloquearla; para esos casos sigue la versión portátil en HTML.
-- **Dibujos que cambian en dos dispositivos se juntan** elemento a elemento: si uno mueve una caja y el otro añade un rombo, quedan las dos cosas sin crear copias. Solo si los dos cambian el mismo elemento de forma distinta se guarda además la otra versión aparte. Vale también para la carpeta del ordenador (cambios hechos fuera).
-- La **búsqueda encuentra los dibujos** por su nombre y por los textos que llevan dentro, y al abrir un dibujo, «Enlaces entrantes» muestra las notas que lo incrustan.
-- Dibujos con teclado (crear, recorrer, mover, cambiar de tamaño y girar sin ratón) y más fluidos con muchos elementos (motor de sketch actualizado).
-- Dibujos: letra a mano, texto dentro de las formas (doble clic), flechas pegadas a las formas, girar, agrupar, alinear y repartir (motor de sketch actualizado). En la versión portátil los textos usan la letra cursiva del sistema, porque su CSP no admite fuentes.
-- **Dibujos a mano alzada** (motor de [sketch](https://github.com/serbenda/sketch)): «Nuevo dibujo» crea un `.sketch` en la carpeta `Dibujos` y lo abre en una pizarra con rectángulos, rombos, elipses, flechas, líneas, lápiz, texto y goma; deshacer, zoom y temas claro y oscuro. «Insertar un dibujo nuevo» añade `![[Dibujo….sketch]]` a la nota, que se ve como imagen en el modo lectura y se abre al pulsarla. Se guardan cifrados como cualquier adjunto; si el mismo dibujo cambia en dos dispositivos, se guarda la otra versión como copia. Adjuntar un `.excalidraw` lo convierte en `.sketch`. `scripts/update-sketch.mjs` copia el motor desde el repo de sketch.
-- **Cambiar la clave de cifrado** («Frase de paso y recuperación…» → «Cambiar la clave de cifrado»): todas las notas, adjuntos y el índice se vuelven a cifrar con una clave nueva en un solo commit, y se genera un código de recuperación nuevo. Las claves anteriores se guardan cifradas con la nueva en un llavero, así el historial se sigue leyendo. Los demás dispositivos piden la frase al guardar o al entrar, y lo que estuvieran escribiendo no se pierde: se sube tras desbloquear.
-- Si la frase de paso se cambia en otro dispositivo, este pide la nueva al desbloquear (antes seguía valiendo la antigua aquí).
-- **Fusión automática:** si la misma nota cambia en dos dispositivos (o fuera de Snowlog, en la versión portátil) en partes distintas, se juntan los dos cambios sin crear copias. Si los dos añaden líneas en el mismo sitio, se quedan ambas. Solo cuando cambian las mismas líneas de forma distinta se guarda la otra versión como copia, como antes.
-- Primera entrada en un dispositivo nuevo mucho más rápida: las notas se descargan en bloques de 100 (GraphQL de GitHub) en lugar de una a una. Con 1.000 notas y 150 ms de latencia, el índice completo pasa de 17,5 s a 2,9 s. Si GraphQL no está disponible, se sigue como antes.
-- **Tests en el navegador** (`npm run test:e2e`, y en la CI en cada push y PR): crear bóveda, escribir, bloquear y volver a entrar sin nada en claro en el repo; que el HTML de una nota no se ejecute y la CSP no se queje; ejemplos, búsqueda y renombrar con enlaces; y la versión portátil desde el disco sin ninguna conexión. Usan Chrome directamente por el protocolo de DevTools, sin dependencias.
-- **Pasar notas entre la versión portátil y la online:** «Importar copia (.snowlog o .zip)…» acepta la copia cifrada de la online y el .zip de la portátil (o de «Exportar sin cifrar»). Se puede importar en una carpeta aparte o tal cual, con sus carpetas y adjuntos.
-- Versión portátil en Firefox y Safari (y en cualquier navegador que no deje elegir carpetas): «Guardar dentro del navegador» guarda las notas en IndexedDB (o en localStorage si no hay) y siguen ahí al volver a abrir el fichero.
-- Carpetas del ordenador: Snowlog detecta lo que cambia desde fuera (otro editor, OneDrive, Dropbox…) al volver a la ventana y cada 10 s. Actualiza el explorador y la nota abierta; si la nota abierta se borra fuera mientras escribes, lo escrito se guarda en «Recuperada».
-- **Tableros Kanban** sobre Markdown normal (`## Columna` y `- [ ] tarjeta`, con `kanban-plugin: basic` o `kanban: true` en las propiedades): arrastrar tarjetas entre columnas, añadir, editar, marcar y borrar tarjetas, y crear, renombrar, mover y borrar columnas. «Nuevo tablero Kanban» en el menú y en la paleta. El texto sigue siendo editable con Ctrl+E.
-- **Vista de grafo** (Ctrl+G o el botón del ribbon): notas y enlaces con disposición por fuerzas, zoom, arrastrar, resaltar vecinas al pasar el ratón y abrir una nota al pulsarla. «Grafo de esta nota» muestra solo la nota y sus vecinas (1 a 3 saltos); se pueden ocultar las notas sin enlaces.
-- **Paleta de comandos** (Ctrl+P o el botón `>_`): todas las acciones por nombre, sin acentos ni mayúsculas, con las últimas usadas primero. Ctrl+O sigue abriendo notas.
-- **Marcadores:** «Añadir a marcadores» en el menú de la nota o del explorador, y pestaña Marcadores en el panel izquierdo. Siguen a la nota al renombrarla o moverla y se comparten entre dispositivos (van en los ajustes cifrados).
-- **Vista previa** de la nota al pasar el ratón por un `[[enlace]]` en el modo lectura.
-- **Ajustes** dentro de la app (botón de engranaje o menú ⋯): panel principal, carpeta y plantilla del diario, abrir la nota de hoy al entrar, carpetas de plantillas y adjuntos, minutos hasta el bloqueo, días del recordatorio de copia y tema (automático, claro u oscuro). En online se guardan cifrados en la bóveda y valen en todos los dispositivos; en local, en `.snowlog/ajustes.json` dentro de la carpeta. `config.js` queda como valores por defecto.
-- `docs/SEGURIDAD.md`: qué protege Snowlog y frente a quién, qué queda en el dispositivo, CSP, hallazgos de la revisión y riesgos aceptados.
-- La versión online funciona sin conexión: la web se guarda en el navegador (service worker) y se abre sin red; se pueden leer las notas ya descargadas, editarlas y crear notas nuevas. Lo escrito queda cifrado en este dispositivo y se sube solo al volver la red, con la detección de conflictos de siempre. La barra de estado avisa: «Sin conexión · 2 cambios por subir». Renombrar, borrar, mover o adjuntar sin conexión avisa de que hace falta red (salvo renombrar una nota creada sin conexión).
-- Se puede instalar como aplicación desde el navegador (manifiesto web).
-- Caché local cifrada (IndexedDB) de las notas y adjuntos de la versión online: solo se descargan los que han cambiado. Con 1.000 notas, entrar tarda menos de medio segundo y la búsqueda está lista en menos de 1 s; en un dispositivo nuevo, la primera vez se descargan todas en segundo plano (10 a la vez) mientras ya puedes trabajar. «Cerrar sesión» y «Olvidar este dispositivo» la borran.
-- La búsqueda dice cuántas notas encajan aunque solo muestre las 200 primeras, y cuántas lleva descifradas mientras prepara el índice.
-- Copias de seguridad: «Copia de seguridad cifrada» descarga un fichero `.snowlog` con todas las notas y adjuntos cifrados, que se abre con la frase de paso o con el código de recuperación, sin GitHub. «Abrir copia de seguridad…» la importa en una carpeta aparte o la descarga como .zip sin cifrar; también funciona en la versión portátil, sin red. En local, la copia es el .zip de siempre.
-- Recordatorio cuando pasan 7 días sin copia (`backupReminderDays` en la configuración), con «Hacer copia ahora» o «Mañana».
-- Al bloquear también se vacían los avisos de la pantalla.
-- «Frase de paso y recuperación…» en el menú ⋯: cambiar la frase de paso (pide la actual) y generar un código de recuperación nuevo (el anterior deja de servir). Solo se vuelve a envolver la clave; las notas no se recifran. Al cambiarla se aplican las iteraciones de PBKDF2 de la configuración si son más.
-- Historial de versiones de cada nota (menú ⋯ › «Historial de versiones…»): lista de versiones con fecha, vista previa, cuántas líneas cambian frente a la actual y botón para restaurar (restaurar no borra nada del historial). En online se leen de los commits del repo, cifradas; en local se guarda una copia en `.history/` como mucho cada 10 minutos (las 50 últimas por nota).
-- Ningún cambio se pierde entre dispositivos: si la misma nota se cambió en otro sitio desde que la abriste, al guardar se conserva tu versión y la otra queda en una copia «Nota (otro dispositivo AAAA-MM-DD HHMM)», con un aviso que la abre. Si la borraron en otro dispositivo, guardarla la recupera. En la versión portátil pasa lo mismo cuando la carpeta se sincroniza (OneDrive, Dropbox…) y el fichero cambió fuera.
-- Adjuntos: pegar o arrastrar imágenes y PDF en el editor (o «Adjuntar imagen o PDF…» en el menú). Se guardan en `Adjuntos/` y se insertan como `![[nombre]]`; en lectura se ve la imagen (`![[foto.png|300]]` fija el ancho) o una ficha del PDF para abrirlo. En la versión online van cifrados (`a/<id>.enc`); en la portátil son ficheros normales. Máximo 20 MB por adjunto.
-- Los adjuntos aparecen en el explorador (abrir, insertar en la nota, eliminar), se mueven con su carpeta y entran en la copia .zip.
-- Búsqueda en todas las notas (Ctrl+Mayús+F): sin acentos ni mayúsculas, con el fragmento de cada coincidencia resaltado; admite `"frase"`, `-palabra`, `tag:#etiqueta` y `path:carpeta`. Pulsar un resultado abre la nota con el texto seleccionado.
-- Panel de etiquetas con el número de notas de cada una; pulsar una etiqueta busca sus notas.
-- Panel izquierdo con pestañas: Archivos, Buscar y Etiquetas.
-- Editor: resaltado de Markdown mientras escribes (solo color, sin mover el texto); Intro continúa listas, tareas y citas, y en un elemento vacío sale de la lista; Tab y Mayús+Tab sangran.
-- Editor: al escribir `[[` aparecen sugerencias de notas; si la nota no existe, se puede crear desde ahí.
-- Atajos: Ctrl+B (negrita), Ctrl+I (cursiva), Ctrl+K (enlace) y Ctrl+Intro (marcar o crear tarea), con deshacer normal.
-- Renombrar o mover una nota o carpeta actualiza los `[[enlaces]]` que apuntan a ella en todas las notas (un solo commit en la versión online).
-- Modo lectura: el frontmatter se muestra como propiedades (con etiquetas, listas y casillas).
-- Tablas Markdown con alineación, celdas vacías y `\|` escapado.
-- Callouts (`> [!info]`, `[!warning]`, `[!danger]`…) con colores, alias y versión plegable (`+`/`-`).
-- Etiquetas `#tag` en el texto y en las tareas.
-- `CLAUDE.md`, `docs/CONTEXT.md`, `docs/DEFINITION-OF-DONE.md` y comandos en `.claude/commands/`.
-- Comprobación en CI de la autoría de los commits.
-- Login con GitHub activo: Client ID de la GitHub App y URL del Worker en la configuración.
-- Nota diaria: botón **Hoy** (Ctrl+D), se abre sola al entrar y se crea desde la plantilla `Plantillas/Nota diaria`.
-- Plantillas con `{{title}}`, `{{date:FORMATO}}` y `{{time}}`: «Insertar plantilla» y «Nueva nota desde plantilla».
-- Consultas al estilo Dataview en bloques ```` ```dataview ````: `TASK`, `LIST` y `TABLE` con `FROM`, `WHERE`, `GROUP BY`, `SORT` y `LIMIT`.
-- Tareas que se marcan con un clic en el modo lectura y desde los resultados de una consulta; el cambio se guarda en su nota.
-- Panel derecho con calendario mensual (puntos en los días con nota) y enlaces entrantes.
-- Panel principal con `cssclasses: dashboard`: las listas de primer nivel se muestran en columnas.
-- «Configurar mi espacio»: crea Inicio, Diario, Proyectos, Plantillas (nota diaria, nota, proyecto, reunión, píldora de conocimiento y procedimiento) y Archivo.
-- Importar una carpeta de Markdown (por ejemplo, una bóveda de Obsidian): se cifra en el navegador y se sube por lotes.
-- **Versión portátil** `snowlog-portable.html`: un solo fichero que se abre con doble clic en Chrome o Edge, sin instalar nada y sin internet. Las notas son ficheros `.md` en una carpeta del ordenador; la CSP prohíbe cualquier conexión.
-- Modo local también en la versión online: «Usar notas de este ordenador, sin GitHub».
-- Exportar copia (.zip) de todas las notas, en las dos versiones.
-- Lo que se borra en modo local va a `.trash` dentro de la carpeta.
-- GitHub Actions construye la versión portátil y la publica en `https://snowlog.bendi.dev/snowlog-portable.html`.
-- «Cargar ejemplos»: un proyecto de ejemplo (Web de recetas) con 4 historias, tablero, reunión, píldora y notas diarias enlazadas, para ver cómo organizarse.
+### Added
+- **MCP server and script access** (`agent/`, see `docs/AGENT_ACCESS.md`): list, read, search, follow links and backlinks, create notes (also from a template), append at the end or to a section, and the daily note, encrypting and decrypting locally with the same modules as the site. It works on a clone of the notes repository: each change is a commit pushed with git, and if the app wrote first it is merged as between two devices. The passphrase is asked for in a system dialog and never reaches the client; the key only lives in memory and is forgotten after 10 minutes unused. `agent/test-vault.mjs` creates a test vault.
+- **Desktop version with Tauri** for Windows (an `.exe` that opens without installing), macOS (an `.app` for Intel and Apple Silicon) and Linux (AppImage): a window of its own with the site inside, no browser. The "Desktop" workflow builds it and leaves it as an artifact. Unsigned: on company computers the antivirus may block it; for those cases the portable HTML version remains.
+- **Drawings changed on two devices are merged** element by element: if one moves a box and the other adds a diamond, both stay without creating copies. Only if both change the same element differently is the other version also kept apart. This also applies to a folder on the computer (changes made outside).
+- **Search finds drawings** by their name and by the texts inside them, and when a drawing is open, "Backlinks" shows the notes that embed it.
+- Drawings with the keyboard (create, go through, move, resize and rotate without a mouse) and smoother with many elements (sketch engine updated).
+- Drawings: handwriting, text inside shapes (double click), arrows attached to shapes, rotate, group, align and distribute (sketch engine updated). In the portable version texts use the system cursive, because its CSP allows no fonts.
+- **Hand-drawn drawings** (engine from [sketch](https://github.com/serbenda/sketch)): "New drawing" creates a `.sketch` in the drawings folder and opens it on a whiteboard with rectangles, diamonds, ellipses, arrows, lines, pencil, text and eraser; undo, zoom and light and dark themes. "Insert a new drawing" adds `![[Drawing….sketch]]` to the note, shown as an image in reading mode and opened when clicked. They are stored encrypted like any attachment. Attaching an `.excalidraw` converts it to `.sketch`. `scripts/update-sketch.mjs` copies the engine from the sketch repository.
+- **Change the encryption key** ("Passphrase and recovery…" → "Change the encryption key"): every note, attachment and the index are encrypted again with a new key in a single commit, and a new recovery code is generated. Earlier keys are kept encrypted with the new one in a keyring, so the history is still readable. Other devices ask for the passphrase when saving or entering, and what they were writing is not lost: it is uploaded after unlocking.
+- If the passphrase is changed on another device, this one asks for the new one when unlocking (before, the old one still worked here).
+- **Automatic merging:** if the same note changes on two devices (or outside Snowlog, in the portable version) in different parts, both changes are combined without copies. If both add lines at the same place, both stay. Only when the same lines change differently is the other version kept as a copy, as before.
+- Much faster first entry on a new device: notes are downloaded in blocks of 100 (GitHub GraphQL) instead of one by one. With 1,000 notes and 150 ms of latency, the full index goes from 17.5 s to 2.9 s. If GraphQL is unavailable, it works as before.
+- **Browser tests** (`npm run test:e2e`, and in CI on every push and PR): create a vault, write, lock and enter again with nothing in plaintext in the repository; a note's HTML does not run and the CSP does not complain; examples, search and renaming with links; and the portable version from disk with no connection at all. They drive Chrome directly over the DevTools protocol, with no dependencies.
+- **Moving notes between the portable and the online version:** "Import a backup (.snowlog or .zip)…" accepts the online encrypted backup and the portable `.zip` (or "Export unencrypted"). It can import into a separate folder or as is, with folders and attachments.
+- Portable version on Firefox and Safari (and any browser that cannot pick folders): "Store inside the browser" keeps the notes in IndexedDB (or localStorage if there is none) and they are still there when the file is opened again.
+- Folders on the computer: Snowlog detects what changes from outside (another editor, OneDrive, Dropbox…) when coming back to the window and every 10 s. It updates the tree and the open note; if the open note is deleted outside while typing, what was written is saved in "Recovered".
+- **Kanban boards** on plain Markdown (`## Column` and `- [ ] card`, with `kanban-plugin: basic` or `kanban: true` in the properties): drag cards between columns; add, edit, tick and delete cards; and create, rename, move and delete columns. "New Kanban board" in the menu and the palette. The text stays editable with Ctrl+E.
+- **Graph view** (Ctrl+G or the ribbon button): notes and links with a force-directed layout, zoom, drag, neighbors highlighted on hover and a note opened on click. "Graph of this note" shows only the note and its neighbors (1 to 3 hops); notes without links can be hidden.
+- **Command palette** (Ctrl+P or the `>_` button): every action by name, ignoring accents and case, with the most recent first. Ctrl+O still opens notes.
+- **Bookmarks:** "Add to bookmarks" in the note or tree menu, and a Bookmarks tab in the left panel. They follow the note on rename or move and are shared between devices (they go in the encrypted settings).
+- **Preview** of a note when hovering over a `[[link]]` in reading mode.
+- **Settings** inside the app (gear button or ⋯ menu): dashboard, daily folder and template, open today's note on start, templates and attachments folders, minutes until lock, days between backup reminders, and theme (automatic, light or dark). Online they are stored encrypted in the vault and apply on every device; locally, in a JSON file inside the folder. `config.js` stays as the defaults.
+- A security document: what Snowlog protects and from whom, what stays on the device, the CSP, the review's findings and the accepted risks (now `docs/THREAT_MODEL.md`).
+- The online version works offline: the site is stored in the browser (service worker) and opens without a network; notes already downloaded can be read and edited, and new ones created. What is written stays encrypted on this device and is uploaded when the network is back, with the usual conflict detection. The status bar says so: "Offline · 2 changes to upload". Renaming, deleting, moving or attaching while offline says a network is needed (except renaming a note created offline).
+- It can be installed as an app from the browser (web manifest).
+- An encrypted local cache (IndexedDB) of the online version's notes and attachments: only what changed is downloaded. With 1,000 notes, entering takes under half a second and search is ready in under 1 s; on a new device, the first time everything is downloaded in the background (10 at a time) while you can already work. "Sign out" and "Forget this device" delete it.
+- Search says how many notes match even when it only shows the first 200, and how many it has decrypted while it prepares the index.
+- Backups: "Encrypted backup" downloads a `.snowlog` file with every note and attachment encrypted, which opens with the passphrase or the recovery code, without GitHub. Importing it brings it into a separate folder or downloads it as an unencrypted `.zip`; it also works in the portable version, offline. Locally, the backup is the usual `.zip`.
+- A reminder when 7 days pass without a backup (`backupReminderDays` in the configuration), with "Back up now" or "Tomorrow".
+- Locking also clears the notices on screen.
+- "Passphrase and recovery…" in the ⋯ menu: change the passphrase (asks for the current one) and generate a new recovery code (the previous one stops working). Only the key is re-wrapped; notes are not re-encrypted. Changing it applies the configured PBKDF2 iterations if they are more.
+- Version history of each note (menu ⋯ › "Version history…"): a list of versions with dates, a preview, how many lines differ from the current one, and a button to restore (restoring deletes nothing from the history). Online they are read, encrypted, from the repository's commits; locally a copy is kept in `.history/` at most every 10 minutes (the last 50 per note).
+- No change is lost between devices: if the same note changed elsewhere since you opened it, saving keeps your version and the other goes to a copy "Note (other device YYYY-MM-DD HHMM)", with a notice that opens it. If it was deleted on another device, saving it restores it. In the portable version the same happens when the folder is synced (OneDrive, Dropbox…) and the file changed outside.
+- Attachments: paste or drop images and PDFs into the editor (or "Attach an image or PDF…" in the menu). They are saved in the attachments folder and inserted as `![[name]]`; in reading mode the image shows (`![[photo.png|300]]` sets the width) or a PDF card to open it. Online they are encrypted (`a/<id>.enc`); in the portable version they are normal files. At most 20 MB per attachment.
+- Attachments appear in the tree (open, insert into the note, delete), move with their folder and go into the `.zip` backup.
+- Search across all notes (Ctrl+Shift+F): ignoring accents and case, with each match's snippet highlighted; supports `"phrase"`, `-word`, `tag:#tag` and `path:folder`. Clicking a result opens the note with the text selected.
+- A tags panel with the number of notes for each; clicking a tag searches its notes.
+- A left panel with tabs: Files, Search and Tags.
+- Editor: Markdown highlighting while typing (color only, the text does not move); Enter continues lists, tasks and quotes, and on an empty item leaves the list; Tab and Shift+Tab indent.
+- Editor: typing `[[` suggests notes; if the note does not exist, it can be created from there.
+- Shortcuts: Ctrl+B (bold), Ctrl+I (italic), Ctrl+K (link) and Ctrl+Enter (tick or create a task), with normal undo.
+- Renaming or moving a note or folder updates the `[[links]]` that point to it in every note (a single commit online).
+- Reading mode: the frontmatter shows as properties (with tags, lists and checkboxes).
+- Markdown tables with alignment, empty cells and escaped `\|`.
+- Callouts (`> [!info]`, `[!warning]`, `[!danger]`…) with colors, aliases and a foldable version (`+`/`-`).
+- `#tag` tags in the text and in tasks.
+- Project instructions for Claude, a context document, a Definition of Done and commands in `.claude/commands/`.
+- A CI check of commit authorship.
+- Sign-in with GitHub enabled: the GitHub App's client ID and the Worker URL in the configuration.
+- Daily note: a **Today** button (Ctrl+D); it opens by itself on entry and is created from the daily template.
+- Templates with `{{title}}`, `{{date:FORMAT}}` and `{{time}}`: "Insert template" and "New note from template".
+- Dataview-style queries in ```` ```dataview ```` blocks: `TASK`, `LIST` and `TABLE` with `FROM`, `WHERE`, `GROUP BY`, `SORT` and `LIMIT`.
+- Tasks ticked with a click in reading mode and from a query's results; the change is saved in its note.
+- A right panel with a monthly calendar (dots on the days with a note) and backlinks.
+- A dashboard with `cssclasses: dashboard`: top-level lists show as columns.
+- "Set up my space": creates the dashboard, the daily folder, projects, templates (daily note, note, project, meeting, knowledge pill and procedure) and an archive.
+- Import a folder of Markdown (for example, an existing vault): it is encrypted in the browser and uploaded in batches.
+- **Portable version** `snowlog-portable.html`: a single file that opens with a double click in Chrome or Edge, with nothing to install and no internet. Notes are `.md` files in a folder on the computer; the CSP forbids any connection.
+- Local mode in the online version too: "Use notes on this computer, without GitHub".
+- Export a copy (`.zip`) of every note, in both versions.
+- What is deleted in local mode goes to `.trash` inside the folder.
+- GitHub Actions builds the portable version and publishes it at `https://snowlog.bendi.dev/snowlog-portable.html`.
+- "Load examples": an example project (Recipe website) with 4 stories, a board, a meeting, a knowledge pill and linked daily notes, to see how to organize.
 
-### Cambiado
-- Seguridad: la CSP solo permite conectar con GitHub y con el Worker configurado (antes, cualquier `*.workers.dev`); Trusted Types obligatorios para todo el HTML que se pinta; Snowlog no arranca dentro de un iframe; al bloquear se vacían también el título de la pestaña, las migas y los diálogos abiertos; las carpetas abiertas se recuerdan cifradas.
-- Guardados agrupados: en online se guarda tras 4 s sin escribir (antes 2,5 s) y como mucho cada 30 s escribiendo sin parar, así hay menos commits y no se pierde nada; al cambiar de pestaña o de app se guarda enseguida. En local, 1 s.
-- Snowlog se publica en `https://snowlog.bendi.dev`; el Worker solo acepta ese origen.
-- En las tareas hechas solo se tacha el texto, no la casilla ni el espacio.
-- El esquema y el contador de palabras ignoran el frontmatter.
-- Las listas se anidan según la sangría real (2 o 4 espacios, o tabuladores).
-- Los enlaces y etiquetas escritos dentro de `código` ya no cuentan como enlaces ni etiquetas.
+### Changed
+- Security: the CSP only allows connecting to GitHub and the configured Worker (before, any `*.workers.dev`); Trusted Types are required for all rendered HTML; Snowlog does not start inside an iframe; locking also clears the tab title, the breadcrumbs and open dialogs; open folders are remembered encrypted.
+- Grouped saves: online, a save happens after 4 s without typing (before 2.5 s) and at most every 30 s while typing non-stop, so there are fewer commits and nothing is lost; switching tab or app saves at once. Locally, 1 s.
+- Snowlog is published at `https://snowlog.bendi.dev`; the Worker only accepts that origin.
+- In done tasks only the text is struck through, not the checkbox or the space.
+- The outline and the word count ignore the frontmatter.
+- Lists nest by the real indentation (2 or 4 spaces, or tabs).
+- Links and tags written inside `code` no longer count as links or tags.
 
-### Corregido
-- El menú ⋯ se abre debajo de su botón sin taparlo (antes, con el menú abierto no se podía volver a pulsar).
-- Tableros en el móvil: una columna por pantalla, con desplazamiento que se ajusta a cada columna.
-- El menú ⋯ ya no se sale de la pantalla (tiene su propio desplazamiento) y se cierra al usar un atajo de teclado.
-- Con muchas notas, el explorador ya no estira la página entera: cada panel tiene su propio desplazamiento.
-- La pantalla de acceso ya no muestra el texto «null» cuando el login con GitHub está activo.
+### Fixed
+- The ⋯ menu opens below its button without covering it (before, with the menu open it could not be clicked again).
+- Boards on a phone: one column per screen, with scrolling that snaps to each column.
+- The ⋯ menu no longer goes off screen (it has its own scrolling) and closes when a keyboard shortcut is used.
+- With many notes, the tree no longer stretches the whole page: each panel scrolls on its own.
+- The sign-in screen no longer shows the text "null" when sign-in with GitHub is enabled.
 
 ## [0.1.0] - 2026-11-09
 
-### Añadido
-- Cifrado de extremo a extremo con WebCrypto: clave de datos envuelta con frase de paso y código de recuperación.
-- Bóveda en un repo privado de GitHub: índice cifrado y una nota cifrada por fichero con nombre aleatorio.
-- Un commit atómico por guardado, con reintento ante escrituras simultáneas.
-- Login con token personal o con GitHub (GitHub App y Cloudflare Worker), con renovación automática.
-- Interfaz al estilo Obsidian: ribbon, explorador con carpetas, editor, lectura, selector rápido, esquema y barra de estado.
-- Bloqueo automático tras 10 minutos sin actividad.
-- Tests con `node --test`, publicación en GitHub Pages con GitHub Actions y guía de puesta en marcha.
+### Added
+- End-to-end encryption with WebCrypto: a data key wrapped with the passphrase and a recovery code.
+- A vault in a private GitHub repository: an encrypted index and one encrypted note per file, with a random name.
+- One atomic commit per save, with a retry on simultaneous writes.
+- Sign-in with a personal token or with GitHub (GitHub App and Cloudflare Worker), with automatic refresh.
+- An interface with a ribbon, a tree with folders, an editor, reading mode, a quick switcher, an outline and a status bar.
+- Automatic lock after 10 minutes of inactivity.
+- Tests with `node --test`, publishing to GitHub Pages with GitHub Actions, and a setup guide.
