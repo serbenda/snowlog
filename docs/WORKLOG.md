@@ -43,7 +43,9 @@
   loses nothing); keeping Spanish with an ADR (the template's records, commands and PR template are English).
 - **Files:** public/*, agent/*, worker/*, desktop/*, scripts/build-portable.mjs, scripts/update-sketch.mjs, tests/*,
   package.json, README.md, CHANGELOG.md, SECURITY.md, .gitignore, .claude/launch.json, docs/*
-- **Commits:** 0146141 (EPIPE fix), 307a62d (code, interface and tests), and the docs commit that adds this entry.
+- **Commits:** 0146141 (EPIPE fix), 307a62d (code, interface and tests), f37566d and 2921d80 (docs), 014aacd
+  (guardrails, applied, committed and pushed by the agent with `GUARDRAILS_OWNER_CHANGE=1` at the owner's explicit
+  request in chat for this patch), and this record's update.
 - **Tested:** `npm test` 163 pass (new: legacy names, legacy settings file, Spanish query words); `npm run test:e2e`
   5 pass in Chrome; the portable build opened in Chrome with the starter space and the examples loaded, checking that
   the tree, the note menu and the command palette show no Spanish text and the console has no errors. On the
@@ -56,7 +58,7 @@
     `test.yml` and its authorship check removed), Dependabot with `cargo`, `AGENTS.md` (template plus Snowlog's
     security rules), `CLAUDE.md`, `setup-repo.sh`, CODEOWNERS, `.github/OWNER`, the dev container, the template's
     skills, and `pages.yml` and `desktop.yml` in English with actions pinned to a SHA. The old Spanish commands removed.
-- **Pending:** the guardrails commit (the owner's, or the agent's only with his explicit approval); GitHub Actions billing; SAST and OSV run
+- **Pending:** the owner's review of the guardrail files on PR #6; GitHub Actions billing; SAST and OSV run
   for the first time once CI starts; PR #6's title and description in English.
 
 ## 2026-11-13 — Recorded afterwards: the work before the template (S0–S2)

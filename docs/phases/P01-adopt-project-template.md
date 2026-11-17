@@ -4,7 +4,7 @@
 - **Status:** ⏳ in progress
 - **Issue:** —
 - **Dates:** 2026-11-17 → —
-- **Owner approvals:** 2026-11-17 "I'd like both projects to use project-template"; 2026-11-17 "everything in English"; 2026-11-17 "continue" (Snowlog after sketch)
+- **Owner approvals:** 2026-11-17 "I'd like both projects to use project-template"; 2026-11-17 "everything in English"; 2026-11-17 "continue" (Snowlog after sketch); 2026-11-17 "yes, apply it yourself" (the agent applies, commits and pushes the guardrails patch)
 
 ## Goal
 Snowlog follows the current template (guardrails, CI jobs, documented way of working) and the whole repository,
@@ -36,8 +36,7 @@ the interface included, is in English, without breaking existing vaults.
 - [x] Rehearsed on a copy: `sync --apply`, shellcheck, `test-guard.sh`, `test-check-records.sh`,
   `test-githooks.sh`, actionlint (as in CI), `check-records.sh` on the PR range and `npm test` pass; the commit is
   refused without `GUARDRAILS_OWNER_CHANGE=1` and accepted with it.
-- [ ] The guardrails commit is on `development`, made by the owner (or by the agent only with the owner's explicit
-  per-action approval).
+- [x] The guardrails commit is on `development` (`014aacd`; applied by the agent at the owner's explicit request).
 - [ ] CI is green on the PR: Secrets, Authorship, Hook, Hook (macOS bash 3.2), SAST, Dependencies, Records, Tests.
 
 ## Plan

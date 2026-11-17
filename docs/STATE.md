@@ -15,7 +15,7 @@ Last updated: 2026-11-17
 
 ## Current work
 - [P01](phases/P01-adopt-project-template.md): code, interface and docs in English, with existing vaults kept working;
-  the template's docs filled in; the guardrails patch rehearsed on a copy. Next: the owner's guardrails commit.
+  the template's docs filled in; the guardrails committed (`014aacd`). Waiting for CI and the owner's review on PR #6.
 
 ## Recently done
 - Agent and script access: an MCP server over a clone of the notes repository ([AGENT_ACCESS.md](AGENT_ACCESS.md)).
@@ -24,7 +24,7 @@ Last updated: 2026-11-17
 - The day-to-day features, the portable file and the earlier three-phase plan (PR #4). Details in the CHANGELOG.
 
 ## Next
-1. Owner: fix GitHub Actions billing (jobs are not starting), apply the guardrails patch, then review and merge PR #6.
+1. Owner: fix GitHub Actions billing (jobs are not starting), then review and merge PR #6.
 2. Owner: run `./scripts/setup-repo.sh` so the new checks are required on `main`.
 3. P02: an independent security review ([R-001](RISKS.md)) and tests on real Firefox, Safari, phones, macOS and
    Windows ([R-004](RISKS.md)).
