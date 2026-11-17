@@ -1,0 +1,350 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, development]
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [development]
+
+# Minimal permissions by default
+permissions:
+  contents: read
+
+# A new push to a PR cancels its older run. Pushes to development are never cancelled: each run checks only
+# its own pushed range, so a cancelled one would leave that range unchecked.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'pr' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  secrets:
+    name: Secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Gitleaks pinned to a release and checked against its published SHA-256 (the same as the hook tests).
+      - name: Install Gitleaks 8.30.1
+        run: |
+          curl -fsSLo gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks && sudo install -m 0755 gitleaks /usr/local/bin/gitleaks && rm gitleaks.tgz gitleaks
+
+      # Every commit of the PR (or of the push; the whole history on a new branch), as the git hooks scan
+      # them: gitleaks:allow is ignored (false positives go in .gitleaksignore, which only the owner edits),
+      # and the text of the changes is scanned too, so binary files, "-diff" files and the paths gitleaks
+      # skips by default (lockfiles, node_modules, images…) are covered, with the commit messages, the PR's
+      # title, description and branch name. A false positive goes in .gitleaks.toml ([[allowlists]], with its
+      # reason). The SHAs and texts go through environment variables, never interpolated into the script.
+      - name: Secrets in the commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          REF_NAME: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r v; do unset "$v"; done < <(env | sed -n 's/^\(GITLEAKS_[A-Za-z0-9_]*\)=.*/\1/p')
+          if [ -n "$BASE" ]; then range="$BASE..$HEAD"
+          elif [ -n "$BEFORE" ] && ! printf '%s' "$BEFORE" | grep -Eq '^0+$'; then range="$BEFORE..$AFTER"
+          else range="HEAD"; fi
+          opts=(--redact --no-banner --ignore-gitleaks-allow)
+          if [ -f .gitleaks.toml ]; then opts+=(--config .gitleaks.toml); fi
+          gitleaks git "${opts[@]}" --log-opts="$range" .
+          { printf '%s\n%s\n%s\n' "$REF_NAME" "$PR_TITLE" "$PR_BODY"
+            git -c core.attributesFile=/dev/null log --cc --text --no-color --no-ext-diff --no-textconv \
+              --format='commit %H%n%B' "$range"; } | gitleaks stdin "${opts[@]}"
+
+  authorship:
+    name: Authorship
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # PR texts go through environment variables, never interpolated into the script (prevents injection)
+      - name: No AI signatures and correct author
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The same pattern as .githooks/commit-msg: trailers and tool footers where they start a line.
+          # grep reads to the end (never -q), so a long text can't make the writer fail and hide a match.
+          pattern='^[[:space:]#>*_-]*((co-authored|co-developed|assisted|generated)-by:|(signed-off|authored)-by:[[:space:]]*\[?(claude|cursor|copilot|codex|gemini|aider|chatgpt|openai|anthropic|devin|windsurf|gpt)|claude-session:|(generated|made|created|written|authored|assisted)[*_[:space:]]+(with|by|using|via|in)[*_[:space:]]+(the[[:space:]]+)?\[?[*_]*((github|microsoft)[[:space:]]+)?(claude|cursor|copilot|codex|gemini|aider|chatgpt|openai|anthropic|devin|windsurf|gpt)(-[[:alnum:].]*[0-9][[:alnum:].]*|-(code|cli|agent))?([^[:alnum:]-]|$)|(\[[^]]*\]\()?<?https?://(claude\.ai/code|claude\.com/claude-code)/?[)>]*[[:space:].]*$)|claude\.ai/code/session|noreply@anthropic|🤖'
+          export LC_ALL=C
+          failed=0
+          if printf '%s\n%s' "$PR_TITLE" "$PR_BODY" | grep -Ei "$pattern" >/dev/null; then
+            echo "::error::The PR title or description contains AI signatures."; failed=1
+          fi
+          # Author and committer are text anyone with write access can set, so this keeps out mistakes and
+          # foreign commits; the owner's review (ruleset + CODEOWNERS) is what authenticates. Accepted:
+          #   - the owner's commits (committer the owner, or GitHub for commits made in the web UI);
+          #   - commits GitHub made and signed (verified): its merges of PRs, authored with the owner's noreply
+          #     address, and Dependabot's updates, also when they reach main inside a release PR.
+          verified() { [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$1" --jq .commit.verification.verified 2>/dev/null)" = "true" ]; }
+          # The owner (.github/OWNER) as on the PR's base branch, so a PR can't name a new owner for itself. A base
+          # whose OWNER names someone else than this repository's owner is the template's, before setup-repo's
+          # first commit reached it (or an organisation's repo): the PR's own file is read then.
+          owner_file() { git show "$1:.github/OWNER" 2>/dev/null || true; }   # missing there: empty, not an exit (bash -e)
+          field() { printf '%s\n' "$1" | sed -n "s/^$2=//p" | head -n 1 | tr '[:upper:]' '[:lower:]'; }
+          owner="$(owner_file "$BASE")"
+          if [ "$(field "$owner" login)" != "$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" ]; then
+            owner="$(owner_file "$HEAD")"
+          fi
+          o_email="$(field "$owner" email)" o_noreply="$(field "$owner" noreply)" o_login="$(field "$owner" login)"
+          if [ -z "$o_email" ] || [ -z "$o_login" ]; then
+            echo "::error file=.github/OWNER::.github/OWNER is missing or has no email or login: the authors can't be checked."; exit 1
+          fi
+          shas="$(git rev-list "$BASE..$HEAD")" || { echo "::error::cannot read the PR's commits (fetch-depth: 0)."; exit 1; }
+          for sha in $shas; do
+            # One field per call: an email can contain any separator.
+            email="$(git log -1 --format=%ae "$sha" | tr '[:upper:]' '[:lower:]')"
+            committer="$(git log -1 --format=%ce "$sha" | tr '[:upper:]' '[:lower:]')"
+            if git log -1 --format=%B "$sha" | grep -Ei "$pattern" >/dev/null; then
+              echo "::error::Commit $sha contains AI signatures in the message."; failed=1
+            fi
+            case "$email" in
+              "$o_email")
+                if [ "$committer" != "$o_email" ] && [ "$committer" != "noreply@github.com" ]; then
+                  echo "::error::Commit $sha has committer '$committer'."; failed=1
+                fi ;;
+              "${o_noreply:-$o_login@users.noreply.github.com}"|"$o_login@users.noreply.github.com"|"49699333+dependabot[bot]@users.noreply.github.com")
+                if [ "$committer" = "noreply@github.com" ] && verified "$sha"; then
+                  echo "Commit $sha by $email: made and signed by GitHub, accepted."
+                else
+                  echo "::error::Commit $sha has author '$email' but was not made and signed by GitHub."; failed=1
+                fi ;;
+              *) echo "::error::Commit $sha has author '$email' (must be $o_email, from .github/OWNER)."; failed=1 ;;
+            esac
+          done
+          [ "$failed" -eq 0 ] && echo "✓ Correct authorship and no AI signatures."
+          exit "$failed"
+
+  hook:
+    name: Hook
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Shell scripts
+        run: shellcheck --severity=error scripts/*.sh .claude/hooks/*.sh .githooks/*
+
+      # Gitleaks pinned to a release and checked against its published SHA-256, before the tests: the git hook
+      # tests run every case with it, and setup-repo (test-scripts) pushes through the pre-push hook, which needs it.
+      - name: Install Gitleaks 8.30.1
+        run: |
+          curl -fsSLo gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks && sudo install -m 0755 gitleaks /usr/local/bin/gitleaks && rm gitleaks.tgz gitleaks
+
+      # Each suite's output is kept (pipefail is on in Actions' bash) for the README count check at the end.
+      - name: Security hook tests
+        run: bash scripts/test-guard.sh | tee "$RUNNER_TEMP/guard.out"
+
+      - name: Records check tests
+        run: bash scripts/test-check-records.sh | tee "$RUNNER_TEMP/records.out"
+
+      # setup-repo and sync are the template's tools, tested on a copy of the template as it is: in a project made
+      # from it (.claude/TEMPLATE_VERSION) the copy is the project, already set up, so they are skipped there.
+      - name: setup-repo and sync-from-template tests
+        run: |
+          if [ -f .claude/TEMPLATE_VERSION ]; then echo "A project made from the template: skipped."; exit 0; fi
+          bash scripts/test-scripts.sh | tee "$RUNNER_TEMP/scripts.out"
+
+      # actionlint pinned to a release and checked against its published SHA-256. Its shellcheck and pyflakes
+      # integrations are off: the scripts are already checked above, and this job must not depend on the
+      # runner's preinstalled versions.
+      - name: Workflow lint (actionlint 1.7.12)
+        run: |
+          curl -fsSLo actionlint.tgz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tgz" | sha256sum -c -
+          tar -xzf actionlint.tgz actionlint && ./actionlint -shellcheck= -pyflakes= && rm actionlint.tgz actionlint
+
+      - name: Git hook tests
+        run: bash scripts/test-githooks.sh | tee "$RUNNER_TEMP/githooks.out"
+
+      # The README states how many cases each suite has (badge and "What's verified"): checked against the real
+      # counts, so the numbers can't drift. Only in the template: a project's README is its own.
+      - name: README test counts
+        run: |
+          if [ -f .claude/TEMPLATE_VERSION ]; then echo "A project made from the template: skipped."; exit 0; fi
+          n() { grep -c '^  ok ' "$RUNNER_TEMP/$1.out"; }
+          g="$(n guard)" h="$(n githooks)" r="$(n records)" s="$(n scripts)"
+          want="guard hook ($g cases), git hooks ($h), records check ($r) and \`setup-repo\`/\`sync\` ($s,"
+          ok=1
+          grep -qF "$want" README.md || { echo "::error file=README.md::the README's test counts should read: $want"; ok=0; }
+          grep -qF "guard%20hook-$g%20tests" README.md || { echo "::error file=README.md::the guard badge should say $g tests"; ok=0; }
+          [ "$ok" = 1 ] && echo "✓ README counts match: guard $g, git hooks $h, records $r, scripts $s."
+          [ "$ok" = 1 ]
+
+  # The same suites with macOS's /bin/bash 3.2 (the README's claim, and the shell the hooks run under on the
+  # owner's Mac): the guard, the records check, the setup/sync scripts and the git hooks.
+  hook-macos:
+    name: Hook (macOS bash 3.2)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      # The same pinned Gitleaks (macOS arm64 build): setup-repo pushes through the pre-push hook, which needs it.
+      - name: Install Gitleaks 8.30.1
+        run: |
+          curl -fsSLo gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_arm64.tar.gz
+          echo "b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5  gitleaks.tgz" | shasum -a 256 -c -
+          tar -xzf gitleaks.tgz gitleaks && sudo install -m 0755 gitleaks /usr/local/bin/gitleaks && rm gitleaks.tgz gitleaks
+
+      - name: Suites with /bin/bash 3.2
+        run: |
+          /bin/bash --version | head -1
+          /bin/bash scripts/test-guard.sh
+          /bin/bash scripts/test-check-records.sh
+          if [ ! -f .claude/TEMPLATE_VERSION ]; then /bin/bash scripts/test-scripts.sh; fi
+          /bin/bash scripts/test-githooks.sh
+
+  sast:
+    name: SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Semgrep works for any language: injection, unsafe deserialisation, weak crypto, debug flags,
+      # insecure CI and Dependabot settings… Fails on any finding. Third-party skills are excluded.
+      # Image pinned by tag and digest in .scanners/semgrep/Dockerfile (Dependabot keeps it current).
+      # A false positive is silenced in the code with `# nosemgrep: <rule-id>` and the reason, never by
+      # removing this job.
+      - name: Static analysis (Semgrep)
+        run: |
+          image="$(sed -n 's/^FROM //p' .scanners/semgrep/Dockerfile)"
+          case "$image" in *@sha256:*) ;; *) echo "::error::the Semgrep image must be pinned by digest"; exit 1 ;; esac
+          docker run --rm -v "$PWD:/src:ro" -w /src "$image" \
+            semgrep scan --config p/default --error --metrics=off --exclude .claude/skills .
+
+  dependencies:
+    name: Dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # OSV-Scanner reads the lockfiles and manifests of any ecosystem (npm, pip, go, cargo, pub…)
+      # and fails if a dependency has a known vulnerability. Passes while there are none yet.
+      # Image pinned by tag and digest in .scanners/osv-scanner/Dockerfile (Dependabot keeps it current).
+      - name: Known vulnerabilities (OSV-Scanner)
+        run: |
+          image="$(sed -n 's/^FROM //p' .scanners/osv-scanner/Dockerfile)"
+          case "$image" in *@sha256:*) ;; *) echo "::error::the OSV-Scanner image must be pinned by digest"; exit 1 ;; esac
+          docker run --rm -v "$PWD:/src:ro" "$image" \
+            scan source --recursive --allow-no-lockfiles --x-exclude "g:**/.claude/skills/**" /src
+
+  records:
+    name: Records
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read   # which PR a pushed merge belongs to (the Dependabot exemption)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # STATE size always; on PRs, also "code changes need a worklog entry".
+      # The SHAs go through environment variables, never interpolated into the script.
+      # On a push to development, the pushed range is checked too (code pushed straight there needs its entry).
+      - name: STATE size and worklog entry
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          SENDER: ${{ github.event.sender.login }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The Dependabot exemption: in a PR, Dependabot opened it and made its last push (SENDER: anyone with
+          # write access can push to its branch); on a push to development, GitHub says the pushed tip is its
+          # merge of a PR Dependabot opened (whoever pressed the button is the sender, so the PR is asked for),
+          # and the range is only Dependabot's commits and that merge (check-records checks that). Either way
+          # GitHub must have verified every commit, not just seen a Dependabot author line.
+          if [ -n "$BASE" ]; then
+            [ "$SENDER" = "dependabot[bot]" ] || PR_AUTHOR=""
+            range="$BASE..$HEAD"
+          else
+            PR_AUTHOR=""; range="$BEFORE..$AFTER"
+            if printf '%s' "$AFTER" | grep -Eq '^[0-9a-f]{40}$' && ! printf '%s' "$BEFORE" | grep -Eq '^0*$'; then
+              opener="$(gh api "repos/$GITHUB_REPOSITORY/commits/$AFTER/pulls" \
+                --jq "map(select(.merge_commit_sha == \"$AFTER\")) | .[0].user.login" 2>/dev/null || true)"
+              [ "$opener" = "dependabot[bot]" ] && PR_AUTHOR="dependabot[bot]"
+            fi
+          fi
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            shas="$(git rev-list "$range")" || shas="unreadable"
+            for sha in $shas; do
+              if [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha" --jq .commit.verification.verified 2>/dev/null)" != "true" ]; then
+                echo "Commit $sha is not verified by GitHub: the worklog rule applies."; PR_AUTHOR=""; break
+              fi
+            done
+          fi
+          export PR_AUTHOR
+          if [ -n "$BASE" ]; then bash scripts/check-records.sh "$BASE" "$HEAD"
+          elif [ -n "$BEFORE" ] && ! printf '%s' "$BEFORE" | grep -Eq '^0+$'; then bash scripts/check-records.sh "$BEFORE" "$AFTER"
+          else bash scripts/check-records.sh; fi
+
+  # The project's own checks: the same commands as "Verify" in docs/SETUP.md.
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "lts/*"
+
+      - name: Unit tests
+        run: npm test
+
+      # Chrome is preinstalled on GitHub's runners; the e2e tests have no dependencies.
+      - name: Browser walkthroughs in Chrome
+        run: npm run test:e2e
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+
+      - name: Portable version
+        run: node scripts/build-portable.mjs
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: snowlog-portable
+          path: dist/snowlog-portable.html
+          if-no-files-found: error
+          retention-days: 30

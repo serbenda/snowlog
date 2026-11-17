@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# Git hook (for any tool or person), run before every push. It does not depend on how the push was typed,
+# so it holds where the Claude guard's text matching can't (aliases, scripts, other tools):
+#   1. Nothing is pushed to main or master, and they are never deleted: main only changes through a PR.
+#      (Only the owner, with the switch, may create main in a new repository whose remote has no branch yet.)
+#   2. Only branches and (by the owner) tags are pushed; only work branches (feat/, fix/…, hotfix/,
+#      dependabot/, release/) are deleted on the remote.
+#   3. No force pushes: an update that would drop commits from the remote branch is refused.
+#   4. Every commit that leaves is the owner's (author and committer) and has no AI signature. cherry-pick,
+#      revert, rebase and git plumbing make commits without commit-msg, so they are checked here.
+#   5. Guardrail files change only with the owner's switch, also in commits that skipped pre-commit. A
+#      merge's own changes are what differs from git's own merge of its parents (git merge-tree), plus what
+#      differs from every parent (a merge driver in the local config would make merge-tree agree with any
+#      result): a merge can't hide a change by taking a file from one parent.
+#   6. The commits that leave are scanned for secrets (gitleaks, ignoring gitleaks:allow, binary files as
+#      text; their messages and the branch names too) and for new scanner suppressions (only the owner's,
+#      with the switch), as pre-commit does.
+# "Leaves" means: not on the remote's branches or tags yet. That is asked to the remote itself (git
+# ls-remote), never read from local remote-tracking refs, which anything can rewrite; tips this clone hasn't
+# got are fetched first (a shallow clone stops at the commits it was given, which those tips reach). Other
+# refs (refs/pull/*: anyone's PR) don't count. Commits already on a branch or tag were pushed through this
+# hook, merged by GitHub after review, or are Dependabot's.
+# The GitHub ruleset enforces 1 and 3 on the server; this stops it before anything leaves the machine.
+# Enabled with: git config core.hooksPath .githooks   (scripts/setup-repo.sh does it)
+set -euo pipefail
+export GIT_NO_REPLACE_OBJECTS=1   # git replace would show other commits' data instead of what is sent
+# Gitleaks reads its config from GITLEAKS_* variables before the repository's: they are not the owner's.
+while IFS= read -r v; do unset "$v"; done < <(env | sed -n 's/^\(GITLEAKS_[A-Za-z0-9_]*\)=.*/\1/p')
+
+url="${2:-${1:-origin}}"
+# The owner's identity, from .github/OWNER as last committed (the staged copy only before the first commit):
+# a changed copy on disk doesn't change who the owner is.
+owner_field() { { git show HEAD:.github/OWNER 2>/dev/null || git show :.github/OWNER 2>/dev/null; } |
+  sed -n "s/^$1=//p" | head -n 1; }
+owner="$(owner_field email | tr '[:upper:]' '[:lower:]')"
+[[ -n "$owner" ]] || { echo "pre-push: .github/OWNER has no email, so the commits' author can't be checked." >&2; exit 1; }
+switch="${GUARDRAILS_OWNER_CHANGE:-}"
+# The same signature pattern as commit-msg and CI.
+pattern='^[[:space:]#>*_-]*((co-authored|co-developed|assisted|generated)-by:|(signed-off|authored)-by:[[:space:]]*\[?(claude|cursor|copilot|codex|gemini|aider|chatgpt|openai|anthropic|devin|windsurf|gpt)|claude-session:|(generated|made|created|written|authored|assisted)[*_[:space:]]+(with|by|using|via|in)[*_[:space:]]+(the[[:space:]]+)?\[?[*_]*((github|microsoft)[[:space:]]+)?(claude|cursor|copilot|codex|gemini|aider|chatgpt|openai|anthropic|devin|windsurf|gpt)(-[[:alnum:].]*[0-9][[:alnum:].]*|-(code|cli|agent))?([^[:alnum:]-]|$)|(\[[^]]*\]\()?<?https?://(claude\.ai/code|claude\.com/claude-code)/?[)>]*[[:space:].]*$)|claude\.ai/code/session|noreply@anthropic|🤖'
+# The same guardrail paths as pre-commit.
+protected='^(\.claude|\.mcp\.json|\.githooks|\.github|\.devcontainer|\.devcontainer\.json|\.semgrep|\.scanners|scripts/(setup-repo|sync-from-template|check-records|test-guard|test-check-records|test-githooks|test-scripts)\.sh)($|/)|(^|/)\.husky($|/)|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md|\.vscode/(settings|tasks|launch)\.json|[^/]*\.code-workspace|\.envrc|\.pre-commit-config\.yaml|\.gitattributes|\.gitleaks\.toml|\.gitleaksignore|\.semgrepignore|osv-scanner\.toml)$'
+work='^refs/heads/(feat|fix|docs|chore|refactor|test|ci|perf|build|style|revert|hotfix|dependabot|release)/'
+zero='^0+$'
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+# grep reads to the end (never -q): with pipefail an early exit would make the writer fail and hide a match.
+matches() { LC_ALL=C grep -Ei "$1" >/dev/null; }
+
+if ! command -v gitleaks >/dev/null 2>&1 || ! gitleaks stdin --help >/dev/null 2>&1; then
+  echo "pre-push: gitleaks (8.19 or newer) is not installed, so the push can't be checked for secrets." >&2
+  exit 1
+fi
+
+known=""    # "^<sha>" lines: the commits the remote's branches and tags have
+heads=0     # how many branches the remote has
+asked=0
+ask_remote() {
+  (( asked )) && return 0
+  asked=1
+  local refs tips missing
+  refs="$(git ls-remote --heads --tags "$url" </dev/null 2>/dev/null)" ||
+    { echo "pre-push: could not ask $url which commits it has, so the push can't be checked." >&2; exit 1; }
+  heads="$(printf '%s\n' "$refs" | awk '$2 ~ /^refs\/heads\// { n++ } END { print n + 0 }')"
+  tips="$(printf '%s\n' "$refs" | awk 'NF { print $1 }' | sort -u)"
+  [[ -z "$tips" ]] && return 0
+  missing="$(printf '%s\n' "$tips" | git cat-file --batch-check='%(objectname) %(objecttype)' | awk '$2 == "missing" { print $1 }')"
+  if [[ -n "$missing" ]]; then
+    # shellcheck disable=SC2086
+    git fetch -q --no-tags --no-write-fetch-head "$url" $missing </dev/null >/dev/null 2>&1 ||
+      { echo "pre-push: $url has commits this clone hasn't got and they couldn't be fetched: git fetch, then push again." >&2; exit 1; }
+  fi
+  known="$(printf '%s\n' "$tips" | git cat-file --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" { print "^" $1 }')"
+  return 0
+}
+
+own_files() {  # own_files <commit>: the files it changes itself, NUL-separated
+  local c="$1" from out rc
+  set -- $(git rev-list --parents -n 1 "$c"); shift
+  case $# in
+    0) from="$(git hash-object -t tree /dev/null)" ;;
+    1) from="$1" ;;
+    2) from="$1"
+       out="$(git merge-tree --write-tree --no-messages "$1" "$2" 2>/dev/null)" && rc=0 || rc=$?
+       out="$(printf '%s\n' "$out" | head -n 1)"
+       if (( rc <= 1 )) && [[ "$out" =~ ^[0-9a-f]{40,64}$ ]]; then from="$out"; fi ;;
+    *) from="$1" ;;   # an octopus merge: everything that differs from the first parent
+  esac
+  git -c core.quotePath=false diff-tree -r --no-renames --name-only -z "$from" "$c"
+  if (( $# >= 2 )); then   # and what differs from every parent
+    local p list
+    list="$(git -c core.quotePath=false diff-tree -r --no-renames --name-only "$1" "$c" | LC_ALL=C sort)"
+    shift
+    for p in "$@"; do
+      list="$(comm -12 <(printf '%s\n' "$list") <(git -c core.quotePath=false diff-tree -r --no-renames --name-only "$p" "$c" | LC_ALL=C sort))"
+    done
+    [[ -n "$list" ]] && printf '%s\n' "$list" | tr '\n' '\0'
+  fi
+  return 0
+}
+
+sent=""   # every commit this push sends, for the scans at the end
+names=""  # the branch and tag names it writes, scanned for secrets too
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$(lower "$remote_ref")" in
+    refs/heads/main|refs/heads/master)
+      ask_remote
+      if ! [[ "$switch" == "1" && "$heads" == 0 && "$remote_sha" =~ $zero && ! "$local_sha" =~ $zero ]]; then
+        echo "pre-push: nothing is pushed to ${remote_ref#refs/heads/} (from $local_ref): it only changes through a PR." >&2
+        exit 1
+      fi ;;
+    refs/heads/*) ;;
+    refs/tags/*)
+      if [[ "$switch" != "1" ]]; then
+        echo "pre-push: tags ($remote_ref) are the owner's: releases are cut by the owner." >&2
+        exit 1
+      fi ;;
+    *) echo "pre-push: only branches are pushed, not $remote_ref." >&2; exit 1 ;;
+  esac
+  if [[ "$local_sha" =~ $zero ]]; then   # a deletion on the remote
+    if [[ "$remote_ref" =~ $work ]]; then continue; fi
+    [[ "$remote_ref" == refs/tags/* && "$switch" == "1" ]] && continue
+    echo "pre-push: $remote_ref is not deleted on the remote: only work branches (feat/, fix/…) are." >&2
+    exit 1
+  fi
+  if [[ ! "$remote_sha" =~ $zero ]] && ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+    echo "pre-push: $remote_ref would lose commits (a force push, or the remote has commits you haven't fetched)." >&2
+    echo "  Fetch, merge with git merge --no-ff and push again; history on the remote is never rewritten." >&2
+    exit 1
+  fi
+  names="$names$remote_ref"$'\n'
+  # The commits this push sends: reachable from what is pushed and from nothing the remote has.
+  ask_remote
+  if ! commits="$(printf '%s\n%s\n' "$local_sha" "$known" | sed '/^$/d' | git rev-list --stdin)"; then
+    echo "pre-push: could not list the commits of $local_ref, so the push can't be checked." >&2
+    exit 1
+  fi
+  guard=()
+  for c in $commits; do
+    short="$(git rev-parse --short "$c")"
+    author="$(lower "$(git log -1 --format=%ae "$c")")"
+    committer="$(lower "$(git log -1 --format=%ce "$c")")"
+    if [[ "$author" != "$owner" || "$committer" != "$owner" ]]; then
+      echo "pre-push: commit $short has author '$author' and committer '$committer' (both must be $owner)." >&2
+      exit 1
+    fi
+    if git log -1 --format=%B "$c" | matches "$pattern"; then
+      echo "pre-push: commit $short has an AI assistant signature in its message." >&2
+      exit 1
+    fi
+    while IFS= read -r -d '' f; do
+      [[ "$f" == .claude/launch.json ]] && continue
+      printf '%s' "$f" | matches "$protected" && guard+=("$short $f")
+    done < <(own_files "$c")
+    sent="$sent$c"$'\n'
+  done
+  if (( ${#guard[@]} > 0 )) && [[ "$switch" != "1" ]]; then
+    echo "pre-push: these commits change guardrail files, which only the owner pushes:" >&2
+    printf '    %s\n' "${guard[@]}" >&2
+    echo "  Owner: push them with  GUARDRAILS_OWNER_CHANGE=1 git push …   Agent: stop and tell the owner." >&2
+    exit 1
+  fi
+done
+
+[[ -z "$sent$names" ]] && exit 0
+# The changes of every commit sent, as text (binary files too, no external diff or textconv), with its message;
+# a merge shows only its own hunks (--cc).
+changes() {
+  [[ -n "$sent" ]] || return 0
+  printf '%s' "$sent" | git -c core.attributesFile=/dev/null log --stdin --no-walk=unsorted --cc --text --no-color \
+    --no-ext-diff --no-textconv --format='commit %H%n%B'
+}
+opts=(--redact --no-banner --log-level warn --ignore-gitleaks-allow)
+[[ -f .gitleaks.toml ]] && opts+=(--config .gitleaks.toml)   # hooks run at the top of the work tree
+if ! { printf '%s' "$names"; changes; } | gitleaks stdin "${opts[@]}"; then
+  echo "pre-push: possible secret in the commits being pushed (changes, messages or branch names). Remove it from the history; never skip the hook." >&2
+  exit 1
+fi
+# Added lines (outside prose files) with a Semgrep or OSV-Scanner suppression: the owner's, with the switch.
+if [[ "$switch" != "1" ]] && changes | tr '\0' ' ' | awk '
+    /^commit [0-9a-f]+$/ { skip = 1; h = 0; next }
+    /^diff --git / || /^diff --cc / { cc = /^diff --cc /; f = tolower($NF); skip = (f ~ /\.(md|txt|rst|adoc)$/); h = 1; next }
+    h { if (/^@@/) h = 0; next }
+    skip { next }
+    cc { if (substr($0, 1, 2) ~ /\+/) print; next }
+    /^\+/ { print }' | matches '((^|[^[:alnum:]_])nosem(grep)?([^[:alnum:]_]|$)|osv-scanner:ignore)'; then
+  echo "pre-push: a commit being pushed adds a scanner suppression (nosemgrep, osv-scanner:ignore…): only the owner adds them." >&2
+  exit 1
+fi
+exit 0

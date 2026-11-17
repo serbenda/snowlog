@@ -1,0 +1,34 @@
+{
+  "name": "${localWorkspaceFolderBasename}",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "vscode",
+  // Lets /status (and you) tell that the agent is running inside the container.
+  "containerEnv": {
+    "CLAUDE_DEVCONTAINER": "1",
+    // Claude Code keeps its login and preferences in ~/.claude.json, outside the volume below: pointed into the
+    // volume, so a rebuilt container doesn't ask you to log in again.
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+  },
+  // With an agent account (docs/SECURITY_GUIDE.md → Agent identity): its token, read from your Mac's
+  // environment when the container starts, so gh and git push act as the agent, not as you.
+  // SSH_AUTH_SOCK empty: the agent can't use your SSH agent (VS Code forwards it by default).
+  "remoteEnv": { "GH_TOKEN": "${localEnv:CLAUDE_AGENT_GH_TOKEN}", "SSH_AUTH_SOCK": "" },
+  // No Docker socket and no home folder: only the project is mounted. Claude Code's own settings and login
+  // live in a volume of their own, so they survive rebuilds without touching your Mac's ~/.claude.
+  // VS Code still forwards your git credentials and copies ~/.gitconfig by default: see docs/SECURITY_GUIDE.md → Dev container.
+  "mounts": [
+    "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume"
+  ],
+  // seccomp and AppArmor unconfined: Docker's default profiles don't let bubblewrap create the namespaces
+  // Claude Code's sandbox runs in; systempaths unconfined: Docker's masked /proc paths stop it mounting /proc.
+  // With "failIfUnavailable" a sandbox that can't start refuses every command. The trade-off (a wider kernel
+  // surface from inside the container) is in docs/SECURITY_GUIDE.md. No capabilities at all (--cap-drop=ALL):
+  // bubblewrap, git and npm need none, and root in the container, which unmasked /proc would let escape, can't
+  // be reached (USER vscode, no-new-privileges stops sudo). Keep all three.
+  "runArgs": ["--cap-drop=ALL", "--security-opt=no-new-privileges", "--security-opt=seccomp=unconfined", "--security-opt=apparmor=unconfined", "--security-opt=systempaths=unconfined"],
+  // The git hooks, as setup-repo.sh sets them on the Mac (the identity comes from the repo's own git config).
+  "postCreateCommand": "git config --global --add safe.directory \"${containerWorkspaceFolder}\" && git config core.hooksPath .githooks",
+  "customizations": {
+    "vscode": { "extensions": ["anthropic.claude-code"] }
+  }
+}

@@ -1,0 +1,33 @@
+# Who must approve changes. GitHub only enforces it when the main ruleset requires code-owner review, which
+# scripts/setup-repo.sh turns on when the agent has an account of its own (AGENT_BOT=<login>): then every
+# PR the agent opens needs the owner's approval, which the agent can't give (it can merge it once approved).
+# setup-repo.sh replaces @serbenda with the repository's owner in new projects.
+*                @serbenda
+# The guardrails, named explicitly so a later broader rule can never drop them.
+/.claude/        @serbenda
+/.githooks/      @serbenda
+/.github/        @serbenda
+/.devcontainer/  @serbenda
+/scripts/        @serbenda
+/.mcp.json       @serbenda
+/.devcontainer.json @serbenda
+/.semgrep/       @serbenda
+/.scanners/      @serbenda
+# The agent's instructions, in any folder: it must not rewrite its own rules.
+AGENTS.md        @serbenda
+CLAUDE.md        @serbenda
+CLAUDE.local.md  @serbenda
+# Scanner settings and .gitattributes in any folder: the scanners read them next to the files they scan.
+.gitleaks.toml   @serbenda
+.gitleaksignore  @serbenda
+.semgrepignore   @serbenda
+osv-scanner.toml @serbenda
+.gitattributes   @serbenda
+# Files editors and tools run on their own, in any folder: they could switch the git hooks off.
+.vscode/settings.json @serbenda
+.vscode/tasks.json    @serbenda
+.vscode/launch.json   @serbenda
+*.code-workspace      @serbenda
+.envrc                @serbenda
+.husky/               @serbenda
+.pre-commit-config.yaml @serbenda

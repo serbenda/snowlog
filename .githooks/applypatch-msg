@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Git runs this hook for git am instead of commit-msg, so a patch gets the same checks: no AI signatures,
+# a Conventional Commits subject, and the owner as author. git am keeps the patch's author, which git var
+# doesn't show here, so it is read from am's own state first.
+set -euo pipefail
+# The owner's identity, from .github/OWNER as last committed (the staged copy only before the first commit):
+# a changed copy on disk doesn't change who the owner is.
+owner_field() { { git show HEAD:.github/OWNER 2>/dev/null || git show :.github/OWNER 2>/dev/null; } |
+  sed -n "s/^$1=//p" | head -n 1; }
+expected="$(owner_field email | tr '[:upper:]' '[:lower:]')"
+[[ -n "$expected" ]] || { echo "applypatch-msg: .github/OWNER has no email, so the author can't be checked." >&2; exit 1; }
+script="$(git rev-parse --git-path rebase-apply/author-script)"
+# No author-script means the patch's author can't be read: refused, never checked against the configured one.
+author=""
+[[ -f "$script" ]] && author="$(sed -n "s/^GIT_AUTHOR_EMAIL='\(.*\)'\$/\1/p" "$script" | tr '[:upper:]' '[:lower:]')"
+if [[ "$author" != "$expected" ]]; then
+  echo "applypatch-msg: the patch's author is '${author:-unknown}' and must be '$expected'." >&2
+  exit 1
+fi
+exec "$(dirname "$0")/commit-msg" "$@"

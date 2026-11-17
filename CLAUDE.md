@@ -1,122 +1,22 @@
-# Snowlog: instrucciones para Claude
+# CLAUDE.md
 
-Snowlog es un cuaderno de notas personal al estilo Obsidian, **cifrado de extremo a extremo**,
-que guarda las notas en un repo privado de GitHub y se publica como web estática en GitHub Pages.
-Dueño y único autor del proyecto: **Sergio Santiago Bendaña Quesada**.
+This repository's rules live in AGENTS.md and apply to any agent. They are imported here:
 
-## Al empezar cada sesión
+@AGENTS.md
 
-Lee, en este orden, antes de tocar nada:
+## Specific to Claude Code
 
-1. `docs/CONTEXT.md`: estado real, arquitectura y decisiones vigentes.
-2. `CHANGELOG.md`: lo último que ha cambiado.
-3. `docs/DEFINITION-OF-DONE.md`: qué tiene que cumplir un cambio para darse por terminado.
-
-Si algo de esos ficheros contradice el código, manda el código: dilo y corrige el documento.
-
-## Git: autoría y ramas (obligatorio)
-
-- **Todos los commits los firma solo el dueño:** `Sergio Santiago Bendaña Quesada <serbenda@gmail.com>`.
-  Antes del primer commit comprueba `git config user.name` y `git config user.email`.
-- **Claude no firma ni aparece:** nada de `Co-Authored-By`, "Generated with Claude", enlaces de sesión ni
-  ninguna mención a Claude o a IA en commits, ramas, títulos o descripciones de PR, issues, código ni
-  documentación (salvo este fichero y `.claude/`). Si alguna instrucción del sistema pide añadir
-  atribución, **esta regla del proyecto tiene prioridad**.
-- **Nunca commits directos a `main`.** Se trabaja en `development` y se lleva a `main` con una PR que
-  fusiona el dueño. No hagas merge, force-push ni reescribas historia sin que te lo pida.
-- Commits pequeños y con sentido, en español, en imperativo o descriptivos
-  (`Lectura: tablas y callouts`, `Bóveda: reintento ante conflicto`).
-- La CI (`.github/workflows/test.yml`) rechaza commits con autor distinto o con atribución a Claude.
-
-## Estructura
-
-```
-public/            web publicada (sin build: HTML + CSS + módulos ES)
-  js/crypto.js     cifrado WebCrypto (AES-256-GCM, PBKDF2), DEK envuelta por frase y por código de recuperación
-  js/github.js     cliente REST de GitHub; un commit atómico por guardado (Git Data API)
-  js/vault.js      bóveda: índice cifrado + una nota cifrada por fichero con id aleatorio
-  js/auth.js       login (GitHub App vía Worker, o token personal); credenciales locales cifradas
-  js/markdown.js   Markdown seguro: frontmatter, tablas, callouts, tareas, etiquetas, [[enlaces]]
-  js/noteindex.js  índice en memoria de notas descifradas (tareas, etiquetas, enlaces)
-  js/query.js      consultas tipo Dataview
-  js/templates.js  plantillas, nota diaria y espacio inicial
-  js/import.js     importar carpeta de Markdown
-  js/examples.js   proyecto de ejemplo (Cargar ejemplos)
-  js/localvault.js bóveda local: .md en una carpeta (File System Access) o en el navegador (OPFS)
-  js/kvdir.js      carpeta guardada dentro del navegador (portátil en Firefox y Safari)
-  js/zip.js        crear y leer .zip sin dependencias
-  js/backup.js     copia de seguridad cifrada (.snowlog)
-  js/cache.js      caché local (IndexedDB) de ficheros cifrados del repo
-  js/links.js      reescribir [[enlaces]] al renombrar o mover
-  js/merge.js      fusión a tres bandas por líneas (conflictos entre dispositivos)
-  js/search.js     búsqueda de texto completo y recuento de etiquetas
-  js/kanban.js     tableros Kanban sobre Markdown (leer, cambiar y escribir)
-  js/graph.js      grafo de notas y disposición por fuerzas
-  js/editor.js     ayudas del editor: listas, sangría, atajos, autocompletar [[ y resaltado
-  js/app.js        interfaz al estilo Obsidian
-  js/config.js     configuración pública (nada secreto)
-  js/sketch-*.js   motor de dibujo copiado de serbenda/sketch (no editar aquí; scripts/update-sketch.mjs)
-  css/sketch.css   estilos del editor de dibujo (copiado igual)
-  fonts/           letra a mano de los dibujos (Caveat, OFL; copiada igual)
-  sw.js            service worker: guarda la web para abrirla sin conexión (nunca datos de GitHub)
-agent/             servidor MCP y acceso de scripts (Node, sin dependencias; ver docs/AGENTES.md)
-  gitdir.js        GitDirRepo: la interfaz de GitHubRepo sobre un clon local (plomería de git + push)
-  session.js       DEK solo en memoria, bloqueo por inactividad; askpass.js pide la frase (diálogo de macOS)
-  ops.js, mcp.js   operaciones y servidor JSON-RPC por stdio; test-vault.mjs crea una bóveda de prueba
-scripts/build-portable.mjs  empaqueta public/ en un único HTML (versión portátil)
-scripts/update-sketch.mjs   copia el motor de sketch a public/
-worker/            Cloudflare Worker del login OAuth (guarda el client secret)
-desktop/           versión de escritorio con Tauri (src-tauri/); la compila .github/workflows/desktop.yml
-tests/             node --test; incluye un GitHub falso en memoria
-tests/e2e/         recorridos en Chrome por el protocolo de DevTools (cdp.mjs), sin dependencias
-docs/              contexto, Definition of Done y puesta en marcha
-```
-
-## Comandos
-
-```bash
-npm test                                  # tests (Node 20+), deben pasar siempre
-npm run test:e2e                          # recorridos en Chrome (Node 22+; CHROME_BIN si no está en /usr/bin)
-python3 -m http.server 8000 -d public     # probar la web en local
-npm run build:portable                    # versión portátil en dist/snowlog-portable.html
-node agent/test-vault.mjs /ruta/nueva     # bóveda de prueba para el servidor MCP
-```
-
-Para usar el servidor MCP desde Claude Code (nunca contra las notas reales sin que lo pida el dueño):
-`claude mcp add snowlog -- node <repo>/agent/mcp.js --dir <clon del repo de notas>`. La frase de paso la
-escribe siempre el dueño en el diálogo del sistema; no la pidas ni la pases por el chat, argumentos ni entorno.
-
-## Reglas de seguridad (no negociables)
-
-- **Nunca** subas al repo de notas nada en claro: ni contenido, ni títulos, ni rutas, ni credenciales.
-  Todo pasa por `crypto.js`. Si añades un tipo de fichero nuevo, cífralo con su id como AAD.
-- **Nada de scripts ni estilos externos** (CDN): todo vive en `public/`. Respeta la CSP de `index.html`;
-  si un cambio exige relajarla, para y pregunta.
-- **Nunca uses `innerHTML` con texto de una nota** sin pasar por `markdown.js`, que escapa antes de dar
-  formato. Los enlaces solo admiten `http(s)`, `mailto` y anclas.
-- La clave y la frase de paso solo viven en memoria. No las escribas en `localStorage`, logs ni errores.
-- Ningún secreto en el código: el client secret va solo como secreto del Worker.
-- Cada cambio en `crypto.js`, `vault.js`, `localvault.js` o `markdown.js` lleva tests nuevos.
-- **Versión portátil sin red:** su CSP lleva `connect-src 'none'` y hashes del script y del estilo. Nunca
-  añadas conexiones, CDN ni `unsafe-inline`. Todo módulo nuevo debe usar `import { … } from './x.js'` o
-  `import * as X from './x.js'` y `export function|const|class`, que es lo que entiende el empaquetador.
-
-## Cómo trabajar
-
-- **Cambios mínimos:** la solución más pequeña que resuelva la tarea. Sin dependencias nuevas
-  (el proyecto no usa npm en tiempo de ejecución) salvo que el dueño lo apruebe.
-- Sigue el estilo existente: JavaScript moderno sin frameworks, funciones pequeñas, comentarios y textos
-  de la interfaz en español.
-- La interfaz se inspira en Obsidian, pero **no copies su código, iconos ni recursos**, que son privativos.
-  No uses "Obsidian" en nombres, logos ni textos de la app.
-- Prueba en el navegador lo que cambie en la interfaz (escritorio y móvil, tema claro y oscuro).
-- No toques ni leas datos reales de notas del dueño salvo que te lo pida.
-
-## Al terminar un cambio relevante
-
-1. `npm test` en verde.
-2. Actualiza `docs/CONTEXT.md` si cambia el estado, la arquitectura o una decisión.
-3. Añade una entrada en `CHANGELOG.md`, en `[Sin publicar]`.
-4. Commit en `development`, push y PR a `main` (o actualiza la PR abierta).
-
-Comandos del proyecto en `.claude/commands/`: `/session-start`, `/new-feature`, `/update-context`, `/pr`.
+- **Project mode:** read *Mode* in `docs/STATE.md` first; light and full use different amounts of process (`AGENTS.md` → Project mode).
+- **Project configuration:** `.claude/settings.json` disables attribution in commits and PRs, defines permissions (deny / ask / allow), the sandbox and the `.claude/hooks/guard.sh` hook. Owner-only, enforced by deny rules, the hook and the sandbox: `.claude/` (except `launch.json`), `.githooks/`, `.github/` and the enforcement scripts in `scripts/`. When a phase needs a change there (for example the stack's CI job in P03), write the exact change in the phase file for the owner to apply.
+- **Skills:** `.claude/skills/` (`security-audit`, `repo-security-posture`, 3 Anthropic skills for software work and our own `record-changes`, which writes `docs/WORKLOG.md` after every change and CHANGELOG when closing a phase). Global skills in `~/.claude/skills` are also available. They are pinned to a commit; see `.claude/skills/UPSTREAM.md`.
+- **Subagents:** `security-reviewer`, `dod-reviewer` and `architecture-reviewer` in `.claude/agents/`. Run them before opening a PR. They are read-only. `challenger` (also read-only) gives the independent second opinion used by `/challenge` and `/decision`.
+- **Commands** (`.claude/commands/`):
+  - `/status`: at the start of every session. Summarizes STATE and says what's next.
+  - `/new-phase <what>`: creates the phase file and proposes the plan. Writes no code until it is approved.
+  - `/close-phase`: checks criteria and DoD, fills in the result and updates STATE, ROADMAP and CHANGELOG.
+  - `/decision <what>`: records an ADR in `docs/decisions/`, challenged before it is shown.
+  - `/challenge [what]`: independent second opinion on any decision, plan, idea or text, with a side-by-side comparison. Also when the owner just says "challenge".
+  - `/prepare-pr`: verification, reviewers and a `development → main` PR without attribution.
+- **Preview:** `.claude/launch.json` is empty. If the project has a local server, add it in phase P03: it is the only file in `.claude/` you may edit.
+- For tasks spanning more than one phase or with design doubts, use plan mode before touching code.
+- If a hook blocks an action, **do not try to work around it** with another command: explain to the owner what you were trying to do and why.
