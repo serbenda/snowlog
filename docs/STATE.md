@@ -15,7 +15,7 @@ Last updated: 2026-11-17
 
 ## Current work
 - [P01](phases/P01-adopt-project-template.md): code, interface and docs in English, with existing vaults kept working;
-  the template's docs filled in. Next: rehearse the guardrails on a copy and hand the patch to the owner.
+  the template's docs filled in; the guardrails patch rehearsed on a copy. Next: the owner's guardrails commit.
 
 ## Recently done
 - Agent and script access: an MCP server over a clone of the notes repository ([AGENT_ACCESS.md](AGENT_ACCESS.md)).

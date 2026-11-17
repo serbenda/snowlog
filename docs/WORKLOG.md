@@ -46,8 +46,17 @@
 - **Commits:** 0146141 (EPIPE fix), 307a62d (code, interface and tests), and the docs commit that adds this entry.
 - **Tested:** `npm test` 163 pass (new: legacy names, legacy settings file, Spanish query words); `npm run test:e2e`
   5 pass in Chrome; the portable build opened in Chrome with the starter space and the examples loaded, checking that
-  the tree, the note menu and the command palette show no Spanish text and the console has no errors.
-- **Pending:** the guardrails (rehearsal on a copy, then the owner's commit); GitHub Actions billing; SAST and OSV run
+  the tree, the note menu and the command palette show no Spanish text and the console has no errors. On the
+  rehearsal copy with the guardrails: shellcheck, `test-guard.sh`, `test-check-records.sh`, `test-githooks.sh`,
+  actionlint, `check-records.sh origin/main HEAD` and `npm test` pass (`test-scripts.sh` is skipped in projects, as
+  in CI).
+  - The guardrails prepared as one patch and rehearsed on a copy: the template's owned files (sync `--apply`),
+    settings (template plus `npm test`, `npm run test:e2e`, `npm run build:portable` allowed and `.dev.vars` denied),
+    `ci.yml` (template jobs plus a Tests job with the unit tests, the e2e and the portable artifact; the old
+    `test.yml` and its authorship check removed), Dependabot with `cargo`, `AGENTS.md` (template plus Snowlog's
+    security rules), `CLAUDE.md`, `setup-repo.sh`, CODEOWNERS, `.github/OWNER`, the dev container, the template's
+    skills, and `pages.yml` and `desktop.yml` in English with actions pinned to a SHA. The old Spanish commands removed.
+- **Pending:** the guardrails commit (the owner's, or the agent's only with his explicit approval); GitHub Actions billing; SAST and OSV run
   for the first time once CI starts; PR #6's title and description in English.
 
 ## 2026-11-13 — Recorded afterwards: the work before the template (S0–S2)

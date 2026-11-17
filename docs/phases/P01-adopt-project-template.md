@@ -33,8 +33,9 @@ the interface included, is in English, without breaking existing vaults.
   query-word tests.
 - [x] The interface shows no Spanish text in the main flows (checked in Chrome on the portable build: tree, note menu,
   command palette, examples).
-- [ ] Rehearsed on a copy: `sync --apply`, shellcheck, `test-guard.sh`, `test-check-records.sh`,
-  `test-githooks.sh` and actionlint pass.
+- [x] Rehearsed on a copy: `sync --apply`, shellcheck, `test-guard.sh`, `test-check-records.sh`,
+  `test-githooks.sh`, actionlint (as in CI), `check-records.sh` on the PR range and `npm test` pass; the commit is
+  refused without `GUARDRAILS_OWNER_CHANGE=1` and accepted with it.
 - [ ] The guardrails commit is on `development`, made by the owner (or by the agent only with the owner's explicit
   per-action approval).
 - [ ] CI is green on the PR: Secrets, Authorship, Hook, Hook (macOS bash 3.2), SAST, Dependencies, Records, Tests.
