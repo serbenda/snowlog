@@ -29,7 +29,7 @@ export function git(dir, args, { input, env } = {}) {
   return new Promise((resolve, reject) => {
     const p = spawn('git', ['-C', dir, ...args], {
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C', ...env },
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: [input == null ? 'ignore' : 'pipe', 'pipe', 'pipe'],
     });
     const out = [];
     const err = [];
@@ -46,7 +46,12 @@ export function git(dir, args, { input, env } = {}) {
         reject(e);
       }
     });
-    p.stdin.end(input ?? '');
+    if (p.stdin) {
+      // If git exits before reading all of stdin, writing to it fails with EPIPE: the exit code
+      // (handled above) is what matters, so that error is ignored instead of crashing the process.
+      p.stdin.on('error', () => {});
+      p.stdin.end(input);
+    }
   });
 }
 
