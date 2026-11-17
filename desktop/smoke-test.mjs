@@ -7,6 +7,10 @@ const BASE = 'http://127.0.0.1:4444';
 
 // Every request to tauri-driver goes through this one function.
 function driver(method, path, body) {
+  // Why the suppression below: tauri-driver 2.1.0 (pinned in .github/workflows/desktop.yml) only speaks plain HTTP.
+  // The request never leaves this machine (BASE is the constant 127.0.0.1), runs on an ephemeral CI runner and
+  // carries only WebDriver commands to a throwaway app session: no secrets or credentials. Not part of the site or app.
+  // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
   return fetch(BASE + path, {
     method,
     headers: { 'content-type': 'application/json' },
