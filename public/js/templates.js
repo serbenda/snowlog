@@ -1,9 +1,9 @@
-// Plantillas y nota diaria.
-// Variables: {{title}}, {{date}}, {{date:FORMATO}}, {{time}}, {{time:FORMATO}}.
-// FORMATO usa los códigos habituales: YYYY YY MMMM MMM MM M DD D dddd ddd HH H mm ss y [texto literal].
+// Templates and the daily note.
+// Variables: {{title}}, {{date}}, {{date:FORMAT}}, {{time}}, {{time:FORMAT}}.
+// FORMAT uses the usual codes: YYYY YY MMMM MMM MM M DD D dddd ddd HH H mm ss and [literal text].
 
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const pad = (n) => String(n).padStart(2, '0');
 
 export function formatDate(d, fmt) {
@@ -45,47 +45,46 @@ export function applyTemplate(text, { title = '', date = new Date() } = {}) {
 export const dailyPath = (folder, date) => (folder ? `${folder}/${isoDate(date)}` : isoDate(date));
 
 // ---------------------------------------------------------------------------
-// Espacio inicial: la misma forma de trabajar que una bóveda de Obsidian con
-// panel principal, nota diaria, proyectos, plantillas y archivo.
+// Starter space: a dashboard, a daily note, projects, templates and an archive.
 
 export const DAILY_TEMPLATE = `---
 date: {{date:YYYY-MM-DD}}
-type: diario
+type: daily
 tags:
-  - diario
+  - daily
 ---
-# {{date:dddd, D [de] MMMM [de] YYYY}}
+# {{date:dddd, MMMM D, YYYY}}
 
-## Foco de hoy
+## Today's focus
 - [ ]
 
-## Registro
+## Log
 
-| Hora | Qué | Área |
-|------|-----|------|
+| Time | What | Area |
+|------|------|------|
 | {{time}} | | |
 
-## Citas y reuniones
+## Appointments and meetings
 -
 
-## Notas e ideas
+## Notes and ideas
 -
 
-## Bloqueos
+## Blockers
 -
 
-## Compromisos
-- [ ] #compromiso
+## Commitments
+- [ ] #commitment
 
-## Pendiente de hablar
-- [ ] #pendiente
+## To discuss
+- [ ] #to-discuss
 `;
 
 const NOTE_TEMPLATE = `---
 date: {{date:YYYY-MM-DD}}
-type: nota
+type: note
 area:
-status: activo
+status: active
 tags:
 ---
 # {{title}}
@@ -94,111 +93,111 @@ tags:
 
 const PROJECT_TEMPLATE = `---
 date: {{date:YYYY-MM-DD}}
-type: proyecto
-status: activo
+type: project
+status: active
 area:
 tags:
-  - proyecto
+  - project
 ---
 # {{title}}
 
-> [!abstract] Objetivo
-> Qué quiero conseguir y para cuándo.
+> [!abstract] Goal
+> What I want to achieve, and by when.
 
-## Próximos pasos
+## Next steps
 - [ ]
 
-## Notas
+## Notes
 -
 
-## Enlaces
+## Links
 -
 `;
 
 const MEETING_TEMPLATE = `---
 date: {{date:YYYY-MM-DD}}
-type: reunión
+type: meeting
 area:
-status: activo
-asistentes:
+status: active
+attendees:
 tags:
-  - reunión
+  - meeting
 ---
 # {{title}}
 
-> [!info] Contexto
-> **Fecha:** {{date:YYYY-MM-DD}} · **Área:**
+> [!info] Context
+> **Date:** {{date:YYYY-MM-DD}} · **Area:**
 
-## Asistentes
+## Attendees
 -
 
-## Orden del día
+## Agenda
 -
 
-## Notas
+## Notes
 -
 
-## Decisiones
+## Decisions
 -
 
-## Próximas acciones
-- [ ] #compromiso
+## Next actions
+- [ ] #commitment
 `;
 
 const PILL_TEMPLATE = `---
 date: {{date:YYYY-MM-DD}}
-type: píldora
+type: knowledge-pill
 area:
-tecnología:
-status: activo
+technology:
+status: active
 tags:
-  - píldora
+  - knowledge-pill
 ---
 # {{title}}
 
-> [!abstract] Resumen
-> El problema y su solución en dos líneas.
+> [!abstract] Summary
+> The problem and its solution in two lines.
 
-## Problema / contexto
-
-
-## Solución
+## Problem / context
 
 
-## Comandos clave
+## Solution
 
-\`\`\`bash
 
-\`\`\`
-
-## Comprobación
+## Key commands
 
 \`\`\`bash
 
 \`\`\`
 
-## Referencias
+## Check
+
+\`\`\`bash
+
+\`\`\`
+
+## References
 -
 `;
 
 const PROCEDURE_TEMPLATE = `---
 date: {{date:YYYY-MM-DD}}
-type: procedimiento
+type: procedure
 area:
-status: activo
-revisión: trimestral
+status: active
+review: quarterly
 tags:
-  - procedimiento
+  - procedure
 ---
 # {{title}}
 
-> [!abstract] Objetivo
-> Qué consigue este procedimiento y cuándo se usa.
+> [!abstract] Goal
+> What this procedure achieves and when it is used.
 
-## Antes de empezar
+## Before you start
 - [ ]
 
-## Pasos
+## Steps
 
 ### 1.
 
@@ -206,91 +205,121 @@ tags:
 
 \`\`\`
 
-## Comprobación
+## Check
 - [ ]
 
-## Si algo sale mal
+## If something goes wrong
 -
 `;
 
 const HOME = `---
 cssclasses: dashboard
-type: panel
+type: dashboard
 ---
-> [!tip] Cómo funciona
-> En la nota diaria, marca con #compromiso lo que te comprometes a hacer y con #pendiente lo que tienes que hablar con alguien. Aparece aquí hasta que lo marques como hecho, desde aquí mismo.
+> [!tip] How it works
+> In the daily note, tag what you commit to doing with #commitment and what you need to talk to someone about with #to-discuss. It shows up here until you tick it off, right from this page.
 
-- Empezar
-    - Pulsa **Hoy** (o Ctrl+D) para la nota diaria
-    - Ctrl+O para buscar o crear una nota
-- Plantillas
-    - [[Plantillas/Nota diaria|Nota diaria]]
-    - [[Plantillas/Proyecto|Proyecto]]
-    - [[Plantillas/Reunión|Reunión]]
-- Más plantillas
-    - [[Plantillas/Píldora de conocimiento|Píldora de conocimiento]]
-    - [[Plantillas/Procedimiento|Procedimiento]]
-    - [[Plantillas/Nota|Nota]]
+- Get started
+    - Press **Today** (or Ctrl+D) for the daily note
+    - Ctrl+O to find or create a note
+- Templates
+    - [[Templates/Daily note|Daily note]]
+    - [[Templates/Project|Project]]
+    - [[Templates/Meeting|Meeting]]
+- More templates
+    - [[Templates/Knowledge pill|Knowledge pill]]
+    - [[Templates/Procedure|Procedure]]
+    - [[Templates/Note|Note]]
 
-## Foco de hoy
+## Today's focus
 
 \`\`\`dataview
 TASK
-FROM "Diario"
-WHERE file.day = date(today) AND !completed AND !contains(text, "#compromiso") AND !contains(text, "#pendiente")
+FROM "Daily"
+WHERE file.day = date(today) AND !completed AND !contains(text, "#commitment") AND !contains(text, "#to-discuss")
 \`\`\`
 
-## Compromisos abiertos
+## Open commitments
 
 \`\`\`dataview
 TASK
-WHERE contains(text, "#compromiso") AND !completed
+WHERE contains(text, "#commitment") AND !completed
 GROUP BY file.link
 \`\`\`
 
-## Pendiente de hablar
+## To discuss
 
 \`\`\`dataview
 TASK
-WHERE contains(text, "#pendiente") AND !completed
+WHERE contains(text, "#to-discuss") AND !completed
 GROUP BY file.link
 \`\`\`
 
-## Proyectos activos
+## Active projects
 
 \`\`\`dataview
-TABLE area AS "Área", status AS "Estado"
-FROM "Proyectos"
-WHERE status = "activo"
+TABLE area AS "Area", status AS "Status"
+FROM "Projects"
+WHERE status = "active"
 SORT file.mtime DESC
 \`\`\`
 
-## Últimos días
+## Recent days
 
 \`\`\`dataview
 LIST
-FROM "Diario"
+FROM "Daily"
 SORT file.name DESC
 LIMIT 7
 \`\`\`
 `;
 
-// Notas y carpetas que crea "Configurar mi espacio". Las rutas usan las carpetas configuradas.
-export function starterSpace({ home = 'Inicio', dailyFolder = 'Diario', templatesFolder = 'Plantillas' } = {}) {
+// Notes and folders created by "Set up my space". Paths use the configured folders.
+export function starterSpace({ home = 'Home', dailyFolder = 'Daily', templatesFolder = 'Templates' } = {}) {
   const t = (name) => `${templatesFolder}/${name}`;
   const fix = (text) => text
-    .replaceAll('FROM "Diario"', `FROM "${dailyFolder}"`)
-    .replaceAll('[[Plantillas/', `[[${templatesFolder}/`);
+    .replaceAll('FROM "Daily"', `FROM "${dailyFolder}"`)
+    .replaceAll('[[Templates/', `[[${templatesFolder}/`);
   return {
-    folders: ['Proyectos', 'Archivo', dailyFolder, templatesFolder],
+    folders: ['Projects', 'Archive', dailyFolder, templatesFolder],
     notes: [
       { path: home, text: fix(HOME) },
-      { path: t('Nota diaria'), text: DAILY_TEMPLATE },
-      { path: t('Nota'), text: NOTE_TEMPLATE },
-      { path: t('Proyecto'), text: PROJECT_TEMPLATE },
-      { path: t('Reunión'), text: MEETING_TEMPLATE },
-      { path: t('Píldora de conocimiento'), text: PILL_TEMPLATE },
-      { path: t('Procedimiento'), text: PROCEDURE_TEMPLATE },
+      { path: t('Daily note'), text: DAILY_TEMPLATE },
+      { path: t('Note'), text: NOTE_TEMPLATE },
+      { path: t('Project'), text: PROJECT_TEMPLATE },
+      { path: t('Meeting'), text: MEETING_TEMPLATE },
+      { path: t('Knowledge pill'), text: PILL_TEMPLATE },
+      { path: t('Procedure'), text: PROCEDURE_TEMPLATE },
     ],
   };
+}
+
+// Folder and note names used before the interface was translated to English. A vault that already
+// has them, and has not chosen its own names in Settings, keeps using them.
+export const LEGACY_WORKSPACE = {
+  home: 'Inicio',
+  dailyFolder: 'Diario',
+  templatesFolder: 'Plantillas',
+  attachmentsFolder: 'Adjuntos',
+  drawingsFolder: 'Dibujos',
+  dailyTemplate: 'Plantillas/Nota diaria',
+};
+
+// Settings in force: the defaults, then the legacy names the vault already uses, then the vault's own.
+// index: the vault index ({ notes, files, folders }), whose paths say which legacy names are in use.
+export function workspaceSettings(defaults, stored = {}, index = {}) {
+  const paths = [
+    ...Object.values(index.notes || {}).map((n) => n.path),
+    ...Object.values(index.files || {}).map((f) => f.path),
+    ...(index.folders || []),
+  ].filter(Boolean).map((p) => p.toLowerCase());
+  const inUse = (name) => {
+    const n = name.toLowerCase();
+    return paths.some((p) => p === n || p.startsWith(`${n}/`));
+  };
+  const out = { ...defaults };
+  for (const [key, legacy] of Object.entries(LEGACY_WORKSPACE)) {
+    if (key in defaults && !(key in stored) && inUse(legacy)) out[key] = legacy;
+  }
+  return { ...out, ...stored };
 }

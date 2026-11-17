@@ -1,65 +1,65 @@
-// La bóveda: índice cifrado + notas cifradas en el repo privado.
+// The vault: an encrypted index + encrypted notes in the private repository.
 //
-// Estructura en el repo de notas:
-//   .snowlog/vault.json   parámetros públicos y la clave de datos envuelta (sin secretos en claro)
-//   .snowlog/index.enc    índice cifrado: rutas y fechas de las notas, carpetas
-//   n/<id>.enc            una nota cifrada; <id> es aleatorio y no revela el título
-//   a/<id>.enc            un adjunto cifrado (imagen, PDF…); su nombre y tipo van en el índice
+// Layout of the notes repository:
+//   .snowlog/vault.json   public parameters and the wrapped data key (no secrets in plaintext)
+//   .snowlog/index.enc    encrypted index: note paths and dates, folders
+//   n/<id>.enc            an encrypted note; <id> is random and does not reveal the title
+//   a/<id>.enc            an encrypted attachment (image, PDF…); its name and type are in the index
 
 import * as C from './crypto.js';
 import { merge3 } from './merge.js';
 
 export const VAULT_FILE = '.snowlog/vault.json';
 export const INDEX_FILE = '.snowlog/index.enc';
-// Claves anteriores (tras rotar), cifradas con la actual: para seguir leyendo el historial.
+// Earlier keys (after rotating), encrypted with the current one: to keep reading the history.
 export const KEYRING_FILE = '.snowlog/keyring.enc';
 const notePath = (id) => `n/${id}.enc`;
 const filePath = (id) => `a/${id}.enc`;
 
-// Adjuntos que se pueden pegar o arrastrar, con su tipo.
+// Attachments that can be pasted or dropped, with their type.
 export const ATTACHMENT_TYPES = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
   avif: 'image/avif', bmp: 'image/bmp', pdf: 'application/pdf',
-  sketch: 'application/vnd.sketch+json', // dibujos de serbenda/sketch
+  sketch: 'application/vnd.sketch+json', // drawings from serbenda/sketch
 };
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const extOf = (name) => (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';
 export const isAttachmentName = (name) => Object.hasOwn(ATTACHMENT_TYPES, extOf(name));
 
-const WELCOME = `Tu cuaderno personal, cifrado de extremo a extremo.
+const WELCOME = `Your personal notebook, end-to-end encrypted.
 
-## Lo básico
-- Las notas se guardan solas al dejar de escribir.
-- **Ctrl+E** cambia entre editar y leer.
-- **Ctrl+O** abre el selector rápido de notas.
-- **Ctrl+N** crea una nota nueva.
-- Enlaza notas con [[Otra nota]]: si no existe, se crea al pulsarla.
+## The basics
+- Notes save themselves when you stop typing.
+- **Ctrl+E** switches between editing and reading.
+- **Ctrl+O** opens the quick note switcher.
+- **Ctrl+N** creates a new note.
+- Link notes with [[Another note]]: if it does not exist, it is created when you click it.
 
-## Formato
-- [x] Listas de tareas
-- **Negrita**, *cursiva*, ~~tachado~~ y ==resaltado==
-- \`código en línea\` y bloques de código
+## Formatting
+- [x] Task lists
+- **Bold**, *italic*, ~~strikethrough~~ and ==highlight==
+- \`inline code\` and code blocks
 
-| Formato | Cómo se escribe |
+| Format | How to write it |
 | --- | --- |
-| Tabla | \`| a | b |\` y debajo \`|---|---|\` |
-| Callout | \`> [!tip] Título\` |
-| Etiqueta | #idea |
+| Table | \`| a | b |\` and below it \`|---|---|\` |
+| Callout | \`> [!tip] Title\` |
+| Tag | #idea |
 
 > [!tip] Callouts
-> Usa [!note], [!info], [!warning], [!danger], [!example]… y añade - para plegarlos.
+> Use [!note], [!info], [!warning], [!danger], [!example]… and add - to fold them.
 
-> [!info] Privado de verdad
-> En el repo solo hay ficheros ilegibles. Sin tu frase de paso, nadie puede leer esto.
+> [!info] Truly private
+> The repository only holds unreadable files. Without your passphrase, nobody can read this.
 `;
 
-// Nombre de la copia que guarda la versión de otro dispositivo.
+// Name of the copy that keeps another device's version.
 export function conflictName(name, date = new Date()) {
   const p = (n) => String(n).padStart(2, '0');
-  return `${name} (otro dispositivo ${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}${p(date.getMinutes())})`;
+  return `${name} (other device ${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}${p(date.getMinutes())})`;
 }
 
-// fetch falla con TypeError cuando no hay red (no cuando GitHub responde con un error).
+// fetch fails with TypeError when there is no network (not when GitHub answers with an error).
 export const isNetworkError = (e) => e instanceof TypeError || e?.name === 'TypeError';
 
 export function normalizePath(path) {
@@ -89,26 +89,26 @@ export function validName(path) {
 const sameBytes = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 export class Vault {
-  // store: caché opcional de ficheros cifrados (cache.js) para no volver a bajar lo que no cambió.
+  // store: optional cache of encrypted files (cache.js) so what did not change is not downloaded again.
   constructor(repo, dek, { store = null } = {}) {
     this.repo = repo;
     this.dek = dek;
     this.store = store;
-    // Sin conexión: los guardados y las notas nuevas esperan en `outbox` (cifrada en la caché)
-    // hasta que vuelva la red y se llame a sync().
+    // Offline: saves and new notes wait in `outbox` (encrypted in the cache)
+    // until the network is back and sync() is called.
     this.offline = false;
     this.outbox = new Map();
     this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
     this.fileCache = new Map();
-    // Fecha `updated` de cada nota cuando se leyó o guardó aquí: si al guardar el índice
-    // trae otra, es que la nota cambió en otro dispositivo mientras tanto.
+    // The `updated` date of each note when it was read or saved here: if the index brings another one
+    // on save, the note changed on another device in the meantime.
     this.base = new Map();
-    // Texto de esa misma versión: la base para juntar cambios de dos dispositivos.
+    // Text of that same version: the base for combining the changes of two devices.
     this.baseText = new Map();
-    // Igual para los adjuntos que se pueden editar (dibujos): versión con la que se leyeron aquí.
+    // The same for editable attachments (drawings): the version they were read with here.
     this.fileBase = new Map();
-    this.fileBaseBytes = new Map(); // contenido de cada adjunto tal como se leyó o guardó aquí (para fusionar)
+    this.fileBaseBytes = new Map(); // content of each attachment as it was read or saved here (for merging)
   }
 
   remember(id, text) {
@@ -123,16 +123,16 @@ export class Vault {
     return text ? JSON.parse(text) : null;
   }
 
-  // Crea la bóveda en un repo sin ella. Devuelve { vault, recoveryCode }.
+  // Creates the vault in a repository without one. Returns { vault, recoveryCode }.
   static async create(repo, passphrase, iterations) {
     await repo.fetchHead();
     if (await repo.readText(VAULT_FILE)) throw new Error('vault_exists');
     const { vault: vaultFile, dek, recoveryCode } = await C.createVault(passphrase, iterations);
     const json = `${JSON.stringify(vaultFile, null, 2)}\n`;
-    if (repo.head) await repo.commit([{ path: VAULT_FILE, content: json }], 'Snowlog: crear bóveda');
-    else await repo.createFirstFile(VAULT_FILE, json, 'Snowlog: crear bóveda');
+    if (repo.head) await repo.commit([{ path: VAULT_FILE, content: json }], 'Snowlog: create vault');
+    else await repo.createFirstFile(VAULT_FILE, json, 'Snowlog: create vault');
     const vault = new Vault(repo, dek);
-    await vault.createNote('Bienvenido', WELCOME);
+    await vault.createNote('Welcome', WELCOME);
     return { vault, vaultFile, recoveryCode };
   }
 
@@ -143,7 +143,7 @@ export class Vault {
       this.offline = false;
       if (text && this.store) await this.store.put('index', { content: text });
     } catch (e) {
-      // Sin red: el último índice conocido (con los cambios hechos aquí sin conexión).
+      // Offline: the last known index (with the changes made here while offline).
       const hit = isNetworkError(e) && this.store && await this.store.get('index');
       if (!hit) throw e;
       text = hit.content;
@@ -154,12 +154,12 @@ export class Vault {
       try {
         this.index = JSON.parse(await C.decryptText(this.dek, text, 'index'));
       } catch {
-        // La clave se rotó en otro dispositivo: hay que volver a desbloquear con la frase.
+        // The key was rotated on another device: unlock again with the passphrase.
         throw new Error('key_changed');
       }
     }
     if (!this.index.folders) this.index.folders = [];
-    // Lo que otro dispositivo cambió se vuelve a leer del repo (la versión de aquí ya no es la última).
+    // What another device changed is read again from the repository (the version here is no longer the latest).
     for (const id of [...this.cache.keys()]) {
       if (this.index.notes[id]?.updated !== this.base.get(id)) this.cache.delete(id);
     }
@@ -169,7 +169,7 @@ export class Vault {
     if (!this.index.files) this.index.files = {};
   }
 
-  // Guarda en la caché local los ficheros cifrados recién subidos (o los quita si se borraron).
+  // Stores the just-uploaded encrypted files in the local cache (or removes them if they were deleted).
   async cacheChanges(changes) {
     if (!this.store) return;
     for (const c of changes) {
@@ -180,12 +180,12 @@ export class Vault {
     }
   }
 
-  // Versión de un fichero según el índice: si coincide con la de la caché, la caché vale.
+  // A file's version according to the index: if it matches the cache's, the cache is valid.
   versionOf(id) {
     return this.index.notes[id]?.updated || this.index.files?.[id]?.updated || this.index.files?.[id]?.created || null;
   }
 
-  // Lee un fichero cifrado: de la caché si está al día, si no del repo (y lo guarda en la caché).
+  // Reads an encrypted file: from the cache if it is up to date, otherwise from the repository (and caches it).
   async readEncrypted(path, id) {
     const v = this.versionOf(id);
     if (this.store && v) {
@@ -197,9 +197,9 @@ export class Vault {
     return { content, cached: false };
   }
 
-  // Descarga de golpe las notas que no están en memoria ni en la caché local (para el índice completo).
-  // Con GraphQL son 10 peticiones para 1.000 notas en lugar de 1.000. Si falla, no pasa nada:
-  // read() las pedirá una a una.
+  // Downloads in one go the notes that are neither in memory nor in the local cache (for the full index).
+  // With GraphQL it takes 10 requests for 1,000 notes instead of 1,000. If it fails, no harm done:
+  // read() will fetch them one by one.
   async prefetch(ids) {
     const want = [];
     for (const id of ids) {
@@ -223,7 +223,7 @@ export class Vault {
         this.remember(id, await C.decryptText(this.dek, content, id));
         if (this.store) await this.store.put(notePath(id), { v: this.versionOf(id), content });
         n += 1;
-      } catch { /* se leerá con read() */ }
+      } catch { /* read() will fetch it */ }
     }
     return n;
   }
@@ -232,8 +232,8 @@ export class Vault {
     return { path: INDEX_FILE, content: await C.encryptText(this.dek, JSON.stringify(this.index), 'index') };
   }
 
-  // Aplica un cambio al índice (y ficheros) en un solo commit. Si otro dispositivo
-  // escribió antes, recarga el índice, repite el cambio y reintenta una vez.
+  // Applies a change to the index (and files) in a single commit. If another device
+  // wrote first, it reloads the index, repeats the change and retries once.
   async apply(message, mutate, files = async () => []) {
     if (this.offline) throw new Error('offline');
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -276,8 +276,8 @@ export class Vault {
     return this.findByPath(title) || this.notes().find((n) => baseName(n.path).toLowerCase() === t) || null;
   }
 
-  // Nombre libre: "Sin título", "Sin título 1"…
-  freePath(folder, name = 'Sin título') {
+  // A free name: "Untitled", "Untitled 1"…
+  freePath(folder, name = 'Untitled') {
     let n = 0;
     for (;;) {
       const candidate = normalizePath(`${folder}/${n ? `${name} ${n}` : name}`);
@@ -306,7 +306,7 @@ export class Vault {
     try {
       plain = content ? await C.decryptText(this.dek, content, id) : '';
     } catch (e) {
-      // Una copia local dañada o manipulada no se descifra: se vuelve a pedir al repo.
+      // A damaged or tampered local copy does not decrypt: it is fetched again from the repository.
       if (!cached) throw e;
       content = await this.repo.readText(notePath(id));
       plain = content ? await C.decryptText(this.dek, content, id) : '';
@@ -341,7 +341,7 @@ export class Vault {
 
   async createOnline(id, p, text, now) {
     await this.apply(
-      'Snowlog: nueva nota',
+      'Snowlog: new note',
       (idx) => {
         idx.notes[id] = { path: p, created: now, updated: now };
         this.addFolderChain(idx, parentPath(p));
@@ -352,9 +352,9 @@ export class Vault {
     return id;
   }
 
-  // Importa muchas notas de golpe, en lotes (un commit por lote).
-  // items: [{ path, text }]. Si un nombre ya existe, añade « (importada)», « (importada 2)»…
-  // Devuelve [{ id, path }] en el orden recibido.
+  // Imports many notes at once, in batches (one commit per batch).
+  // items: [{ path, text }]. If a name already exists, it adds “ (imported)”, “ (imported 2)”…
+  // Returns [{ id, path }] in the order received.
   async importNotes(items, { batchSize = 100, onProgress, message = 'importar', folders = [] } = {}) {
     const taken = new Set(this.notes().map((n) => n.path.toLowerCase()));
     const planned = items.map(({ path, text }) => {
@@ -364,7 +364,7 @@ export class Vault {
         let n = 1;
         const base = p;
         do {
-          p = `${base} (importada${n > 1 ? ` ${n}` : ''})`;
+          p = `${base} (imported${n > 1 ? ` ${n}` : ''})`;
           n += 1;
         } while (taken.has(p.toLowerCase()));
       }
@@ -376,7 +376,7 @@ export class Vault {
       const batch = planned.slice(i, i + batchSize);
       const now = new Date().toISOString();
       await this.apply(
-        `Snowlog: ${message} (${batch.length} notas)`,
+        `Snowlog: ${message} (${batch.length} notes)`,
         (idx) => {
           if (i === 0) for (const f of folders) this.addFolderChain(idx, f);
           for (const n of batch) {
@@ -395,8 +395,8 @@ export class Vault {
     return planned.map(({ id, path }) => ({ id, path }));
   }
 
-  // Guarda varias notas en un solo commit: [{ id, text }].
-  async saveMany(items, message = 'actualizar enlaces') {
+  // Saves several notes in a single commit: [{ id, text }].
+  async saveMany(items, message = 'update links') {
     if (!items.length) return;
     const now = new Date().toISOString();
     await this.apply(
@@ -409,16 +409,16 @@ export class Vault {
     for (const { id, text } of items) this.remember(id, text);
   }
 
-  // Guarda la nota. Si otro dispositivo la cambió desde que se leyó aquí, no se pierde nada:
-  // esta versión queda en la nota y la otra se guarda como copia al lado.
-  // Devuelve { conflict: { id, path } } cuando ha hecho falta la copia.
+  // Saves the note. If another device changed it since it was read here, nothing is lost:
+  // this version stays in the note and the other one is saved as a copy beside it.
+  // Returns { conflict: { id, path } } when the copy was needed.
   async saveNote(id, text) {
     if (this.offline) return this.queue(id, text);
     try {
       return await this.saveOnline(id, text);
     } catch (e) {
       if (e.message === 'key_changed') {
-        // Se rotó la clave en otro dispositivo: lo escrito se guarda aquí para subirlo tras desbloquear.
+        // The key was rotated on another device: what was written is kept here to upload after unlocking.
         await this.queue(id, text);
         throw e;
       }
@@ -427,8 +427,8 @@ export class Vault {
     }
   }
 
-  // --- Sin conexión ---
-  // Guarda el cambio aquí (memoria y caché cifrada) para subirlo con sync().
+  // --- Offline ---
+  // Keeps the change here (memory and encrypted cache) to upload it with sync().
   async queue(id, text, isNew = false) {
     const meta = this.index.notes[id];
     const prev = this.outbox.get(id);
@@ -459,12 +459,12 @@ export class Vault {
   async loadOutbox() {
     const hit = this.store && await this.store.get('outbox');
     if (!hit) return;
-    // Puede estar cifrada con una clave anterior (si se rotó en otro dispositivo mientras había cambios
-    // pendientes aquí): se prueba también con el llavero para no perderlos.
+    // It may be encrypted with an earlier key (if it was rotated on another device while there were
+    // pending changes here): the keyring is tried too so they are not lost.
     try {
       this.outbox = new Map(JSON.parse(await C.decryptText(this.dek, hit.content, 'outbox')));
       return;
-    } catch { /* quizá de antes de rotar */ }
+    } catch { /* maybe from before the rotation */ }
     for (const key of await this.loadKeyring(true).catch(() => [])) {
       try {
         this.outbox = new Map(JSON.parse(await C.decryptText(key, hit.content, 'outbox')));
@@ -474,8 +474,8 @@ export class Vault {
     }
   }
 
-  // Claves anteriores de la bóveda (CryptoKey), de la más reciente a la más antigua.
-  // Solo existe si alguna vez se rotó (el índice lo indica); `force` lo busca igualmente.
+  // The vault's earlier keys (CryptoKey), newest first.
+  // Only exists if the key was ever rotated (the index says so); `force` looks for it anyway.
   async loadKeyring(force = false) {
     if (this.keyring) return this.keyring;
     if (!force && !this.index.hasKeyring) return [];
@@ -495,9 +495,9 @@ export class Vault {
     return this.keyring;
   }
 
-  // Rota la clave: todo (notas, adjuntos, índice) se vuelve a cifrar con una DEK nueva en un solo
-  // commit. La DEK antigua va al llavero, cifrada con la nueva, para poder leer el historial.
-  // Devuelve { vaultFile, recoveryCode }. Mientras se hace no debe escribir nadie más.
+  // Rotates the key: everything (notes, attachments, index) is encrypted again with a new DEK in a single
+  // commit. The old DEK goes to the keyring, encrypted with the new one, to be able to read the history.
+  // Returns { vaultFile, recoveryCode }. Nobody else should write while it runs.
   async rotate(vaultFile, passphrase, iterations, onProgress = () => {}) {
     if (this.offline) throw new Error('offline');
     if (this.outbox.size) throw new Error('pending');
@@ -525,7 +525,7 @@ export class Vault {
     changes.push({ path: INDEX_FILE, content: await C.encryptText(dek, JSON.stringify(this.index), 'index') });
     changes.push({ path: VAULT_FILE, content: `${JSON.stringify(next, null, 2)}\n` });
     try {
-      await this.repo.commit(changes, 'Snowlog: rotar la clave', { blobs: true });
+      await this.repo.commit(changes, 'Snowlog: rotate the key', { blobs: true });
     } catch (e) {
       if (e.status === 409) throw new Error('busy');
       if (isNetworkError(e)) throw new Error('offline');
@@ -546,9 +546,9 @@ export class Vault {
     return { vaultFile: next, recoveryCode };
   }
 
-  // Vuelve a conectar (recarga el índice) y sube lo pendiente. Cada nota se guarda como un guardado normal, con la detección de
-  // conflictos respecto a la versión que había antes de quedarse sin red.
-  // Devuelve { synced, conflicts: [{ id, path }] }. Si la red vuelve a fallar, lanza 'offline'.
+  // Reconnects (reloads the index) and uploads what is pending. Each note is saved as a normal save, detecting
+  // conflicts against the version there was before going offline.
+  // Returns { synced, conflicts: [{ id, path }] }. If the network fails again, it throws 'offline'.
   async sync() {
     try {
       await this.repo.fetchHead();
@@ -581,11 +581,11 @@ export class Vault {
     let conflict = null;
     let finalText = text;
     await this.apply(
-      'Snowlog: guardar nota',
+      'Snowlog: save note',
       (idx) => {
         const now = new Date().toISOString();
         if (!idx.notes[id]) {
-          // La borraron en otro dispositivo: se recupera con esta versión.
+          // It was deleted on another device: it is restored with this version.
           idx.notes[id] = { ...mine, path: this.freePathIn(idx, parentPath(mine.path), baseName(mine.path)) };
           this.addFolderChain(idx, parentPath(idx.notes[id].path));
         }
@@ -604,7 +604,7 @@ export class Vault {
           const theirs = await this.repo.readText(notePath(id));
           const plain = theirs ? await C.decryptText(this.dek, theirs, id) : '';
           if (plain !== text) {
-            // Primero se intenta juntar los dos cambios; si chocan, la otra versión va a una copia.
+            // First it tries to combine both changes; if they clash, the other version goes to a copy.
             const baseText = this.baseText.get(id);
             const m = baseText != null ? merge3(baseText, text, plain) : { conflict: true };
             if (!m.conflict) {
@@ -625,7 +625,7 @@ export class Vault {
     return { ...out, conflict: { id: conflict.id, path: conflict.path } };
   }
 
-  // Como freePath, pero sobre un índice concreto (el recargado dentro de apply).
+  // Like freePath, but on a given index (the one reloaded inside apply).
   freePathIn(idx, folder, name) {
     const taken = new Set(Object.values(idx.notes).map((n) => n.path.toLowerCase()));
     for (let n = 0; ; n += 1) {
@@ -638,7 +638,7 @@ export class Vault {
     const p = normalizePath(newPath);
     validName(p);
     this.ensureFree(p, id);
-    // Una nota creada sin conexión aún no está en el repo: se renombra solo aquí.
+    // A note created offline is not in the repository yet: it is only renamed here.
     const pending = this.outbox.get(id);
     if (pending?.isNew) {
       this.index.notes[id].path = p;
@@ -650,7 +650,7 @@ export class Vault {
       }
       return;
     }
-    await this.apply('Snowlog: renombrar nota', (idx) => {
+    await this.apply('Snowlog: rename note', (idx) => {
       if (!idx.notes[id]) throw new Error('missing');
       idx.notes[id].path = p;
       this.addFolderChain(idx, parentPath(p));
@@ -659,7 +659,7 @@ export class Vault {
 
   async deleteNote(id) {
     await this.apply(
-      'Snowlog: eliminar nota',
+      'Snowlog: delete note',
       (idx) => {
         delete idx.notes[id];
       },
@@ -672,7 +672,7 @@ export class Vault {
     const p = normalizePath(path);
     validName(p);
     if (this.index.folders.some((f) => f.toLowerCase() === p.toLowerCase())) throw new Error('exists');
-    await this.apply('Snowlog: nueva carpeta', (idx) => this.addFolderChain(idx, p));
+    await this.apply('Snowlog: new folder', (idx) => this.addFolderChain(idx, p));
   }
 
   async renameFolder(oldPath, newPath) {
@@ -687,7 +687,7 @@ export class Vault {
       const target = moved(n.path);
       if (target !== n.path) this.ensureFree(target, n.id);
     }
-    await this.apply('Snowlog: renombrar carpeta', (idx) => {
+    await this.apply('Snowlog: rename folder', (idx) => {
       idx.folders = idx.folders.map(moved);
       for (const n of Object.values(idx.notes)) n.path = moved(n.path);
       for (const f of Object.values(idx.files || {})) f.path = moved(f.path);
@@ -695,18 +695,18 @@ export class Vault {
     });
   }
 
-  // --- Ajustes de la bóveda (van cifrados dentro del índice, así se comparten entre dispositivos) ---
+  // --- Vault settings (encrypted inside the index, so they are shared between devices) ---
   getSettings() {
     return { ...(this.index.settings || {}) };
   }
 
   async saveSettings(settings) {
-    await this.apply('Snowlog: ajustes', (idx) => { idx.settings = { ...settings }; });
+    await this.apply('Snowlog: settings', (idx) => { idx.settings = { ...settings }; });
   }
 
   // --- Historial ---
-  // Versiones de una nota, de la más reciente a la más antigua: [{ ref, date }].
-  // La primera es la actual. Git guarda cada versión cifrada; aquí solo se listan.
+  // Versions of a note, newest first: [{ ref, date }].
+  // The first is the current one. Git keeps each encrypted version; here they are only listed.
   async history(id) {
     return (await this.repo.history(notePath(id))).map((c) => ({ ref: c.sha, date: c.date }));
   }
@@ -717,7 +717,7 @@ export class Vault {
     try {
       return await C.decryptText(this.dek, text, id);
     } catch (e) {
-      // Versión de antes de rotar la clave: se abre con la clave de entonces (del llavero).
+      // A version from before the key rotation: it opens with the key of that time (from the keyring).
       for (const key of await this.loadKeyring()) {
         try {
           return await C.decryptText(key, text, id);
@@ -732,14 +732,14 @@ export class Vault {
     return Object.entries(this.index.files || {}).map(([id, f]) => ({ id, ...f }));
   }
 
-  // ![[foto.png]] o ![[Carpeta/foto.png]]: primero la ruta exacta, luego el nombre.
+  // ![[photo.png]] or ![[Folder/photo.png]]: first the exact path, then the name.
   findFile(name) {
     const t = normalizePath(name).toLowerCase();
     const all = this.files();
     return all.find((f) => f.path.toLowerCase() === t) || all.find((f) => baseName(f.path).toLowerCase() === baseName(t)) || null;
   }
 
-  // Nombre libre para un adjunto: "foto.png", "foto 1.png"…
+  // A free name for an attachment: "photo.png", "photo 1.png"…
   freeFilePath(folder, name) {
     const ext = extOf(name);
     const stem = ext ? name.slice(0, -(ext.length + 1)) : name;
@@ -755,7 +755,7 @@ export class Vault {
     if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error('too_big');
   }
 
-  // Guarda un adjunto cifrado. Devuelve { id, path } (el nombre puede cambiar si ya existía).
+  // Stores an encrypted attachment. Returns { id, path } (the name may change if it already existed).
   async addFile(folder, name, bytes) {
     const clean = name.replace(/[\\/:*?"<>|#^[\]]/g, '-').trim() || 'adjunto';
     this.checkAttachment(clean, bytes);
@@ -764,7 +764,7 @@ export class Vault {
     const id = C.randomId();
     const now = new Date().toISOString();
     const content = C.toB64(await C.encryptBytes(this.dek, bytes, id));
-    await this.apply(`Snowlog: añadir adjunto`, (idx) => {
+    await this.apply(`Snowlog: add attachment`, (idx) => {
       if (!idx.files) idx.files = {};
       idx.files[id] = { path, type: ATTACHMENT_TYPES[extOf(path)], size: bytes.length, created: now };
       this.addFolderChain(idx, parentPath(path));
@@ -786,9 +786,9 @@ export class Vault {
     return bytes;
   }
 
-  // Guarda una versión nueva de un adjunto (un dibujo). Si cambió en otro dispositivo desde que se
-  // leyó aquí, `merge(base, mío, suyo)` puede juntar las dos versiones ({ bytes, conflict }); si no se
-  // puede, o si chocan, la otra versión se guarda como copia al lado.
+  // Saves a new version of an attachment (a drawing). If it changed on another device since it was
+  // read here, `merge(base, mine, theirs)` can combine both versions ({ bytes, conflict }); if it
+  // cannot, or they clash, the other version is saved as a copy beside it.
   // Devuelve { merged?: bytes guardados, conflict?: { id, path } }.
   async saveFile(id, bytes, { merge = null } = {}) {
     const meta = this.index.files?.[id];
@@ -797,7 +797,7 @@ export class Vault {
     const mine = { ...meta };
     let conflict = null;
     let out = bytes;
-    await this.apply('Snowlog: guardar dibujo', (idx) => {
+    await this.apply('Snowlog: save drawing', (idx) => {
       const now = new Date().toISOString();
       if (!idx.files[id]) idx.files[id] = { ...mine };
       idx.files[id].updated = now;
@@ -823,7 +823,7 @@ export class Vault {
             let joined = null;
             try {
               joined = merge && baseBytes ? merge(baseBytes, bytes, plain) : null;
-            } catch { /* no se pudo juntar: copia */ }
+            } catch { /* could not combine: copy */ }
             if (joined?.bytes) out = joined.bytes;
             if (!joined?.bytes || joined.conflict) {
               conflict = { id: C.randomId(), bytes: plain };
@@ -856,13 +856,13 @@ export class Vault {
     return this.notes().filter((n) => n.path.startsWith(`${folder}/`));
   }
 
-  // Borra la carpeta, sus subcarpetas y todas sus notas.
+  // Deletes the folder, its subfolders and all their notes.
   async deleteFolder(folder) {
     const f = normalizePath(folder);
     const ids = this.notesUnder(f).map((n) => n.id);
     const fids = this.files().filter((x) => x.path.startsWith(`${f}/`)).map((x) => x.id);
     await this.apply(
-      'Snowlog: eliminar carpeta',
+      'Snowlog: delete folder',
       (idx) => {
         idx.folders = idx.folders.filter((x) => x !== f && !x.startsWith(`${f}/`));
         for (const id of ids) delete idx.notes[id];
@@ -874,8 +874,8 @@ export class Vault {
     for (const id of fids) this.fileCache.delete(id);
   }
 
-  // Guarda en el repo un vault.json actualizado (tras recuperar con el código).
-  async writeVaultFile(vaultFile, message = 'cambiar frase de paso') {
+  // Stores an updated vault.json in the repository (after recovering with the code).
+  async writeVaultFile(vaultFile, message = 'change passphrase') {
     const change = [{ path: VAULT_FILE, content: `${JSON.stringify(vaultFile, null, 2)}\n` }];
     try {
       await this.repo.commit(change, `Snowlog: ${message}`);

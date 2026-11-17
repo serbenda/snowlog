@@ -1,12 +1,12 @@
-// Índice en memoria de todas las notas descifradas: frontmatter, etiquetas, tareas y enlaces.
-// Vive solo en memoria y se borra al bloquear. Lo usan las consultas, los enlaces entrantes
-// y el calendario.
+// In-memory index of every decrypted note: frontmatter, tags, tasks and links.
+// It lives only in memory and is wiped on lock. Queries, backlinks and the calendar
+// use it.
 
 import { parseFrontmatter } from './markdown.js';
 
 const TAG_RE = /(^|[\s(])#([\p{L}_][\p{L}\p{N}_/-]*)/gu;
 const LINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g;
-// Una tarea: "- [ ] texto", también dentro de citas o callouts ("> - [x] …").
+// A task: "- [ ] text", also inside quotes or callouts ("> - [x] …").
 export const TASK_LINE_RE = /^(\s*(?:>\s*)*[-*+]\s+\[)([ xX])(\]\s*)(.*)$/;
 const DAY_RE = /^(\d{4}-\d{2}-\d{2})$/;
 
@@ -16,7 +16,7 @@ function asList(v) {
   return String(v).split(/[\s,]+/).filter(Boolean);
 }
 
-// Recorre las líneas fuera de bloques de código y del frontmatter.
+// Walks the lines outside code blocks and the frontmatter.
 export function contentLines(text) {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const start = parseFrontmatter(text).lines;
@@ -42,12 +42,12 @@ export function parseNote({ id, path, text = '', created, updated }) {
   const tasks = [];
   const links = new Set();
   for (const { line, value } of contentLines(text)) {
-    const plain = value.replace(/`[^`]*`/g, ''); // lo que va en `código` no cuenta
+    const plain = value.replace(/`[^`]*`/g, ''); // what is inside `code` does not count
     for (const m of plain.matchAll(TAG_RE)) tags.add(m[2].toLowerCase());
     for (const m of plain.matchAll(LINK_RE)) links.add(m[1].trim().toLowerCase());
     const t = value.match(TASK_LINE_RE);
     if (t) {
-      // Una tarea vacía (o solo con etiquetas, como la de una plantilla) no es una tarea real.
+      // An empty task (or one with only tags, like a template's) is not a real task.
       const empty = !t[4].replace(TAG_RE, '$1').trim();
       tasks.push({ line, text: t[4], completed: t[2] !== ' ', empty });
     }
@@ -56,7 +56,7 @@ export function parseNote({ id, path, text = '', created, updated }) {
   return { id, path, name, folder, fm, tags, tasks, links, text, ctime: created || '', mtime: updated || '', day };
 }
 
-// Cambia el estado de la tarea de la línea indicada. Devuelve el texto nuevo o null.
+// Toggles the task on the given line. Returns the new text, or null.
 export function toggleTaskLine(text, line, done) {
   const lines = text.split('\n');
   const m = lines[line] != null && lines[line].replace(/\r$/, '').match(TASK_LINE_RE);
@@ -66,7 +66,7 @@ export function toggleTaskLine(text, line, done) {
   return lines.join('\n');
 }
 
-// ¿Enlaza la nota `from` a la nota `target`? Acepta [[Título]] y [[Carpeta/Título]].
+// Does note `from` link to note `target`? Accepts [[Title]] and [[Folder/Title]].
 export function linksTo(from, target) {
   return from.links.has(target.name.toLowerCase()) || from.links.has(target.path.toLowerCase());
 }

@@ -1,5 +1,5 @@
-// Recorridos principales en un Chrome de verdad (sin cabeza), contra un GitHub falso en memoria.
-// Se ejecutan con `npm run test:e2e` y en la CI. Si no hay Chrome, se saltan.
+// Main flows in a real (headless) Chrome, against a fake in-memory GitHub.
+// They run with `npm run test:e2e` and in the CI. Without Chrome, they are skipped.
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +15,7 @@ import { createFakeGitHub } from '../fake-github.mjs';
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
 const chrome = findChrome();
-const skip = chrome ? false : 'No hay Chrome (pon CHROME_BIN)';
+const skip = chrome ? false : 'No Chrome (set CHROME_BIN)';
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 
 let server;
@@ -46,64 +46,64 @@ after(async () => {
   server?.close();
 });
 
-const PASS = 'una frase de paso de prueba';
+const PASS = 'a test passphrase';
 
 async function newVault(page) {
   await page.goto(base);
-  await page.click('button.link-btn', 'Usar un token personal');
-  await page.fill('#pat', 'github_pat_prueba');
-  await page.click('button', 'Continuar');
+  await page.click('button.link-btn', 'Use a personal token');
+  await page.fill('#pat', 'github_pat_test');
+  await page.click('button', 'Continue');
   await page.waitFor('!!document.querySelector("#p1")');
   await page.fill('#p1', PASS);
   await page.fill('#p2', PASS);
-  await page.click('button', 'Crear bóveda cifrada');
+  await page.click('button', 'Create encrypted vault');
   await page.waitFor('!!document.querySelector(".recovery-code")', 30000);
   await page.click('#saved');
-  await page.click('button', 'Entrar en Snowlog');
+  await page.click('button', 'Enter Snowlog');
   await page.waitFor('!document.querySelector("#note").hidden');
 }
 
 async function unlock(page) {
   await page.waitFor('!!document.querySelector("#pp")');
   await page.fill('#pp', PASS);
-  await page.click('button', 'Desbloquear');
+  await page.click('button', 'Unlock');
   await page.waitFor('!document.querySelector("#app").hidden && !document.querySelector("#note").hidden', 30000);
 }
 
 const realErrors = (page) => page.errors.filter((e) => !/status of 4(09|22)/.test(e));
 
-test('crear bóveda, escribir, bloquear y volver a entrar: nada en claro en el repo', { skip, timeout: 120000 }, async () => {
+test('create a vault, write, lock and enter again: nothing in plaintext in the repository', { skip, timeout: 120000 }, async () => {
   const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
   const page = await browser.newPage({ intercept: fake.fetch });
   await newVault(page);
   await page.press('N', { ctrl: true });
   await page.waitFor('document.activeElement?.id === "title"');
   await page.eval('document.getElementById("title").value = ""');
-  await page.type('Plan secreto\n');
+  await page.type('Secret plan\n');
   await page.waitFor('document.activeElement?.id === "editor"');
-  await page.type('- comprar regalo\nllamar a mamá');
-  assert.equal(await page.eval('document.getElementById("editor").value'), '- comprar regalo\n- llamar a mamá', 'Intro continúa la lista');
+  await page.type('- buy a present\ncall mamá');
+  assert.equal(await page.eval('document.getElementById("editor").value'), '- buy a present\n- call mamá', 'Enter continues the list');
   await page.press('S', { ctrl: true });
-  await page.waitFor('document.getElementById("st-sync").textContent === "Guardado"');
+  await page.waitFor('document.getElementById("st-sync").textContent === "Saved"');
   for (const [path, content] of fake.files()) {
-    for (const secret of ['Plan secreto', 'regalo', 'mamá']) assert.ok(!path.includes(secret) && !content.includes(secret), `${path} en claro`);
+    for (const secret of ['Secret plan', 'present', 'mamá']) assert.ok(!path.includes(secret) && !content.includes(secret), `${path} in plaintext`);
   }
   await page.click('.ribbon [data-action=lock]');
   assert.equal(await page.eval('document.title'), 'Snowlog');
   await unlock(page);
-  await page.click('.tree-row', 'Plan secreto');
-  await page.waitFor('document.getElementById("editor").value.includes("llamar a mamá")');
+  await page.click('.tree-row', 'Secret plan');
+  await page.waitFor('document.getElementById("editor").value.includes("call mamá")');
   assert.deepEqual(realErrors(page), []);
   await page.close();
 });
 
-test('lectura segura: el HTML de una nota no se ejecuta y la CSP no se queja', { skip, timeout: 120000 }, async () => {
+test('safe reading: a note\'s HTML does not run and the CSP does not complain', { skip, timeout: 120000 }, async () => {
   const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
   const page = await browser.newPage({ intercept: fake.fetch });
   await newVault(page);
   await page.press('N', { ctrl: true });
   await page.press('Enter');
-  await page.type('<img src=x onerror="window.__pwned=1"> [x](javascript:window.__pwned=2) **negrita** [[Bienvenido]]');
+  await page.type('<img src=x onerror="window.__pwned=1"> [x](javascript:window.__pwned=2) **bold** [[Welcome]]');
   await page.press('E', { ctrl: true });
   await page.waitFor('!!document.querySelector("#reading strong")');
   assert.equal(await page.eval('window.__pwned || 0'), 0);
@@ -113,37 +113,37 @@ test('lectura segura: el HTML de una nota no se ejecuta y la CSP no se queja', {
   await page.close();
 });
 
-test('ejemplos, consultas, búsqueda y renombrar con enlaces', { skip, timeout: 180000 }, async () => {
+test('examples, queries, search and renaming with links', { skip, timeout: 180000 }, async () => {
   const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
   const page = await browser.newPage({ intercept: fake.fetch });
   await newVault(page);
   await page.click('.view-actions [data-action=note-menu]');
-  await page.click('.menu-item', 'Cargar ejemplos');
-  await page.click('.modal button', 'Cargar');
-  await page.waitFor('document.getElementById("title").value === "Cómo usar este ejemplo"', 60000);
-  // Búsqueda en todas las notas
+  await page.click('.menu-item', 'Load examples');
+  await page.click('.modal button', 'Load');
+  await page.waitFor('document.getElementById("title").value === "How to use this example"', 60000);
+  // Search across all notes
   await page.press('F', { ctrl: true, shift: true });
-  await page.type('favoritas');
-  await page.waitFor('/\\d+ nota/.test(document.querySelector("#search-results .search-count")?.textContent || "")', 30000);
+  await page.type('favorites');
+  await page.waitFor('/\\d+ note/.test(document.querySelector("#search-results .search-count")?.textContent || "")', 30000);
   assert.ok(await page.eval('document.querySelectorAll("#search-results mark").length > 0'));
-  // Renombrar una historia reescribe los enlaces que apuntan a ella
+  // Renaming a story rewrites the links that point to it
   await page.click('.left-tab[data-tab=files]');
-  await page.eval(`${page.sel('.tree-row.is-note', 'HU-02')}.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }))`);
-  await page.click('.menu-item', 'Renombrar');
-  await page.fill('#mp', 'HU-02 Favoritas');
+  await page.eval(`${page.sel('.tree-row.is-note', 'US-02')}.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }))`);
+  await page.click('.menu-item', 'Rename');
+  await page.fill('#mp', 'US-02 Favorites');
   await page.press('Enter');
-  await page.waitFor('[...document.querySelectorAll(".notice")].some((n) => n.textContent.includes("Enlaces actualizados"))', 30000);
-  await page.click('.tree-row.is-note', 'Planificación');
-  await page.waitFor('document.getElementById("editor").value.includes("[[HU-02 Favoritas]]") || document.getElementById("reading").textContent.includes("HU-02 Favoritas")', 15000);
+  await page.waitFor('[...document.querySelectorAll(".notice")].some((n) => n.textContent.includes("Links updated"))', 30000);
+  await page.click('.tree-row.is-note', 'Sprint 1 planning');
+  await page.waitFor('document.getElementById("editor").value.includes("[[US-02 Favorites]]") || document.getElementById("reading").textContent.includes("US-02 Favorites")', 15000);
   assert.deepEqual(realErrors(page), []);
   await page.close();
 });
 
-test('versión portátil: funciona desde el disco y sin ninguna conexión', { skip, timeout: 120000 }, async () => {
+test('portable version: works from disk and without any connection', { skip, timeout: 120000 }, async () => {
   execFileSync(process.execPath, [join(ROOT, 'scripts/build-portable.mjs')], { stdio: 'ignore' });
   const file = join(ROOT, 'dist/snowlog-portable.html');
   assert.ok(existsSync(file));
-  // Carpeta en memoria en lugar del selector de carpetas del sistema.
+  // An in-memory folder instead of the system folder picker.
   const memfs = `(() => {
     class F { constructor(n){ this.kind='file'; this.name=n; this.data=new Uint8Array(); this.mtime=Date.now(); }
       async getFile(){ const d=this.data, m=this.mtime; return { size:d.length, lastModified:m, text: async()=>new TextDecoder().decode(d), arrayBuffer: async()=>d.slice().buffer }; }
@@ -153,71 +153,71 @@ test('versión portátil: funciona desde el disco y sin ninguna conexión', { sk
       async getDirectoryHandle(n,{create=false}={}){ const h=this.c.get(n); if(h&&h.kind==='directory') return h; if(h||!create){ throw Object.assign(new Error('nf'),{name:'NotFoundError'}); } const d=new D(n); this.c.set(n,d); return d; }
       async getFileHandle(n,{create=false}={}){ const h=this.c.get(n); if(h&&h.kind==='file') return h; if(h||!create){ throw Object.assign(new Error('nf'),{name:'NotFoundError'}); } const f=new F(n); this.c.set(n,f); return f; }
       async removeEntry(n){ this.c.delete(n); } async requestPermission(){ return 'granted'; } }
-    const root = new D('Notas'); window.__root = root; window.showDirectoryPicker = async () => root;
+    const root = new D('Notes'); window.__root = root; window.showDirectoryPicker = async () => root;
   })();`;
   const page = await browser.newPage({ initScript: memfs, offline: true });
   await page.goto(`file://${file}`);
-  await page.click('button', 'Abrir una carpeta');
+  await page.click('button', 'Open a folder');
   await page.waitFor('!document.querySelector("#app").hidden');
   await page.press('N', { ctrl: true });
   await page.press('Enter');
-  await page.type('escrita sin red');
+  await page.type('written offline');
   await page.press('S', { ctrl: true });
-  await page.waitFor('window.__root.c.has("Sin título.md")');
-  assert.equal(await page.eval('new TextDecoder().decode(window.__root.c.get("Sin título.md").data)'), 'escrita sin red');
-  assert.deepEqual(page.requests.filter((u) => !u.startsWith('file:') && !u.startsWith('data:')), [], 'ninguna petición de red');
+  await page.waitFor('window.__root.c.has("Untitled.md")');
+  assert.equal(await page.eval('new TextDecoder().decode(window.__root.c.get("Untitled.md").data)'), 'written offline');
+  assert.deepEqual(page.requests.filter((u) => !u.startsWith('file:') && !u.startsWith('data:')), [], 'no network requests');
   assert.deepEqual(realErrors(page), []);
   await page.close();
 });
 
-test('rotar la clave en un dispositivo: el otro pide la frase y no pierde lo que estaba escribiendo', { skip, timeout: 180000 }, async () => {
+test('rotating the key on one device: the other asks for the passphrase and does not lose what it was writing', { skip, timeout: 180000 }, async () => {
   const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
   const a = await browser.newPage({ intercept: fake.fetch });
   await newVault(a);
   await a.press('N', { ctrl: true });
   await a.waitFor('document.activeElement?.id === "title"');
   await a.eval('document.getElementById("title").value = ""');
-  await a.type('Compartida\n');
-  await a.fill('#editor', 'línea uno\nlínea dos\nlínea tres');
+  await a.type('Shared\n');
+  await a.fill('#editor', 'line one\nline two\nline three');
   await a.press('S', { ctrl: true });
-  await a.waitFor('document.getElementById("st-sync").textContent === "Guardado"');
+  await a.waitFor('document.getElementById("st-sync").textContent === "Saved"');
 
-  // Segundo dispositivo con la nota abierta.
+  // A second device with the note open.
   const b = await browser.newPage({ intercept: fake.fetch });
   await b.goto(base);
-  await b.click('button.link-btn', 'Usar un token personal');
-  await b.fill('#pat', 'github_pat_prueba');
-  await b.click('button', 'Continuar');
+  await b.click('button.link-btn', 'Use a personal token');
+  await b.fill('#pat', 'github_pat_test');
+  await b.click('button', 'Continue');
   await unlock(b);
-  await b.click('.tree-row', 'Compartida');
-  await b.waitFor('document.getElementById("editor").value.includes("línea dos")');
+  await b.click('.tree-row', 'Shared');
+  await b.waitFor('document.getElementById("editor").value.includes("line two")');
 
-  // A rota la clave.
+  // A rotates the key.
   const before = new Map(fake.files());
   await a.click('.view-actions [data-action=note-menu]');
-  await a.click('.menu-item', 'Frase de paso y recuperación');
-  await a.click('.modal button', 'Cambiar la clave de cifrado');
+  await a.click('.menu-item', 'Passphrase and recovery');
+  await a.click('.modal button', 'Change the encryption key');
   await a.fill('#rk0', PASS);
-  await a.click('.modal button', 'Recifrar todo');
+  await a.click('.modal button', 'Re-encrypt everything');
   await a.waitFor('!!document.querySelector(".modal .recovery-code")', 60000);
   await a.click('#saved2');
-  await a.click('.modal button', 'Hecho');
+  await a.click('.modal button', 'Done');
   for (const [path, content] of fake.files()) if (/^n\//.test(path)) assert.notEqual(content, before.get(path));
 
-  // B, que no sabe nada, sigue escribiendo y guarda: se bloquea pidiendo la frase…
-  await b.fill('#editor', 'línea uno\nlínea dos\nlínea tres\nescrito en B');
+  // B, which knows nothing, keeps writing and saves: it locks, asking for the passphrase…
+  await b.fill('#editor', 'line one\nline two\nline three\nwritten on B');
   await b.press('S', { ctrl: true });
-  await b.waitFor('!!document.querySelector("#pp") && document.querySelector(".lock-card").textContent.includes("clave de cifrado se ha cambiado")', 30000);
-  // …y al volver a entrar, lo que escribió se sube (con la clave nueva).
+  await b.waitFor('!!document.querySelector("#pp") && document.querySelector(".lock-card").textContent.includes("encryption key was changed")', 30000);
+  // …and on entering again, what it wrote is uploaded (with the new key).
   await unlock(b);
-  await b.waitFor('[...document.querySelectorAll(".notice")].some((n) => n.textContent.includes("Conexión recuperada") || n.textContent.includes("subido"))', 30000);
-  await b.click('.tree-row', 'Compartida');
-  await b.waitFor('document.getElementById("editor").value.includes("escrito en B")', 15000);
-  // A también lo ve, y el historial anterior a la rotación se sigue leyendo.
+  await b.waitFor('[...document.querySelectorAll(".notice")].some((n) => n.textContent.includes("Back online") || n.textContent.includes("uploaded"))', 30000);
+  await b.click('.tree-row', 'Shared');
+  await b.waitFor('document.getElementById("editor").value.includes("written on B")', 15000);
+  // A sees it too, and the history from before the rotation is still readable.
   await a.click('.ribbon [data-action=lock]');
   await unlock(a);
-  await a.click('.tree-row', 'Compartida');
-  await a.waitFor('document.getElementById("editor").value.includes("escrito en B")', 15000);
+  await a.click('.tree-row', 'Shared');
+  await a.waitFor('document.getElementById("editor").value.includes("written on B")', 15000);
   assert.deepEqual(realErrors(a), []);
   assert.deepEqual(realErrors(b).filter((e) => !e.includes('OperationError')), []);
   await a.close();

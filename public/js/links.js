@@ -1,20 +1,20 @@
-// Reescribir enlaces [[…]] cuando una nota cambia de nombre o de carpeta.
-// Respeta el alias ([[Nota|texto]]), el encabezado ([[Nota#Sección]]), los incrustados (![[…]])
-// y no toca nada dentro de bloques de código ni de `código en línea`.
+// Rewrite [[…]] links when a note is renamed or moved to another folder.
+// It respects the alias ([[Note|text]]), the heading ([[Note#Section]]), embeds (![[…]])
+// and touches nothing inside code blocks or `inline code`.
 
 const LINK_RE = /(!?)\[\[([^\]|#]+)(#[^\]|]*)?(\|[^\]]*)?\]\]/g;
 
 function rewriteLine(line, map) {
-  // Se separan los trozos de `código` para no tocarlos.
+  // The `code` pieces are split off so they are left alone.
   return line.split(/(`[^`]*`)/).map((part, i) => (i % 2 ? part : part.replace(LINK_RE, (m, bang, target, heading = '', alias = '') => {
     const to = map(target.trim());
     return to == null ? m : `${bang}[[${to}${heading}${alias}]]`;
   }))).join('');
 }
 
-// changes: [{ from: 'Carpeta/Vieja', to: 'Otra/Nueva', byName: true }]
-// byName indica si los enlaces por nombre corto ([[Vieja]]) apuntaban sin duda a esta nota.
-// Devuelve el texto nuevo, o null si no cambia nada.
+// changes: [{ from: 'Folder/Old', to: 'Other/New', byName: true }]
+// byName says whether links by short name ([[Old]]) certainly pointed to this note.
+// Returns the new text, or null if nothing changes.
 export function rewriteLinks(text, changes) {
   const byPath = new Map();
   const byName = new Map();
@@ -45,8 +45,8 @@ export function rewriteLinks(text, changes) {
   return changed ? out.join('\n') : null;
 }
 
-// Construye la lista de cambios para un renombrado, sabiendo qué notas hay (antes del cambio).
-// moves: [{ from, to }] (rutas completas, sin .md). allPaths: rutas de todas las notas antes del cambio.
+// Builds the list of changes for a rename, knowing which notes exist (before the change).
+// moves: [{ from, to }] (full paths, without .md). allPaths: paths of every note before the change.
 export function linkChanges(moves, allPaths) {
   const count = new Map();
   for (const p of allPaths) {
@@ -67,9 +67,9 @@ export function linkChanges(moves, allPaths) {
     return {
       from,
       to,
-      // Los enlaces por nombre corto solo son de esta nota si su nombre era único.
+      // Links by short name only belong to this note if its name was unique.
       byName: count.get(from.split('/').pop().toLowerCase()) === 1,
-      // Si el nombre nuevo queda repetido, se enlaza con la ruta completa para no confundirlo.
+      // If the new name is not unique, the link uses the full path so it is not mistaken.
       toName: after.get(toName.toLowerCase()) > 1 ? to : toName,
     };
   });

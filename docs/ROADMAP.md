@@ -1,44 +1,27 @@
-# Hoja de ruta
+# Roadmap
 
-Estado (2026-11-13): las tres fases están hechas en `development`. Quedan pendientes la revisión de seguridad
-por una persona externa y probar la portátil en Firefox y Safari reales.
+> **A single numbering system:** stages `S0, S1, S2…` and, within each, phases `P01, P02…` (global numbering, never reset).
+> A stage ends when its **exit criterion** is met, which must be checkable, not a feeling.
+> If the plan changes, edit this file and explain it in a [decision](decisions/).
 
-Punto de partida: base sólida (cifrado, versión online y portátil, día a día con nota diaria, panel y consultas).
-Para llegar a un 10/10 se plantearon tres fases. Los criterios para dar cada punto por terminado están en
-[DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md).
+| Stage | Goal | Exit criterion | Status |
+|---|---|---|---|
+| S0 | Define | VISION written, stack and encryption decided (ADRs), local environment running and verifiable (`docs/SETUP.md`) | ✅ |
+| S1 | Secure core | Sign-in, encrypted vault, notes and folders, nothing in plaintext in the repository (tested), automatic lock | ✅ |
+| S2 | Day to day | Daily note, templates, queries, calendar, backlinks, editor, search, attachments, conflict merging, history, backups, offline use, settings, palette, Kanban, graph, portable file, desktop builds, agent access, e2e in CI | ✅ |
+| S3 | Release | Independent security review with no open High findings; portable file tested on real Firefox and Safari; the repo on the template's guardrails; no High risks open | ⏳ |
 
-## Fase 1: Imprescindible (de 6,5 a 8,5)
+Legend: ⬜ not started · ⏳ in progress · ✅ done
 
-Lo que se nota cada día al escribir y lo que evita perder trabajo.
+S0–S2 were done before the project adopted the template (2026-11-09 to 2026-11-17). They followed an earlier
+plan in three phases (Essential, Trust, Polish), all done; their history is in [CHANGELOG.md](../CHANGELOG.md),
+the PRs (#1–#6) and the worklog's first entry, not in phase files.
 
-| Punto | Por qué |
-| --- | --- |
-| Renombrar actualiza enlaces | Hoy renombrar rompe los `[[enlaces]]` que apuntaban a la nota |
-| Editor de verdad | El editor es un cuadro de texto plano: sin resaltado, sin continuar listas, sin autocompletar `[[` |
-| Búsqueda y etiquetas | Encontrar algo hoy exige recordar el título |
-| Adjuntos | Imágenes y PDF son parte normal de las notas |
-| Conflictos entre dispositivos | Editar la misma nota en dos sitios puede perder texto: gana el último en guardar |
+## S3 — Release
 
-## Fase 2: Confianza (de 8,5 a 9,5)
-
-Poder fiarse de Snowlog con años de notas.
-
-| Punto | Por qué |
-| --- | --- |
-| Historial y restaurar | Git ya guarda cada versión cifrada, pero no se puede ver ni recuperar desde la app |
-| Cambiar la frase de paso | Hoy solo se puede con el código de recuperación |
-| Copias de seguridad | Que no dependan de acordarse |
-| Rendimiento | Al entrar se descifran todas las notas; cada guardado es un commit |
-| Online sin conexión | Usar la versión online en el metro o en un avión |
-| Revisión de seguridad | Un cifrado propio debe revisarlo alguien externo |
-
-## Fase 3: Pulido (de 9,5 a 10)
-
-| Punto | Por qué |
-| --- | --- |
-| Ajustes en la app | Cambiar carpetas o plantillas sin tocar código |
-| Paleta de comandos, marcadores, vista previa | Ir rápido sin ratón |
-| Kanban y grafo | Lo que se tenía en Obsidian |
-| Portátil en Safari y Firefox | Hoy solo Chrome y Edge |
-| Pasar notas entre portátil y online | Mover un proyecto de una a otra |
-| Tests de navegador en la CI | Que las pruebas de interfaz se ejecuten solas |
+| Phase | What | Status |
+|---|---|---|
+| P01 | Adopt project-template 1.0.0, everything in English | ⏳ |
+| P02 | Independent security review and fixes; tests on real Firefox, Safari, phones, macOS and Windows | ⬜ |
+| P03 | Agent access, phase 2: edit by section, move, delete, tasks, queries, orphans and a CLI | ⬜ |
+| P04 | First release (`v1.0.0`) | ⬜ |

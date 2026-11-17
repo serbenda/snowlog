@@ -1,10 +1,10 @@
-// Snowlog auth: Cloudflare Worker que cambia el código de login de GitHub por un token.
-// Guarda el client secret de la GitHub App (como secreto del Worker) y nada más:
-// no almacena tokens ni registra el contenido de las peticiones.
+// Snowlog auth: a Cloudflare Worker that exchanges the GitHub sign-in code for a token.
+// It holds the GitHub App client secret (as a Worker secret) and nothing else:
+// it does not store tokens or log the content of requests.
 //
 // Variables:
-//   ALLOWED_ORIGIN        origen de la web, p. ej. https://bendi.dev (sin barra final)
-//   GITHUB_CLIENT_ID      client ID de la GitHub App
+//   ALLOWED_ORIGIN        origin of the web app, e.g. https://bendi.dev (no trailing slash)
+//   GITHUB_CLIENT_ID      GitHub App client ID
 //   GITHUB_CLIENT_SECRET  secreto (wrangler secret put GITHUB_CLIENT_SECRET)
 
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';

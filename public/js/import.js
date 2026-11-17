@@ -1,25 +1,25 @@
-// Importar una carpeta de Markdown (por ejemplo, una bóveda de Obsidian).
-// Todo ocurre en el navegador: se leen los ficheros elegidos, se cifran con la clave
-// de la bóveda y se suben. Nada sale del dispositivo en claro.
+// Import a folder of Markdown (for example, an existing vault from another notes app).
+// Everything happens in the browser: the chosen files are read, encrypted with the vault
+// key and uploaded. Nothing leaves the device in plaintext.
 
 export const MAX_NOTE_BYTES = 2 * 1024 * 1024;
 
-// Carpetas que nunca se importan: configuración de Obsidian, Git, papelera, editores…
+// Folders that are never imported: other apps' settings, Git, trash, editors…
 const SKIP_DIR = /^(\.|node_modules$|__pycache__$)/;
 
-// Caracteres que no admite un nombre de nota en Snowlog.
+// Characters that a Snowlog note name does not allow.
 const BAD_CHARS = /[\\:*?"<>|#^[\]]/g;
 
 function cleanSegment(s) {
   return s.replace(BAD_CHARS, '-').replace(/\s+/g, ' ').trim();
 }
 
-// files: lista de objetos tipo File con webkitRelativePath (o name), size y text().
+// files: a list of File-like objects with webkitRelativePath (or name), size and text().
 // Devuelve { root, notes: [{ path, file }], skipped: { config, other, tooBig } }.
 export function planImport(files) {
   const list = Array.from(files);
   const rels = list.map((f) => (f.webkitRelativePath || f.name).replace(/\\/g, '/'));
-  // Si todos comparten la primera carpeta (la que se eligió), se quita del camino.
+  // If they all share the first folder (the one that was chosen), it is removed from the path.
   const firsts = new Set(rels.map((r) => (r.includes('/') ? r.split('/')[0] : '')));
   const root = firsts.size === 1 && !firsts.has('') ? [...firsts][0] : '';
 

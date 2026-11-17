@@ -1,17 +1,17 @@
-// Copia de seguridad cifrada (.snowlog): un único fichero que se abre sin GitHub y sin Snowlog
-// instalado, solo con la frase de paso o el código de recuperación.
+// Encrypted backup (.snowlog): a single file that opens without GitHub and without Snowlog
+// installed, with just the passphrase or the recovery code.
 //
-//   { app: 'snowlog-backup', v: 1, created, notes, files, vault: <vault.json>, data: base64(iv || cifrado) }
+//   { app: 'snowlog-backup', v: 1, created, notes, files, vault: <vault.json>, data: base64(iv || ciphertext) }
 //
-// `vault` lleva la clave de datos envuelta, como en el repo; `data` es un .zip con las notas (.md)
-// y los adjuntos, cifrado con esa clave. Nada va en claro salvo la fecha y los recuentos.
+// `vault` holds the wrapped data key, as in the repo; `data` is a .zip with the notes (.md)
+// and the attachments, encrypted with that key. Nothing is in plaintext except the date and the counts.
 
 import * as C from './crypto.js';
 import { makeZip, readZip } from './zip.js';
 
 const AAD = 'snowlog-backup';
 
-// files: [{ path, text }] o [{ path, data }], como para makeZip.
+// files: [{ path, text }] or [{ path, data }], as for makeZip.
 export async function makeBackup(vaultFile, dek, files, now = new Date()) {
   const zip = makeZip(files, now);
   const backup = {
@@ -37,7 +37,7 @@ export function parseBackup(bytes) {
   return b;
 }
 
-// Devuelve { created, zip, files: [{ path, data }] } o lanza bad_secret / bad_backup.
+// Returns { created, zip, files: [{ path, data }] } or throws bad_secret / bad_backup.
 export async function openBackup(bytes, secret) {
   const b = parseBackup(bytes);
   const dek = await C.unlockWithAny(b.vault, secret);

@@ -7,7 +7,7 @@ const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf
 const csp = Object.fromEntries(html.match(/Content-Security-Policy" content="([^"]+)"/)[1]
   .split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]));
 
-test('la CSP online es estricta', () => {
+test('the online CSP is strict', () => {
   assert.deepEqual(csp['default-src'], ["'none'"]);
   assert.deepEqual(csp['script-src'], ["'self'"]);
   assert.deepEqual(csp['style-src'], ["'self'"]);
@@ -15,16 +15,16 @@ test('la CSP online es estricta', () => {
   assert.deepEqual(csp['form-action'], ["'none'"]);
   assert.deepEqual(csp['require-trusted-types-for'], ["'script'"]);
   assert.deepEqual(csp['trusted-types'], ['snowlog']);
-  assert.ok(!html.includes('unsafe-'), 'nada de unsafe-inline ni unsafe-eval');
+  assert.ok(!html.includes('unsafe-'), 'no unsafe-inline or unsafe-eval');
 });
 
-test('solo se conecta con GitHub y con el Worker configurado, nada más', () => {
+test('it only connects to GitHub and the configured Worker, nothing else', () => {
   const allowed = ['https://api.github.com', new URL(CONFIG.authWorker).origin];
   assert.deepEqual(csp['connect-src'].sort(), allowed.sort());
-  assert.ok(!csp['connect-src'].some((s) => s.includes('*')), 'sin comodines');
+  assert.ok(!csp['connect-src'].some((s) => s.includes('*')), 'no wildcards');
 });
 
-test('el HTML de la app solo se escribe a través de la política de Trusted Types', () => {
+test('the app HTML is only written through the Trusted Types policy', () => {
   for (const f of readdirSync(new URL('../public/js/', import.meta.url))) {
     const src = readFileSync(new URL(`../public/js/${f}`, import.meta.url), 'utf8');
     for (const line of src.split('\n')) {

@@ -1,4 +1,4 @@
-/* Snowlog: tema oscuro por defecto (obsidiana nevada), claro si el sistema lo pide. */
+/* Snowlog: dark theme by default (snowy obsidian), light if the system asks for it. */
 :root {
   --bg-primary: #1c1d20;
   --bg-secondary: #16171a;
@@ -87,7 +87,7 @@ button { cursor: pointer; }
   height: 100dvh;
   display: grid;
   grid-template-columns: 44px var(--left-w) minmax(0, 1fr) var(--right-w);
-  grid-template-rows: minmax(0, 1fr); /* la fila no crece con el contenido: cada panel hace su propio scroll */
+  grid-template-rows: minmax(0, 1fr); /* the row does not grow with the content: each panel scrolls on its own */
   overflow: hidden;
 }
 .app.left-closed { grid-template-columns: 44px 0 minmax(0, 1fr) var(--right-w); }
@@ -193,7 +193,7 @@ button { cursor: pointer; }
   .kanban-card-actions { position: static; display: flex; grid-column: 1 / -1; justify-content: flex-end; box-shadow: none; border: 0; background: none; }
 }
 
-/* ---------- Grafo ---------- */
+/* ---------- Graph ---------- */
 .modal.graph { width: min(1200px, 100%); height: calc(88vh - 32px); display: flex; flex-direction: column; padding: 12px; }
 .graph-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
 .graph-bar h2 { margin: 0 !important; }
@@ -202,7 +202,7 @@ button { cursor: pointer; }
 .graph-info { flex: 1; font-size: 12px; color: var(--text-faint); }
 .graph-canvas { flex: 1; min-height: 0; width: 100%; border-radius: 8px; background: var(--bg-primary); border: 1px solid var(--border); touch-action: none; cursor: grab; }
 
-/* ---------- Paleta, marcadores y vista previa ---------- */
+/* ---------- Palette, bookmarks and preview ---------- */
 .command-item { flex-direction: row !important; justify-content: space-between; align-items: center; gap: 12px; }
 .command-item kbd, .switcher-hint kbd {
   font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
@@ -224,7 +224,7 @@ button { cursor: pointer; }
 .hover-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
 .hover-preview .markdown h1 { font-size: 20px; }
 
-/* ---------- Historial ---------- */
+/* ---------- History ---------- */
 .modal.history { width: min(980px, 100%); max-height: calc(88vh - 32px); display: flex; flex-direction: column; }
 .history-body { display: grid; grid-template-columns: 220px 1fr; gap: 14px; min-height: 0; flex: 1; }
 .history-list { overflow: auto; max-height: 60vh; border-right: 1px solid var(--border); padding-right: 8px; }
@@ -243,7 +243,7 @@ button { cursor: pointer; }
   .history-hint { display: none; }
 }
 
-/* ---------- Adjuntos ---------- */
+/* ---------- Attachments ---------- */
 .tree-row.is-file .label { color: var(--text-muted); }
 .file-ext {
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint);
@@ -269,7 +269,7 @@ button { cursor: pointer; }
 .embed-open { flex: none; color: var(--accent); font-weight: 600; text-decoration: none; padding: 4px 8px; border-radius: 5px; }
 .embed-open:hover { background: var(--hover); }
 
-/* ---------- Pestañas del panel izquierdo, búsqueda y etiquetas ---------- */
+/* ---------- Left panel tabs, search and tags ---------- */
 .left-tabs { display: flex; gap: 2px; padding: 6px 8px 0; flex: none; }
 .left-tab { color: var(--text-muted); }
 .left-tab[aria-selected="true"] { background: var(--active); color: var(--text-normal); }
@@ -304,7 +304,7 @@ button { cursor: pointer; }
 .tag-name { color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag-count { font-size: 12px; color: var(--text-faint); background: var(--hover); border-radius: 9px; padding: 0 7px; }
 
-/* ---------- Árbol de archivos ---------- */
+/* ---------- File tree ---------- */
 .tree { flex: 1; overflow: auto; padding: 2px 6px 24px; outline: none; }
 .tree.drop-root { background: var(--active); }
 .tree-row {
@@ -335,7 +335,7 @@ button { cursor: pointer; }
 .tree-children { position: relative; }
 .tree-empty { padding: 12px 14px; color: var(--text-faint); font-size: 13px; }
 
-/* ---------- Vista principal ---------- */
+/* ---------- Main view ---------- */
 .workspace { position: relative; display: flex; flex-direction: column; min-width: 0; background: var(--bg-primary); }
 .view-header {
   height: 40px;
@@ -355,7 +355,7 @@ button { cursor: pointer; }
 .view-content { flex: 1; overflow: auto; position: relative; }
 .view-content:has(> .drawing:not([hidden])) { overflow: hidden; }
 .drawing { position: absolute; inset: 0; }
-/* El editor de dibujos con los colores de Snowlog */
+/* The drawing editor with Snowlog's colors */
 .drawing .sk-editor {
   --sk-ui: var(--bg-elevated);
   --sk-text: var(--text-normal);
@@ -407,7 +407,7 @@ button { cursor: pointer; }
 .editor-mirror { visibility: hidden; }
 .editor-wrap .editor { position: relative; color: transparent; caret-color: var(--text-normal); }
 .editor-wrap .editor::selection { color: transparent; background: var(--active); }
-/* Solo colores: nunca tamaños ni grosores, para que el texto coincida con el del cuadro. */
+/* Only colors: never sizes or weights, so the text matches the text box. */
 .hl-mark, .hl-front { color: var(--text-faint); }
 .hl-heading { color: var(--accent); }
 .hl-heading .hl-mark { color: var(--text-faint); }
@@ -481,7 +481,7 @@ button { cursor: pointer; }
 }
 .status-bar .error { color: var(--danger); }
 
-/* ---------- Lectura (Markdown) ---------- */
+/* ---------- Reading (Markdown) ---------- */
 .markdown { font-size: 16px; line-height: 1.65; overflow-wrap: anywhere; }
 .markdown > :first-child { margin-top: 0; }
 .markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { line-height: 1.3; margin: 1.4em 0 0.5em; }
@@ -500,7 +500,7 @@ button { cursor: pointer; }
 .markdown li.task input { margin: 0 8px 0 0; vertical-align: -1px; }
 .markdown li.task.done > .task-text { color: var(--text-muted); text-decoration: line-through; }
 .markdown mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 3px; }
-/* Etiquetas */
+/* Tags */
 .markdown .tag {
   display: inline-block;
   padding: 0 0.5em;
@@ -512,7 +512,7 @@ button { cursor: pointer; }
   white-space: nowrap;
 }
 
-/* Propiedades (frontmatter) */
+/* Properties (frontmatter) */
 .markdown .properties {
   margin: 0 0 1.4em;
   padding: 0 0 0.8em;
@@ -527,7 +527,7 @@ button { cursor: pointer; }
 .markdown .pill { padding: 0 0.5em; border-radius: 6px; background: var(--code-bg); }
 .markdown .empty-value { color: var(--text-faint); font-style: italic; }
 
-/* Tablas */
+/* Tables */
 .markdown .table-wrap { overflow-x: auto; margin: 0.9em 0; }
 .markdown table { border-collapse: collapse; font-size: 0.94em; min-width: 50%; }
 .markdown th, .markdown td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
@@ -581,7 +581,7 @@ button { cursor: pointer; }
 
 .markdown hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
 
-/* ---------- Esquema ---------- */
+/* ---------- Outline ---------- */
 .outline { flex: 1; overflow: auto; padding: 4px 8px 24px; }
 .outline-item {
   display: block;
@@ -600,7 +600,7 @@ button { cursor: pointer; }
 .outline-item:hover { background: var(--hover); color: var(--text-normal); }
 .outline-empty { padding: 8px 14px; color: var(--text-faint); font-size: 13px; }
 
-/* ---------- Menú contextual, modales, avisos ---------- */
+/* ---------- Context menu, modals, notices ---------- */
 .menu {
   position: fixed;
   z-index: 40;
@@ -697,7 +697,7 @@ button { cursor: pointer; }
 }
 .notice.error { border-color: var(--danger); }
 
-/* ---------- Pantallas de acceso ---------- */
+/* ---------- Sign-in screens ---------- */
 .lock {
   min-height: 100dvh;
   display: flex;
@@ -742,7 +742,7 @@ select.input { appearance: auto; }
 .check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 12px 0; }
 .check input { margin-top: 3px; }
 
-/* ---------- Móvil ---------- */
+/* ---------- Mobile ---------- */
 .backdrop { display: none; }
 @media (max-width: 760px) {
   .app, .app.left-closed, .app.right-closed, .app.left-closed.right-closed { grid-template-columns: minmax(0, 1fr); }
@@ -772,7 +772,7 @@ select.input { appearance: auto; }
 
 .lock-card .hint { font-size: 13px; margin: 10px 0 0; }
 
-/* ---------- Panel derecho: calendario, esquema y enlaces entrantes ---------- */
+/* ---------- Right panel: calendar, outline and backlinks ---------- */
 .right-scroll { flex: 1; overflow: auto; padding-bottom: 24px; }
 .sidebar-right .outline { flex: none; overflow: visible; padding-top: 0; }
 .side-section + .side-section { border-top: 1px solid var(--border); }
@@ -797,7 +797,7 @@ select.input { appearance: auto; }
   margin-left: -2px; border-radius: 50%; background: var(--accent);
 }
 
-/* ---------- Consultas ---------- */
+/* ---------- Queries ---------- */
 .markdown .query { margin: 0.6em 0 1.4em; }
 .markdown .query-group + .query-group { margin-top: 0.7em; }
 .markdown .query-group-title { font-weight: 600; font-size: 0.92em; margin-bottom: 0.2em; }
@@ -811,7 +811,7 @@ select.input { appearance: auto; }
 .markdown .query-list { margin: 0.3em 0; }
 .markdown input.task-checkbox { cursor: pointer; accent-color: var(--accent); }
 
-/* ---------- Panel principal (cssclasses: dashboard) ---------- */
+/* ---------- Dashboard (cssclasses: dashboard) ---------- */
 .note:has(> .reading.cs-dashboard:not([hidden])) { max-width: 1100px; }
 .reading.cs-dashboard > ul {
   list-style: none; padding: 0; margin: 1em 0 1.6em;
@@ -821,7 +821,7 @@ select.input { appearance: auto; }
 .reading.cs-dashboard > ul > li > ul { font-weight: 400; padding-left: 1.1em; margin-top: 0.3em; }
 .reading.cs-dashboard h2 { border-bottom: 1px dotted var(--border); padding-bottom: 4px; }
 
-/* Selector de plantilla */
+/* Template picker */
 .switcher .pick-title { margin: 0; padding: 14px 16px; font-size: 15px; border-bottom: 1px solid var(--border); }
 .reading.cs-dashboard > .properties { display: none; }
 .notice .link-btn { display: inline; padding: 0; font-size: inherit; text-align: left; text-decoration: underline; }

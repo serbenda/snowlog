@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Copia el editor de dibujos desde una copia local del repo sketch (serbenda/sketch) a public/:
-// js/sketch-*.js, css/sketch.css y la letra a mano (fonts/). Los imports se renombran para que el empaquetador de la versión
-// portátil (que solo entiende './x.js' en public/js) los encuentre.
+// Copies the drawing editor from a local copy of the sketch repository (serbenda/sketch) to public/:
+// js/sketch-*.js, css/sketch.css and the handwriting font (fonts/). Imports are renamed so the
+// portable build's bundler (which only understands './x.js' in public/js) finds them.
 //
-// Uso: node scripts/update-sketch.mjs ../sketch
+// Usage: node scripts/update-sketch.mjs ../sketch
 
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -12,20 +12,20 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = resolve(process.argv[2] || join(ROOT, '..', 'sketch'));
-const FILES = ['trazo', 'escena', 'pintar', 'editor'];
-let commit = 'desconocido';
+const FILES = ['stroke', 'scene', 'render', 'editor'];
+let commit = 'unknown';
 try {
   commit = execFileSync('git', ['-C', SRC, 'rev-parse', '--short', 'HEAD']).toString().trim();
-} catch { /* sin git */ }
+} catch { /* no git */ }
 
 for (const f of FILES) {
   let src = readFileSync(join(SRC, 'js', `${f}.js`), 'utf8');
-  src = src.replace(/from '\.\/(trazo|escena|pintar|editor)\.js'/g, "from './sketch-$1.js'");
-  const head = `// Copiado de serbenda/sketch (js/${f}.js, commit ${commit}) con scripts/update-sketch.mjs. No editar aquí.\n`;
+  src = src.replace(/from '\.\/(stroke|scene|render|editor)\.js'/g, "from './sketch-$1.js'");
+  const head = `// Copied from serbenda/sketch (js/${f}.js, commit ${commit}) by scripts/update-sketch.mjs. Do not edit here.\n`;
   writeFileSync(join(ROOT, 'public', 'js', `sketch-${f}.js`), head + src);
 }
-writeFileSync(join(ROOT, 'public', 'css', 'sketch.css'), `/* Copiado de serbenda/sketch (css/sketch.css, commit ${commit}). No editar aquí. */\n${readFileSync(join(SRC, 'css', 'sketch.css'), 'utf8')}`);
-// La letra a mano (Caveat, OFL) con su licencia. En la versión portátil no se usa (sin font-src).
+writeFileSync(join(ROOT, 'public', 'css', 'sketch.css'), `/* Copied from serbenda/sketch (css/sketch.css, commit ${commit}). Do not edit here. */\n${readFileSync(join(SRC, 'css', 'sketch.css'), 'utf8')}`);
+// The handwriting font (Caveat, OFL) with its license. The portable build does not use it (no font-src).
 mkdirSync(join(ROOT, 'public', 'fonts'), { recursive: true });
 for (const f of ['caveat.woff', 'OFL.txt']) copyFileSync(join(SRC, 'fonts', f), join(ROOT, 'public', 'fonts', f));
-console.log(`sketch ${commit} copiado en public/js/sketch-*.js, public/css/sketch.css y public/fonts/`);
+console.log(`sketch ${commit} copied to public/js/sketch-*.js, public/css/sketch.css and public/fonts/`);

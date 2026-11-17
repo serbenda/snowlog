@@ -1,0 +1,9 @@
+# The repository owner: the only author of commits, the code owner of the guardrails. Every layer reads this
+# file from the last commit (the git hooks, the guard) or from the PR's base branch (CI), never from the working
+# tree, so a change here takes effect only once the owner has committed it (GUARDRAILS_OWNER_CHANGE=1).
+# setup-repo.sh writes it for a new project from the person running it. One key=value per line.
+name=Sergio Santiago Bendaña Quesada
+email=serbenda@gmail.com
+login=serbenda
+# GitHub's private address for commits made in its web UI (merges of PRs): Settings → Emails.
+noreply=57532210+serbenda@users.noreply.github.com

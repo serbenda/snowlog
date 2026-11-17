@@ -1,21 +1,23 @@
-// Bóveda local: las notas son ficheros .md normales dentro de una carpeta, como en Obsidian.
-// Funciona con una carpeta del ordenador (File System Access API, Chrome y Edge) o con el
-// almacenamiento privado del navegador (OPFS, todos los navegadores modernos).
-// No hay red ni cifrado: los ficheros son tuyos y se pueden abrir con cualquier editor.
+// Local vault: notes are plain .md files inside a folder, like in other Markdown notes apps.
+// It works with a folder on the computer (File System Access API, Chrome and Edge) or with the
+// browser's private storage (OPFS, every modern browser).
+// No network and no encryption: the files are yours and open in any editor.
 //
-// Tiene la misma interfaz que Vault (vault.js), así que la app no distingue una de otra.
+// It has the same interface as Vault (vault.js), so the app cannot tell one from the other.
 
 import { randomId } from './crypto.js';
 import { merge3 } from './merge.js';
 import { Vault, normalizePath, parentPath, baseName, validName, isAttachmentName, extOf, ATTACHMENT_TYPES, conflictName } from './vault.js';
 
-const HIDDEN = /^\./; // .obsidian, .git, .trash… no se tocan
+const HIDDEN = /^\./; // .obsidian, .git, .trash… are left alone
 const TRASH = '.trash';
-// Historial en local: copias de versiones anteriores en .history/<ruta de la nota>/<fecha>.md,
-// como mucho una cada 10 minutos y las 50 últimas por nota.
+// Local history: copies of earlier versions in .history/<note path>/<date>.md,
+// at most one every 10 minutes and the last 50 per note.
 const HISTORY = '.history';
-// Ajustes de la carpeta: un JSON normal dentro de una carpeta oculta (viaja con la carpeta).
-const SETTINGS = '.snowlog/ajustes.json';
+// Folder settings: a plain JSON inside a hidden folder (it travels with the folder).
+const SETTINGS = '.snowlog/settings.json';
+// Name used before the interface was translated to English: still read if there is no settings.json.
+const LEGACY_SETTINGS = '.snowlog/ajustes.json';
 const SNAP_EVERY_MS = 10 * 60 * 1000;
 const SNAP_KEEP = 50;
 const stampOf = (ms) => `${new Date(ms).toISOString().replace(/:/g, '-')}.md`;
@@ -28,7 +30,7 @@ async function getDir(root, path, create = false) {
   return dir;
 }
 
-// Escribe y devuelve la fecha de modificación que queda (para no confundir lo nuestro con cambios de fuera).
+// Writes and returns the resulting modification date (so our changes are not mistaken for outside ones).
 async function writeFile(root, path, data) {
   const dir = await getDir(root, parentPath(path), true);
   const fh = await dir.getFileHandle(baseName(path), { create: true });
@@ -48,7 +50,7 @@ async function removeEntry(root, path, recursive = false) {
   await dir.removeEntry(baseName(path), { recursive });
 }
 
-// Copia una carpeta entera, adjuntos incluidos (no solo las notas).
+// Copies a whole folder, attachments included (not only the notes).
 async function copyTree(from, to) {
   for await (const [name, h] of from.entries()) {
     if (h.kind === 'directory') {
@@ -80,7 +82,7 @@ async function exists(root, path) {
   }
 }
 
-// Nombre libre en la papelera: "nota.md", "nota 1.md"…
+// A free name in the trash: "note.md", "note 1.md"…
 async function freeTrashPath(root, path, ext) {
   for (let n = 0; ; n += 1) {
     const candidate = `${TRASH}/${path}${n ? ` ${n}` : ''}${ext}`;
@@ -95,21 +97,21 @@ async function freeTrashPath(root, path, ext) {
 }
 
 export class LocalVault {
-  // root: FileSystemDirectoryHandle. label: texto para mostrar (nombre de la carpeta).
+  // root: FileSystemDirectoryHandle. label: text to show (the folder name).
   constructor(root, { label, kind = 'folder' } = {}) {
     this.root = root;
     this.label = label || root.name || 'Snowlog';
-    this.kind = kind; // 'folder' (carpeta del ordenador) | 'browser' (almacenamiento del navegador)
+    this.kind = kind; // 'folder' (a folder on the computer) | 'browser' (the browser's storage)
     this.local = true;
     this.now = () => Date.now();
     this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
     this.fileCache = new Map();
-    // Texto tal como se leyó o guardó aquí: la base para juntar cambios hechos fuera.
+    // Text as it was read or saved here: the base for combining changes made outside.
     this.baseText = new Map();
   }
 
-  // Lee la carpeta: notas (.md) y subcarpetas, sin entrar en las ocultas.
+  // Reads the folder: notes (.md) and subfolders, without entering hidden ones.
   async load() {
     await this.scan(false);
     this.cache.clear();
@@ -118,8 +120,8 @@ export class LocalVault {
     return this;
   }
 
-  // Vuelve a mirar la carpeta por si algo cambió desde fuera (otro editor, OneDrive, Dropbox…).
-  // Conserva los ids de lo que sigue igual. Devuelve { added, removed, changed } con ids de notas.
+  // Looks at the folder again in case something changed outside (another editor, OneDrive, Dropbox…).
+  // Keeps the ids of what is unchanged. Returns { added, removed, changed } with note ids.
   async rescan() {
     return this.scan(true);
   }
@@ -153,7 +155,7 @@ export class LocalVault {
           if (meta.mtime !== file.lastModified) {
             meta.mtime = file.lastModified;
             meta.updated = iso(file.lastModified);
-            // Solo cuenta como cambio si el texto es distinto del que tenemos (un «touch» no lo es).
+            // Only counts as a change if the text differs from ours (a “touch” does not).
             if (!this.cache.has(id) || this.cache.get(id) !== await file.text()) {
               changed.push(id);
               this.cache.delete(id);
@@ -172,7 +174,11 @@ export class LocalVault {
     let settings = {};
     try {
       settings = JSON.parse(await readFile(this.root, SETTINGS));
-    } catch { /* sin ajustes propios */ }
+    } catch {
+      try {
+        settings = JSON.parse(await readFile(this.root, LEGACY_SETTINGS));
+      } catch { /* no settings of its own */ }
+    }
     this.index = { v: 1, notes, folders, files, settings };
     const removed = keep ? Object.keys(old.notes || {}).filter((id) => !notes[id]) : [];
     for (const id of removed) {
@@ -207,8 +213,8 @@ export class LocalVault {
     return id;
   }
 
-  // Si la carpeta se sincroniza (OneDrive, Dropbox…) y el fichero cambió fuera desde que se
-  // leyó aquí, esa otra versión se guarda como copia al lado antes de escribir esta.
+  // If the folder is synced (OneDrive, Dropbox…) and the file changed outside since it was
+  // read here, that other version is saved as a copy beside it before writing this one.
   async saveNote(id, text) {
     let conflict = null;
     let merged = null;
@@ -216,10 +222,10 @@ export class LocalVault {
     let disk = null;
     try {
       disk = await readFile(this.root, this.file(id));
-    } catch { /* borrado fuera: se vuelve a crear */ }
+    } catch { /* deleted outside: it is created again */ }
     if (disk != null && disk !== text) await this.snapshot(this.index.notes[id].path, disk);
     if (before != null && disk != null && disk !== before && disk !== text) {
-      // Cambió fuera: se juntan los dos cambios si no chocan; si chocan, lo de fuera va a una copia.
+      // Changed outside: both changes are combined if they do not clash; if they do, the outside one goes to a copy.
       const m = merge3(before, text, disk);
       if (!m.conflict) {
         merged = m.text;
@@ -253,7 +259,7 @@ export class LocalVault {
     note.mtime = await writeFile(this.root, `${p}.md`, text);
     if (note.path.toLowerCase() !== p.toLowerCase()) {
       await removeEntry(this.root, this.file(id));
-      // El historial acompaña a la nota.
+      // The history goes with the note.
       if (await exists(this.root, `${HISTORY}/${note.path}`) && !await exists(this.root, `${HISTORY}/${p}`)) {
         await copyTree(await getDir(this.root, `${HISTORY}/${note.path}`), await getDir(this.root, `${HISTORY}/${p}`, true));
         await removeEntry(this.root, `${HISTORY}/${note.path}`, true);
@@ -275,7 +281,7 @@ export class LocalVault {
     for (const old of names.slice(0, Math.max(0, names.length - SNAP_KEEP))) await dir.removeEntry(old);
   }
 
-  // Versiones: la actual y las copias del historial, de la más reciente a la más antigua.
+  // Versions: the current one and the history copies, newest first.
   async history(id) {
     const note = this.index.notes[id];
     const out = [{ ref: 'current', date: note.updated }];
@@ -285,7 +291,7 @@ export class LocalVault {
       for await (const [name, h] of dir.entries()) if (h.kind === 'file' && name.endsWith('.md')) names.push(name);
       names.sort().reverse();
       for (const name of names) out.push({ ref: name, date: new Date(dateOfStamp(name)).toISOString() });
-    } catch { /* sin historial todavía */ }
+    } catch { /* no history yet */ }
     return out;
   }
 
@@ -295,7 +301,7 @@ export class LocalVault {
     return readFile(this.root, `${HISTORY}/${this.index.notes[id].path}/${ref}`);
   }
 
-  // Borrar = mover a .trash dentro de la carpeta (se puede recuperar a mano).
+  // Delete = move to .trash inside the folder (it can be recovered by hand).
   async deleteNote(id) {
     const text = await this.read(id);
     const path = this.index.notes[id].path;
@@ -358,13 +364,13 @@ export class LocalVault {
     this.index.settings = { ...settings };
   }
 
-  // Adjuntos: ficheros normales dentro de la carpeta.
+  // Attachments: plain files inside the folder.
   async addFile(folder, name, bytes) {
     const clean = name.replace(/[\\/:*?"<>|#^[\]]/g, '-').trim() || 'adjunto';
     this.checkAttachment(clean, bytes);
     let path = this.freeFilePath(normalizePath(folder), clean);
     validName(path);
-    // También puede haber en la carpeta un fichero que no estaba en el índice.
+    // There may also be a file in the folder that was not in the index.
     for (let n = 1; await fileExists(this.root, path); n += 1) {
       const ext = extOf(clean);
       path = normalizePath(`${folder}/${clean.slice(0, -(ext.length + 1))} ${n}.${ext}`);
@@ -385,9 +391,9 @@ export class LocalVault {
     return bytes;
   }
 
-  // Guarda una versión nueva de un dibujo. Si el fichero cambió fuera desde que se leyó,
-  // `merge(base, mío, de fuera)` puede juntar las dos versiones ({ bytes, conflict }); si no se puede,
-  // o si chocan, lo de fuera se guarda como copia al lado. Devuelve { merged?, conflict? }.
+  // Saves a new version of a drawing. If the file changed outside since it was read,
+  // `merge(base, mine, outside)` can combine both versions ({ bytes, conflict }); if it cannot,
+  // or they clash, the outside one is saved as a copy beside it. Returns { merged?, conflict? }.
   async saveFile(id, bytes, { merge = null } = {}) {
     const meta = this.index.files[id];
     if (!meta) throw new Error('missing');
@@ -399,13 +405,13 @@ export class LocalVault {
     try {
       const dir = await getDir(this.root, parentPath(meta.path));
       disk = new Uint8Array(await (await (await dir.getFileHandle(baseName(meta.path))).getFile()).arrayBuffer());
-    } catch { /* borrado fuera: se vuelve a crear */ }
+    } catch { /* deleted outside: it is created again */ }
     const eq = (a, b) => a && b && a.length === b.length && a.every((x, i) => x === b[i]);
     if (before && disk && !eq(disk, before) && !eq(disk, bytes)) {
       let joined = null;
       try {
         joined = merge ? merge(before, bytes, disk) : null;
-      } catch { /* no se pudo juntar: copia */ }
+      } catch { /* could not combine: copy */ }
       if (joined?.bytes) {
         this.checkAttachment(meta.path, joined.bytes);
         out = joined.bytes;
@@ -448,7 +454,7 @@ export class LocalVault {
         const base = p;
         let n = 1;
         do {
-          p = `${base} (importada${n > 1 ? ` ${n}` : ''})`;
+          p = `${base} (imported${n > 1 ? ` ${n}` : ''})`;
           n += 1;
         } while (taken.has(p.toLowerCase()));
       }
@@ -459,7 +465,7 @@ export class LocalVault {
     return out;
   }
 
-  // Todas las notas, para exportar: [{ path: 'Carpeta/Nota.md', text }].
+  // All notes, for export: [{ path: 'Folder/Note.md', text }].
   async exportAll() {
     const out = [];
     for (const n of this.notes()) out.push({ path: `${n.path}.md`, text: await this.read(n.id) });
@@ -468,7 +474,7 @@ export class LocalVault {
   }
 }
 
-// Métodos que no dependen de dónde se guardan las notas: se reutilizan tal cual.
+// Methods that do not depend on where the notes are stored: reused as they are.
 for (const m of ['notes', 'findByPath', 'findByTitle', 'freePath', 'ensureFree', 'addFolderChain', 'notesUnder', 'files', 'findFile', 'freeFilePath', 'checkAttachment']) {
   LocalVault.prototype[m] = Vault.prototype[m];
 }

@@ -1,5 +1,5 @@
-// GitHub falso en memoria para probar la bóveda sin red.
-// Implementa solo los endpoints que usa js/github.js.
+// Fake in-memory GitHub to test the vault without a network.
+// It implements only the endpoints that js/github.js uses.
 
 export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
   const commits = new Map(); // sha -> { parent, files: Map }
@@ -101,7 +101,7 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
     files: () => new Map(head ? commits.get(head).files : []),
     commitCount: () => commits.size,
     graphqlCalls: () => graphqlCalls,
-    // Simula que otro dispositivo escribe un fichero.
+    // Simulates another device writing a file.
     externalWrite(path, content) {
       const files = new Map(commits.get(head).files);
       files.set(path, content);

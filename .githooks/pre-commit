@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Git hook (for any tool or person), run before every commit exists. pre-merge-commit and pre-applypatch
+# run this same file, so automatic merges and applied patches are checked too:
+#   1. Guardrail files can only be committed by the owner, on purpose. This looks at what is staged, so it
+#      holds however the change was prepared (an editor, a script, git plumbing…).
+#   2. Gitleaks scans the staged changes for secrets, so a token never reaches the history or GitHub.
+#      Without Gitleaks installed the commit is refused: a check that silently doesn't run is worse than none.
+# Enabled with: git config core.hooksPath .githooks   (scripts/setup-repo.sh does it)
+set -euo pipefail
+# Gitleaks reads its config from GITLEAKS_* variables before the repository's: they are not the owner's.
+while IFS= read -r v; do unset "$v"; done < <(env | sed -n 's/^\(GITLEAKS_[A-Za-z0-9_]*\)=.*/\1/p')
+# pre-merge-commit passes --automerge (git never passes arguments to pre-commit itself): see that file.
+automerge=0; [[ "${1:-}" == --automerge ]] && automerge=1
+
+# --- 1. Guardrails: everything under .claude/ but launch.json (settings, hook, commands, subagents, skills,
+#        rules…), .mcp.json, the git hooks, the CI and Dependabot, the scanner images (.scanners/), the scanners' own settings (an ignore file
+#        would switch a scan off; in any folder, as the scanners read them next to the files), .gitattributes
+#        (in any folder: "-diff" hides changes from the diff the scans read), the dev container, the files
+#        editors and tools run on their own, in any folder (.vscode/settings, tasks and launch, workspace
+#        files, .envrc, .husky/, .pre-commit-config.yaml: they could switch these hooks off), the agent's
+#        instructions (AGENTS.md, CLAUDE.md, CLAUDE.local.md, in any folder: the agent must not rewrite its own rules), and the scripts that enforce or test the rules. pre-push checks the same
+#        paths in commits that skipped this.
+#        Deletions and renames count too; a protected directory replaced by a file, symlink or submodule
+#        counts too ("($|/)"); case doesn't matter (.GitHub is .github on a case-insensitive disk).
+protected='^(\.claude|\.mcp\.json|\.githooks|\.github|\.devcontainer|\.devcontainer\.json|\.semgrep|\.scanners|scripts/(setup-repo|sync-from-template|check-records|test-guard|test-check-records|test-githooks|test-scripts)\.sh)($|/)|(^|/)\.husky($|/)|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md|\.vscode/(settings|tasks|launch)\.json|[^/]*\.code-workspace|\.envrc|\.pre-commit-config\.yaml|\.gitattributes|\.gitleaks\.toml|\.gitleaksignore|\.semgrepignore|osv-scanner\.toml)$'
+
+# What this commit changes is compared with HEAD; in a merge, with what git's own merge of the parents gives
+# (git merge-tree), so what the other side brings (Dependabot's or main's guardrail changes, already reviewed)
+# is not this commit's change, but anything the merge adds or resolves by hand is. Files that differ from both
+# parents count too, whatever merge-tree gives (a merge driver in the local config would make merge-tree agree
+# with any result). Octopus merges, an old git or an error: compared with HEAD (stricter).
+base=HEAD
+git rev-parse -q --verify HEAD >/dev/null || base="$(git hash-object -t tree /dev/null)"
+merge_head="$(git rev-parse -q --git-path MERGE_HEAD)"
+other=""
+if [[ -f "$merge_head" && "$(wc -l < "$merge_head" | tr -d ' ')" == 1 ]]; then
+  other="$(cat "$merge_head")"
+  if out="$(git merge-tree --write-tree --no-messages HEAD "$(cat "$merge_head")" 2>/dev/null)" || [[ $? == 1 ]]; then
+    tree="$(printf '%s\n' "$out" | head -n 1)"
+    [[ "$tree" =~ ^[0-9a-f]{40,64}$ ]] && base="$tree"
+  fi
+fi
+
+touched=()
+while IFS= read -r -d '' f; do
+  [[ "$f" == .claude/launch.json ]] && continue
+  printf '%s' "$f" | LC_ALL=C grep -Eiq "$protected" || continue
+  touched+=("$f")
+done < <(
+  names() { git -c core.quotePath=false diff --cached --name-only --no-renames --ignore-submodules=none -z "$@"; }
+  names "$base"
+  if [[ -n "$other" ]]; then
+    comm -12 <(names HEAD | tr '\0' '\n' | LC_ALL=C sort) <(names "$other" | tr '\0' '\n' | LC_ALL=C sort) | tr '\n' '\0'
+  fi)
+if (( ${#touched[@]} > 0 && ! automerge )) && [[ "${GUARDRAILS_OWNER_CHANGE:-}" != "1" ]]; then
+  echo "pre-commit: this commit changes guardrail files, which only the owner commits:" >&2
+  printf '    %q\n' "${touched[@]}" >&2
+  echo "  Owner: review the change and commit it with  GUARDRAILS_OWNER_CHANGE=1 git commit …" >&2
+  echo "  Agent: stop and show the owner the exact change instead." >&2
+  exit 1
+fi
+
+# The staged changes as text: binary files (a NUL byte, or "-diff" in any attributes file) included, no
+# external diff or textconv. Both checks below read this.
+staged() {
+  git -c core.attributesFile=/dev/null diff --cached --text -U0 --no-color --no-ext-diff --no-textconv \
+    --ignore-submodules=none "$base" -- "$@"
+}
+
+# --- 1b. Inline suppressions switch Semgrep or OSV-Scanner off for that line: only the owner adds them. Every
+#         added line counts (only the file headers are skipped); prose files (.md, .txt, .rst, .adoc) talk
+#         about the scanners and are not scanned by them. nosem is Semgrep's short form, as a whole word.
+#         gitleaks:allow needs no check: every scan here, in pre-push and in CI ignores it. (grep reads to the
+#         end, never -q: with pipefail an early exit would make the writer fail and hide the match; NUL bytes
+#         become spaces first, as macOS awk would cut the line there.)
+if (( ! automerge )) && [[ "${GUARDRAILS_OWNER_CHANGE:-}" != "1" ]] &&
+   staged . ':(exclude,icase)*.md' ':(exclude,icase)*.txt' ':(exclude,icase)*.rst' ':(exclude,icase)*.adoc' |
+     tr '\0' ' ' | awk '/^diff --git / { h = 1 } h { if (/^@@/) h = 0; next } { print }' |
+     LC_ALL=C grep -Ei '^\+((.*[^[:alnum:]_])?nosem(grep)?([^[:alnum:]_]|$)|.*osv-scanner:ignore)' >/dev/null; then
+  echo "pre-commit: this commit adds a scanner suppression (nosemgrep, osv-scanner:ignore…): only the owner adds them." >&2
+  echo "  Agent: stop and show the owner the finding instead." >&2
+  exit 1
+fi
+
+# --- 2. Secrets, ignoring gitleaks:allow. A false positive goes in .gitleaks.toml (an [[allowlists]] entry
+#        with its reason), which only the owner edits: .gitleaksignore fingerprints don't fit the stdin scan.
+#        Two scans: gitleaks' own view of the staged files (its rules that look at paths) and the text of the
+#        changes on stdin, which also covers what git calls binary and the paths gitleaks skips by default
+#        (lockfiles, node_modules, images…).
+if ! command -v gitleaks >/dev/null 2>&1 || ! gitleaks stdin --help >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks (8.19 or newer) is not installed, so the commit can't be checked for secrets." >&2
+  echo "  Install it (brew install gitleaks) and commit again." >&2
+  exit 1
+fi
+opts=(--redact --no-banner --log-level warn --ignore-gitleaks-allow)
+[[ -f .gitleaks.toml ]] && opts+=(--config .gitleaks.toml)   # hooks run at the top of the work tree
+if ! gitleaks git --pre-commit --staged "${opts[@]}" || ! staged . | gitleaks stdin "${opts[@]}"; then
+  echo "pre-commit: possible secret in the staged changes. Remove it (use .env or GitHub Secrets) and commit again." >&2
+  echo "  If it is a false positive, ask the owner (only the owner edits .gitleaks.toml); never skip the hook." >&2
+  exit 1
+fi

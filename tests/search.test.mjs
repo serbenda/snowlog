@@ -4,23 +4,23 @@ import { parseNote } from '../public/js/noteindex.js';
 import { fold, parseSearch, searchNotes, tagCounts } from '../public/js/search.js';
 
 const notes = [
-  { id: 'a', path: 'Proyectos/Web de recetas', text: '# Web de recetas\nPasar 20 recetas a la web #proyecto/web\n- [ ] Revisar diseño con Blanca', updated: '2026-11-10' },
-  { id: 'b', path: 'Diario/2026-11-13', text: 'Reunión sobre el DISEÑO de la portada.\n#reunion', updated: '2026-11-13' },
-  { id: 'c', path: 'Recetas', text: 'Lista de recetas de la abuela #cocina', updated: '2026-11-01' },
+  { id: 'a', path: 'Projects/Recipe website', text: '# Recipe website\nMove 20 recipes to the website #project/web\n- [ ] Review the diseño with Blanca', updated: '2026-11-10' },
+  { id: 'b', path: 'Daily/2026-11-13', text: 'Meeting about the front page DISEÑO.\n#meeting', updated: '2026-11-13' },
+  { id: 'c', path: 'Recipes', text: 'List of grandma\'s recipes #cooking', updated: '2026-11-01' },
 ].map(parseNote);
 
-test('plegar quita acentos y mayúsculas sin cambiar la longitud', () => {
-  for (const s of ['Diseño Ácido ÑANDÚ', 'emoji 👍 y çà', 'İstanbul ß']) assert.equal(fold(s).length, s.length);
+test('folding removes accents and case without changing the length', () => {
+  for (const s of ['Diseño Ácido ÑANDÚ', 'emoji 👍 and çà', 'İstanbul ß']) assert.equal(fold(s).length, s.length);
   assert.equal(fold('Diseño ÁCIDO'), 'diseno acido');
 });
 
-test('analiza términos, frases, exclusiones, etiquetas y rutas', () => {
-  assert.deepEqual(parseSearch('diseño "la portada" -blanca tag:#Reunion path:Diario'), {
-    terms: ['diseno', 'la portada'], not: ['blanca'], tags: [{ neg: false, tag: 'reunion' }], paths: [{ neg: false, path: 'diario' }],
+test('parses terms, phrases, exclusions, tags and paths', () => {
+  assert.deepEqual(parseSearch('diseño "front page" -blanca tag:#Meeting path:Daily'), {
+    terms: ['diseno', 'front page'], not: ['blanca'], tags: [{ neg: false, tag: 'meeting' }], paths: [{ neg: false, path: 'daily' }],
   });
 });
 
-test('busca sin acentos ni mayúsculas y da el contexto', () => {
+test('searches ignoring accents and case, and gives the context', () => {
   const r = searchNotes(notes, 'diseno');
   assert.deepEqual(r.map((x) => x.note.id).sort(), ['a', 'b']);
   const one = searchNotes(notes, 'diseno', { limit: 1 });
@@ -33,49 +33,49 @@ test('busca sin acentos ni mayúsculas y da el contexto', () => {
   assert.equal(notes[1].text.slice(m.offset, m.offset + m.length), 'DISEÑO');
 });
 
-test('todas las palabras, frases y exclusiones', () => {
-  assert.deepEqual(searchNotes(notes, 'recetas web').map((x) => x.note.id), ['a']);
-  assert.deepEqual(searchNotes(notes, '"de la abuela"').map((x) => x.note.id), ['c']);
-  assert.deepEqual(searchNotes(notes, 'recetas -abuela').map((x) => x.note.id), ['a']);
+test('all words, phrases and exclusions', () => {
+  assert.deepEqual(searchNotes(notes, 'recipe website').map((x) => x.note.id), ['a']);
+  assert.deepEqual(searchNotes(notes, '"grandma\'s recipes"').map((x) => x.note.id), ['c']);
+  assert.deepEqual(searchNotes(notes, 'recipes -grandma').map((x) => x.note.id), ['a']);
   assert.equal(searchNotes(notes, '   ').length, 0);
 });
 
-test('el nombre pesa más que el texto', () => {
-  assert.equal(searchNotes(notes, 'recetas')[0].note.id, 'c');
+test('the name weighs more than the text', () => {
+  assert.equal(searchNotes(notes, 'recipes')[0].note.id, 'c');
 });
 
-test('filtrar por etiqueta (con hijas) y por ruta', () => {
-  assert.deepEqual(searchNotes(notes, 'tag:#proyecto').map((x) => x.note.id), ['a']);
-  assert.deepEqual(searchNotes(notes, 'tag:reunion').map((x) => x.note.id), ['b']);
-  assert.deepEqual(searchNotes(notes, 'path:diario').map((x) => x.note.id), ['b']);
-  assert.deepEqual(searchNotes(notes, 'recetas -path:proyectos').map((x) => x.note.id), ['c']);
+test('filter by tag (with children) and by path', () => {
+  assert.deepEqual(searchNotes(notes, 'tag:#project').map((x) => x.note.id), ['a']);
+  assert.deepEqual(searchNotes(notes, 'tag:meeting').map((x) => x.note.id), ['b']);
+  assert.deepEqual(searchNotes(notes, 'path:daily').map((x) => x.note.id), ['b']);
+  assert.deepEqual(searchNotes(notes, 'recipes -path:projects').map((x) => x.note.id), ['c']);
 });
 
-test('recuento de etiquetas', () => {
-  const extra = parseNote({ id: 'd', path: 'X', text: '#cocina' });
-  assert.deepEqual(tagCounts([...notes, extra])[0], { tag: 'cocina', count: 2 });
+test('tag counts', () => {
+  const extra = parseNote({ id: 'd', path: 'X', text: '#cooking' });
+  assert.deepEqual(tagCounts([...notes, extra])[0], { tag: 'cooking', count: 2 });
 });
 
-test('1.000 notas en menos de 300 ms', () => {
-  const words = 'proyecto reunión tarea diseño web receta cliente equipo revisar código prueba entrega'.split(' ');
+test('1,000 notes in under 300 ms', () => {
+  const words = 'project meeting task diseño web recipe client team review code test delivery'.split(' ');
   const many = Array.from({ length: 1000 }, (_, i) => parseNote({
     id: String(i),
-    path: `Carpeta ${i % 20}/Nota ${i}`,
-    text: Array.from({ length: 40 }, (_, j) => `- ${words[(i + j) % words.length]} línea ${j} con texto de relleno para que pese #t${j % 7}`).join('\n'),
+    path: `Folder ${i % 20}/Note ${i}`,
+    text: Array.from({ length: 40 }, (_, j) => `- ${words[(i + j) % words.length]} line ${j} with filler text to give it weight #t${j % 7}`).join('\n'),
   }));
-  searchNotes(many, 'calentar'); // primera vez: pliega el texto de todas
-  // Mejor de tres, para que no falle si la máquina está ocupada con otros tests.
+  searchNotes(many, 'warm up'); // first time: folds the text of all of them
+  // Best of three, so it does not fail if the machine is busy with other tests.
   let best = Infinity;
   let r;
   for (let i = 0; i < 3; i++) {
     const t0 = performance.now();
-    r = searchNotes(many, 'diseño entrega');
+    r = searchNotes(many, 'diseño delivery');
     best = Math.min(best, performance.now() - t0);
   }
   assert.ok(r.length > 0);
   assert.ok(best < 300, `${best.toFixed(0)} ms`);
   const t1 = performance.now();
-  searchNotes(many.map((n) => ({ ...n })), 'cliente');
+  searchNotes(many.map((n) => ({ ...n })), 'client');
   const cold = performance.now() - t1;
-  assert.ok(cold < 1500, `primera búsqueda (plegando todo): ${cold.toFixed(0)} ms`);
+  assert.ok(cold < 1500, `first search (folding everything): ${cold.toFixed(0)} ms`);
 });

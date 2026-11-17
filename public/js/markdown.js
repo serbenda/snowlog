@@ -1,9 +1,9 @@
-// Renderizador de Markdown pequeño y seguro.
-// Todo el texto se escapa ANTES de aplicar formato, así que ningún HTML de una nota
-// llega a ejecutarse. Los enlaces solo admiten http(s), mailto y anclas.
+// A small, safe Markdown renderer.
+// All text is escaped BEFORE formatting is applied, so no HTML from a note
+// ever runs. Links only allow http(s), mailto and anchors.
 //
-// Soporta lo que se usa a diario en una bóveda de Obsidian: frontmatter (propiedades),
-// tablas, callouts (> [!info]), tareas, etiquetas #tag y enlaces [[nota]].
+// It supports what a vault uses day to day: frontmatter (properties),
+// tables, callouts (> [!info]), tasks, #tags and [[note]] links.
 
 export function escapeHtml(s) {
   return String(s)
@@ -27,10 +27,10 @@ export function inline(raw) {
   const keep = (html) => `\u0000${slots.push(html) - 1}\u0000`;
   let s = escapeHtml(raw);
 
-  // Código en línea: su contenido no se formatea.
+  // Inline code: its content is not formatted.
   s = s.replace(/`([^`]+)`/g, (_, code) => keep(`<code>${code}</code>`));
 
-  // ![[foto.png]] y ![[foto.png|300]]: hueco que la app rellena con el adjunto descifrado.
+  // ![[photo.png]] and ![[photo.png|300]]: a placeholder the app fills with the decrypted attachment.
   s = s.replace(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, target, alias) => {
     const name = target.trim();
     if (!EMBED_RE.test(name)) return m.slice(1);
@@ -38,18 +38,18 @@ export function inline(raw) {
     return keep(`<span class="embed" data-embed="${name}"${width}>${name}</span>`);
   });
 
-  // [[Nota]] y [[Nota|alias]]
+  // [[Note]] and [[Note|alias]]
   s = s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => keep(
     `<a class="internal-link" href="#" data-target="${target.trim()}">${(alias || target).trim()}</a>`,
   ));
 
-  // [texto](url)
+  // [text](url)
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, url) => {
     const ok = safeUrl(url);
     return ok ? keep(`<a class="external-link" href="${ok}" target="_blank" rel="noopener noreferrer">${text}</a>`) : text;
   });
 
-  // #etiqueta (no confunde &#39; ni los # de los encabezados, que llevan espacio)
+  // #tag (does not mistake &#39; or the # of headings, which are followed by a space)
   s = s.replace(TAG_RE, (_, pre, tag) => `${pre}${keep(`<span class="tag" data-tag="${tag}">#${tag}</span>`)}`);
 
   s = s
@@ -64,8 +64,8 @@ export function inline(raw) {
 }
 
 // ---------------------------------------------------------------------------
-// Frontmatter (propiedades): un YAML sencillo entre dos líneas "---" al principio.
-// Se entiende lo que usa Obsidian: clave: valor, listas con "- " y listas [a, b].
+// Frontmatter (properties): simple YAML between two "---" lines at the start.
+// It understands the common subset: key: value, lists with "- " and [a, b] lists.
 
 function yamlScalar(v) {
   const t = v.trim();
@@ -115,11 +115,11 @@ function renderProperties(data) {
     if (Array.isArray(v)) {
       value = v.length
         ? v.map((x) => (isTags ? tagChip(x) : `<span class="pill">${inline(String(x))}</span>`)).join(' ')
-        : '<span class="empty-value">vacío</span>';
+        : '<span class="empty-value">empty</span>';
     } else if (typeof v === 'boolean') {
-      value = `<input type="checkbox" disabled${v ? ' checked' : ''} aria-label="${v ? 'sí' : 'no'}">`;
+      value = `<input type="checkbox" disabled${v ? ' checked' : ''} aria-label="${v ? 'yes' : 'no'}">`;
     } else if (v == null) {
-      value = '<span class="empty-value">vacío</span>';
+      value = '<span class="empty-value">empty</span>';
     } else {
       value = inline(String(v));
     }
@@ -179,7 +179,7 @@ function renderTable(lines, start) {
 }
 
 // ---------------------------------------------------------------------------
-// Callouts: > [!tipo]+/- Título opcional
+// Callouts: > [!type]+/- Optional title
 
 const CALLOUT_KIND = {
   note: 'note',
@@ -228,7 +228,7 @@ export function render(md, { frontmatter = false } = {}) {
   while (i < lines.length) {
     const line = lines[i];
 
-    // Bloque de código
+    // Code block
     const fence = line.match(/^\s*(```|~~~)\s*([\w+-]*)\s*$/);
     if (fence) {
       const body = [];
@@ -308,12 +308,12 @@ export function render(md, { frontmatter = false } = {}) {
 }
 
 function renderList(items) {
-  // Los niveles salen de la sangría real: da igual usar 2, 4 espacios o tabuladores.
+  // Levels come from the real indentation: 2 spaces, 4 spaces or tabs all work.
   let html = '';
   const stack = []; // [{ tag, indent }]
   for (const item of items) {
     while (stack.length > 1 && item.indent < stack[stack.length - 1].indent) {
-      // Sangría intermedia: sigue en el mismo nivel en vez de abrir otra lista.
+      // In-between indentation: stays at the same level instead of opening another list.
       if (item.indent > stack[stack.length - 2].indent) {
         stack[stack.length - 1].indent = item.indent;
         break;
@@ -340,7 +340,7 @@ function renderList(items) {
   return html;
 }
 
-// Encabezados para el panel de esquema (los números de línea son del texto completo).
+// Headings for the outline panel (line numbers refer to the full text).
 export function outline(md) {
   const text = md.replace(/\r\n?/g, '\n');
   const skip = parseFrontmatter(text).lines;

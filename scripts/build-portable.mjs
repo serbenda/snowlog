@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Construye la versión portátil: un único fichero HTML con todo dentro (código, estilos e icono)
-// que se abre con doble clic, sin instalar nada y sin conexión. Sus notas se guardan en una
-// carpeta del ordenador o en el navegador. La CSP prohíbe cualquier conexión de red.
+// Builds the portable version: a single HTML file with everything inside (code, styles and icon)
+// that opens with a double click, with nothing to install and no connection. Its notes are stored in
+// a folder on the computer or in the browser. The CSP forbids any network connection.
 //
-// Uso: node scripts/build-portable.mjs [salida]   (por defecto dist/snowlog-portable.html)
+// Usage: node scripts/build-portable.mjs [output]   (default dist/snowlog-portable.html)
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -15,13 +15,13 @@ const PUB = join(ROOT, 'public');
 const OUT = resolve(process.argv[2] || join(ROOT, 'dist', 'snowlog-portable.html'));
 const read = (p) => readFileSync(join(PUB, p), 'utf8');
 
-// --- Empaquetar los módulos ES en un único script clásico (file:// no admite módulos) ---
+// --- Bundle the ES modules into a single classic script (file:// does not allow modules) ---
 const IMPORT_RE = /^import\s+(?:\*\s+as\s+(\w+)|\{([^}]*)\})\s+from\s+'\.\/([\w-]+)\.js';\s*$/gm;
 const modules = new Map();
 
 function load(name) {
   if (modules.has(name)) return;
-  modules.set(name, null); // marca de "en curso" para detectar ciclos
+  modules.set(name, null); // "in progress" mark to detect cycles
   let src = read(`js/${name}.js`);
   const deps = [];
   src = src.replace(IMPORT_RE, (_, star, named, dep) => {
@@ -31,15 +31,15 @@ function load(name) {
       .map((x) => x.replace(/\s+as\s+/, ': '));
     return `const { ${parts.join(', ')} } = __m[${JSON.stringify(dep)}];`;
   });
-  if (/^\s*import\s/m.test(src)) throw new Error(`${name}.js: import no soportado por el empaquetador`);
+  if (/^\s*import\s/m.test(src)) throw new Error(`${name}.js: import not supported by the bundler`);
   const exported = [];
   src = src.replace(/^export\s+(async\s+function\*?|function\*?|class|const|let)\s+([\w$]+)/gm, (_, kind, id) => {
     exported.push(id);
     return `${kind} ${id}`;
   });
-  if (/^export\s/m.test(src)) throw new Error(`${name}.js: export no soportado por el empaquetador`);
+  if (/^export\s/m.test(src)) throw new Error(`${name}.js: export not supported by the bundler`);
   for (const d of deps) {
-    if (modules.has(d) && modules.get(d) === null) throw new Error(`Dependencia circular: ${name} → ${d}`);
+    if (modules.has(d) && modules.get(d) === null) throw new Error(`Circular dependency: ${name} → ${d}`);
     load(d);
   }
   modules.set(name, `__m[${JSON.stringify(name)}] = (() => {\n${src}\nreturn { ${exported.join(', ')} };\n})();`);
@@ -52,13 +52,13 @@ const icon = read('icon.svg');
 const iconUri = `data:image/svg+xml;base64,${Buffer.from(icon).toString('base64')}`;
 
 let js = order.map((n) => modules.get(n)).join('\n\n');
-// Configuración de la versión portátil: sin GitHub, sin red.
-js = js.replace('__m["config"] = (() => {', '__m["config"] = (() => {\n// (versión portátil)')
+// Portable configuration: no GitHub, no network.
+js = js.replace('__m["config"] = (() => {', '__m["config"] = (() => {\n// (portable version)')
   .replace(/(\nreturn \{ CONFIG \};\n\}\)\(\);)/, "\nCONFIG.mode = 'portable';$1");
 js = js.replaceAll("src: 'icon.svg'", `src: ${JSON.stringify(iconUri)}`);
 const script = `(() => {\n'use strict';\nconst __m = {};\n${js}\n})();`;
 
-// Sin la letra a mano: la portátil no admite fuentes (ni font-src ni data:); se usa la cursiva del sistema.
+// Without the handwriting font: the portable build allows no fonts (no font-src or data:); the system cursive is used.
 const css = `${read('css/app.css')}\n${read('css/sketch.css').replace(/@font-face\s*\{[^}]*\}\s*/g, '')}`;
 const sha = (s) => `'sha256-${createHash('sha256').update(s, 'utf8').digest('base64')}'`;
 const csp = [
@@ -75,22 +75,22 @@ const csp = [
 
 let html = read('index.html');
 const swap = (re, value) => {
-  if (!re.test(html)) throw new Error(`No encuentro ${re} en index.html`);
+  if (!re.test(html)) throw new Error(`${re} not found in index.html`);
   html = html.replace(re, value);
 };
 swap(/<meta http-equiv="Content-Security-Policy" content="[^"]*">/, `<meta http-equiv="Content-Security-Policy" content="${csp}">`);
 swap(/<link rel="icon" href="icon\.svg"[^>]*>/, `<link rel="icon" href="${iconUri}" type="image/svg+xml">`);
-swap(/\n<link rel="manifest" href="manifest\.webmanifest">/, ''); // sin service worker ni instalación
-swap(/\n<link rel="stylesheet" href="css\/sketch\.css">/, ''); // va junto con app.css
+swap(/\n<link rel="manifest" href="manifest\.webmanifest">/, ''); // no service worker or installation
+swap(/\n<link rel="stylesheet" href="css\/sketch\.css">/, ''); // goes together with app.css
 swap(/<link rel="stylesheet" href="css\/app\.css">/, () => `<style>${css}</style>`);
 swap(/<script type="module" src="js\/app\.js"><\/script>\n?/, '');
-swap(/<title>Snowlog<\/title>/, '<title>Snowlog portátil</title>');
+swap(/<title>Snowlog<\/title>/, '<title>Snowlog portable</title>');
 html = html.replace('</body>', () => `<script>${script}</script>\n</body>`);
 
 const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version || '0.0.0';
-const stamp = `<!-- Snowlog portátil ${version} · ${new Date().toISOString().slice(0, 10)} · ábrelo con doble clic en Chrome o Edge. Sin instalación y sin conexión. -->\n`;
+const stamp = `<!-- Snowlog portable ${version} · ${new Date().toISOString().slice(0, 10)} · open it with a double click. No installation and no connection. -->\n`;
 html = html.replace('<!doctype html>\n', () => `<!doctype html>\n${stamp}`);
 
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, html);
-console.log(`${OUT} (${(html.length / 1024).toFixed(0)} KB, ${order.length} módulos)`);
+console.log(`${OUT} (${(html.length / 1024).toFixed(0)} KB, ${order.length} modules)`);

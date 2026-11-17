@@ -1,13 +1,13 @@
 {
   "name": "Snowlog",
   "short_name": "Snowlog",
-  "description": "Cuaderno de notas personal, cifrado de extremo a extremo.",
+  "description": "A personal notebook, end-to-end encrypted.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#1c1d20",
   "theme_color": "#1c1d20",
-  "lang": "es",
+  "lang": "en",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]

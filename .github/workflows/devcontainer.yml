@@ -1,0 +1,29 @@
+name: Devcontainer
+
+# Builds the dev container when it changes, so a broken pin or checksum shows up on the PR, not on the day
+# someone opens it. Not one of main's required checks: it only runs when .devcontainer/ changes.
+on:
+  pull_request:
+    paths: [".devcontainer/**", ".github/workflows/devcontainer.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Devcontainer build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      # The tools, and that bubblewrap can really start a sandbox with the container's own options (runArgs):
+      # with "failIfUnavailable" in .claude/settings.json, a sandbox that can't start refuses every command.
+      - name: Build the image and check its tools
+        run: |
+          docker build -t devcontainer-check .devcontainer
+          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges --security-opt=seccomp=unconfined --security-opt=apparmor=unconfined \
+            --security-opt=systempaths=unconfined devcontainer-check sh -c \
+            'gitleaks version && node --version && claude --version && python3 --version && jq --version && gh --version && bwrap --version &&
+             bwrap --unshare-user --unshare-pid --unshare-net --ro-bind / / --dev /dev --proc /proc true && echo "sandbox starts"'

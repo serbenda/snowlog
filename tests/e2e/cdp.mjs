@@ -1,5 +1,5 @@
-// Mini driver de Chrome por el protocolo de DevTools, sin dependencias (Node 22: WebSocket global).
-// Lo justo para los recorridos de tests/e2e: abrir páginas, ejecutar JS, teclear, interceptar la red.
+// Minimal Chrome driver over the DevTools protocol, with no dependencies (Node 22: global WebSocket).
+// Just enough for the tests/e2e flows: open pages, run JS, type, intercept the network.
 
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
@@ -19,13 +19,13 @@ export async function launch(chrome = findChrome()) {
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   const wsUrl = await new Promise((resolve, reject) => {
     let buf = '';
-    const t = setTimeout(() => reject(new Error(`Chrome no arranca: ${buf}`)), 20000);
+    const t = setTimeout(() => reject(new Error(`Chrome did not start: ${buf}`)), 20000);
     proc.stderr.on('data', (d) => {
       buf += d;
       const m = buf.match(/DevTools listening on (ws:\/\/\S+)/);
       if (m) { clearTimeout(t); resolve(m[1]); }
     });
-    proc.on('exit', (code) => reject(new Error(`Chrome se ha cerrado (${code}): ${buf}`)));
+    proc.on('exit', (code) => reject(new Error(`Chrome exited (${code}): ${buf}`)));
   });
   const ws = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
@@ -53,7 +53,7 @@ export async function launch(chrome = findChrome()) {
     on: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     async newPage(opts) { return openPage(this, opts); },
     async close() {
-      try { ws.close(); } catch { /* ya cerrado */ }
+      try { ws.close(); } catch { /* already closed */ }
       proc.kill('SIGKILL');
       await new Promise((r) => setTimeout(r, 200));
       try { rmSync(profile, { recursive: true, force: true }); } catch { /* da igual */ }
@@ -68,7 +68,7 @@ const KEYS = {
   ArrowDown: { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 },
 };
 
-// Página nueva en un contexto aislado (como una ventana privada: almacenamiento propio).
+// A new page in an isolated context (like a private window: its own storage).
 async function openPage(browser, { intercept, initScript, offline = false } = {}) {
   const { browserContextId } = await browser.send('Target.createBrowserContext');
   const { targetId } = await browser.send('Target.createTarget', { url: 'about:blank', browserContextId });
@@ -79,7 +79,7 @@ async function openPage(browser, { intercept, initScript, offline = false } = {}
   const off = browser.on(async (msg) => {
     if (msg.sessionId !== sessionId) return;
     const p = msg.params;
-    if (msg.method === 'Runtime.exceptionThrown') errors.push(`excepción: ${p.exceptionDetails.exception?.description || p.exceptionDetails.text}`);
+    if (msg.method === 'Runtime.exceptionThrown') errors.push(`exception: ${p.exceptionDetails.exception?.description || p.exceptionDetails.text}`);
     if (msg.method === 'Runtime.consoleAPICalled' && ['error', 'warning', 'assert'].includes(p.type)) {
       errors.push(`console.${p.type}: ${p.args.map((a) => a.value ?? a.description).join(' ')}`);
     }
@@ -88,7 +88,7 @@ async function openPage(browser, { intercept, initScript, offline = false } = {}
     if (msg.method === 'Fetch.requestPaused') {
       const r = p.request;
       if (r.method === 'OPTIONS') {
-        // Preflight de CORS: se responde que sí, como haría GitHub.
+        // CORS preflight: answer yes, as GitHub would.
         await send('Fetch.fulfillRequest', {
           requestId: p.requestId,
           responseCode: 204,
@@ -144,12 +144,12 @@ async function openPage(browser, { intercept, initScript, offline = false } = {}
         try {
           const v = await page.eval(`(() => { try { return ${expr}; } catch { return false; } })()`);
           if (v) return v;
-        } catch { /* la página aún está cargando */ }
+        } catch { /* the page is still loading */ }
         if (Date.now() - t0 > timeout) throw new Error(`Esperando: ${expr}`);
         await new Promise((r) => setTimeout(r, 100));
       }
     },
-    // Busca un elemento por selector y, si se da, por su texto.
+    // Finds an element by selector and, if given, by its text.
     sel: (css, text) => `[...document.querySelectorAll(${JSON.stringify(css)})].find((e) => ${text ? `e.textContent.includes(${JSON.stringify(text)})` : 'true'} && e.offsetParent !== null)`,
     async click(css, text) {
       await page.waitFor(`!!${page.sel(css, text)}`);

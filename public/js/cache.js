@@ -1,6 +1,6 @@
-// Caché local de ficheros cifrados (IndexedDB). Guarda lo mismo que hay en el repo: texto cifrado,
-// nunca en claro. Sirve para no volver a descargar las notas que no han cambiado y para trabajar
-// sin conexión. Si IndexedDB no está disponible, no guarda nada y todo sigue funcionando.
+// Local cache of encrypted files (IndexedDB). It stores the same thing the repo holds: ciphertext,
+// never plaintext. It avoids downloading notes that have not changed again, and allows working
+// offline. If IndexedDB is not available, it stores nothing and everything still works.
 
 const DB = 'snowlog-cache';
 const STORE = 'blobs';
@@ -40,12 +40,12 @@ export function openCache(scope) {
     get: (k) => run('readonly', (st) => st.get(key(k))),
     put: (k, v) => run('readwrite', (st) => st.put(v, key(k))),
     delete: (k) => run('readwrite', (st) => st.delete(key(k))),
-    // Borra todo lo de este scope.
+    // Deletes everything in this scope.
     clear: () => run('readwrite', (st) => st.delete(IDBKeyRange.bound(`${scope}|`, `${scope}|￿`))),
   };
 }
 
-// Caché en memoria con la misma forma, para los tests.
+// In-memory cache with the same shape, for the tests.
 export function memoryCache() {
   const m = new Map();
   return {

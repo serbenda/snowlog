@@ -6,69 +6,69 @@ const BOARD = `---
 kanban-plugin: basic
 ---
 
-Notas del tablero.
+Board notes.
 
-## Pendiente
+## To do
 
-- [ ] Diseñar la portada #web
-- [ ] Revisar [[HU-02]]
-    con una segunda línea
+- [ ] Design the front page #web
+- [ ] Review [[US-02]]
+    with a second line
 
-## En curso
+## In progress
 
-- [x] Elegir colores
+- [x] Pick colors
 
-## Hecho
+## Done
 
 %% kanban:settings
 {"kanban-plugin":"basic"}
 %%`;
 
-test('reconoce un tablero', () => {
+test('recognizes a board', () => {
   assert.ok(K.isBoard(BOARD));
   assert.ok(K.isBoard('---\nkanban: true\n---\n## A'));
-  assert.ok(!K.isBoard('# Nota normal\n## A\n- [ ] x'));
+  assert.ok(!K.isBoard('# Plain note\n## A\n- [ ] x'));
 });
 
-test('lee columnas y tarjetas y conserva lo demás', () => {
+test('reads columns and cards and keeps the rest', () => {
   const b = K.parseBoard(BOARD);
-  assert.deepEqual(b.lanes.map((l) => l.title), ['Pendiente', 'En curso', 'Hecho']);
-  assert.deepEqual(b.lanes[0].cards.map((c) => c.text), ['Diseñar la portada #web', 'Revisar [[HU-02]]']);
-  assert.deepEqual(b.lanes[0].cards[1].more, ['    con una segunda línea']);
+  assert.deepEqual(b.lanes.map((l) => l.title), ['To do', 'In progress', 'Done']);
+  assert.deepEqual(b.lanes[0].cards.map((c) => c.text), ['Design the front page #web', 'Review [[US-02]]']);
+  assert.deepEqual(b.lanes[0].cards[1].more, ['    with a second line']);
   assert.equal(b.lanes[1].cards[0].done, true);
-  assert.ok(b.pre.includes('Notas del tablero.'));
+  assert.ok(b.pre.includes('Board notes.'));
   assert.equal(b.post[0], '%% kanban:settings');
 });
 
-test('escribir lo leído no cambia el texto', () => {
+test('writing what was read does not change the text', () => {
   assert.equal(K.serializeBoard(K.parseBoard(BOARD)), BOARD);
   assert.equal(K.serializeBoard(K.parseBoard(K.NEW_BOARD)), K.NEW_BOARD);
 });
 
-test('mover, añadir, editar, marcar y borrar tarjetas y columnas', () => {
+test('move, add, edit, tick and delete cards and columns', () => {
   let b = K.parseBoard(BOARD);
   b = K.moveCard(b, { lane: 0, index: 0 }, { lane: 2, index: 0 });
-  assert.deepEqual(b.lanes[2].cards.map((c) => c.text), ['Diseñar la portada #web']);
+  assert.deepEqual(b.lanes[2].cards.map((c) => c.text), ['Design the front page #web']);
   b = K.moveCard(b, { lane: 0, index: 0 }, { lane: 1, index: 1 });
-  assert.deepEqual(b.lanes[1].cards.map((c) => c.text), ['Elegir colores', 'Revisar [[HU-02]]']);
-  assert.deepEqual(b.lanes[1].cards[1].more, ['    con una segunda línea'], 'las líneas extra viajan con la tarjeta');
+  assert.deepEqual(b.lanes[1].cards.map((c) => c.text), ['Pick colors', 'Review [[US-02]]']);
+  assert.deepEqual(b.lanes[1].cards[1].more, ['    with a second line'], 'the extra lines travel with the card');
   b = K.moveCard(b, { lane: 1, index: 0 }, { lane: 1, index: 2 });
-  assert.deepEqual(b.lanes[1].cards.map((c) => c.text), ['Revisar [[HU-02]]', 'Elegir colores']);
-  b = K.addCard(b, 0, 'Nueva\ntarjeta');
-  assert.equal(b.lanes[0].cards[0].text, 'Nueva tarjeta');
-  b = K.editCard(b, 0, 0, 'Editada');
+  assert.deepEqual(b.lanes[1].cards.map((c) => c.text), ['Review [[US-02]]', 'Pick colors']);
+  b = K.addCard(b, 0, 'New\ncard');
+  assert.equal(b.lanes[0].cards[0].text, 'New card');
+  b = K.editCard(b, 0, 0, 'Edited');
   b = K.toggleCard(b, 0, 0);
   assert.equal(b.lanes[0].cards[0].done, true);
-  b = K.addLane(b, 'Bloqueado');
+  b = K.addLane(b, 'Blocked');
   b = K.moveLane(b, 3, 1);
-  b = K.renameLane(b, 1, 'Bloqueos');
+  b = K.renameLane(b, 1, 'Blockers');
   b = K.deleteCard(b, 0, 0);
   const text = K.serializeBoard(b);
   const again = K.parseBoard(text);
-  assert.deepEqual(again.lanes.map((l) => l.title), ['Pendiente', 'Bloqueos', 'En curso', 'Hecho']);
-  assert.deepEqual(again.lanes[2].cards.map((c) => `${c.done ? 'x' : 'o'} ${c.text}`), ['o Revisar [[HU-02]]', 'x Elegir colores']);
-  assert.ok(text.trimEnd().endsWith('%%'), 'el bloque final sigue al final');
+  assert.deepEqual(again.lanes.map((l) => l.title), ['To do', 'Blockers', 'In progress', 'Done']);
+  assert.deepEqual(again.lanes[2].cards.map((c) => `${c.done ? 'x' : 'o'} ${c.text}`), ['o Review [[US-02]]', 'x Pick colors']);
+  assert.ok(text.trimEnd().endsWith('%%'), 'the final block stays at the end');
   b = K.deleteLane(again, 1);
   assert.equal(b.lanes.length, 3);
-  assert.equal(K.parseBoard(BOARD).lanes[0].cards.length, 2, 'el original no cambia');
+  assert.equal(K.parseBoard(BOARD).lanes[0].cards.length, 2, 'the original does not change');
 });

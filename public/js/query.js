@@ -1,20 +1,20 @@
-// Consultas al estilo Dataview, con el subconjunto que se usa en el día a día:
+// Dataview-style queries, with the subset used day to day:
 //
-//   TASK  [FROM "carpeta" | FROM #etiqueta] [WHERE …] [GROUP BY …] [SORT … ASC|DESC] [LIMIT n]
+//   TASK  [FROM "folder" | FROM #tag] [WHERE …] [GROUP BY …] [SORT … ASC|DESC] [LIMIT n]
 //   LIST  [FROM …] [WHERE …] [SORT …] [LIMIT n]
-//   TABLE campo1, campo2 AS "Título" [FROM …] [WHERE …] [SORT …] [LIMIT n]
+//   TABLE field1, field2 AS "Title" [FROM …] [WHERE …] [SORT …] [LIMIT n]
 //
-// WHERE admite AND, OR, NOT/!, paréntesis, = != < > <= >=, y las funciones
+// WHERE supports AND, OR, NOT/!, parentheses, = != < > <= >=, and the functions
 // contains, icontains, startswith, endswith, lower, upper, length, date, default.
-// Campos: text y completed (en TASK), file.name, file.path, file.folder, file.link,
-// file.tags, file.day, file.ctime, file.mtime, y cualquier propiedad del frontmatter.
+// Fields: text and completed (in TASK), file.name, file.path, file.folder, file.link,
+// file.tags, file.day, file.ctime, file.mtime, and any frontmatter property.
 
 import { escapeHtml, inline } from './markdown.js';
 
 export class QueryError extends Error {}
 
 // ---------------------------------------------------------------------------
-// Análisis
+// Parsing
 
 const KEYWORDS = ['FROM', 'WHERE', 'GROUP', 'SORT', 'LIMIT', 'FLATTEN'];
 
@@ -25,7 +25,7 @@ function tokenize(src) {
   while (pos < src.length) {
     re.lastIndex = pos;
     const m = re.exec(src);
-    if (!m || m.index !== pos) throw new QueryError(`No entiendo «${src.slice(pos, pos + 12)}»`);
+    if (!m || m.index !== pos) throw new QueryError(`Cannot understand “${src.slice(pos, pos + 12)}”`);
     pos = re.lastIndex;
     if (m[1]) tokens.push({ t: 'str', v: m[1].slice(1, -1).replace(/\\(.)/g, '$1') });
     else if (m[2]) tokens.push({ t: 'num', v: Number(m[2]) });
@@ -58,7 +58,7 @@ class Parser {
 
   expect(test, what) {
     const t = this.next();
-    if (!t || !test(t)) throw new QueryError(`Esperaba ${what}${t ? ` y encontré «${t.v}»` : ' al final'}`);
+    if (!t || !test(t)) throw new QueryError(`Expected ${what}${t ? ` and found “${t.v}”` : ' at the end'}`);
     return t;
   }
 
@@ -103,12 +103,12 @@ class Parser {
 
   primary() {
     const t = this.next();
-    if (!t) throw new QueryError('La condición está incompleta');
+    if (!t) throw new QueryError('The condition is incomplete');
     if (t.t === 'str' || t.t === 'num') return { k: 'lit', v: t.v };
     if (t.t === 'tag') return { k: 'lit', v: `#${t.v}` };
     if (t.t === 'op' && t.v === '(') {
       const e = this.expr();
-      this.expect((x) => x.t === 'op' && x.v === ')', '«)»');
+      this.expect((x) => x.t === 'op' && x.v === ')', '“)”');
       return e;
     }
     if (t.t === 'id') {
@@ -124,7 +124,7 @@ class Parser {
             args.push(this.expr());
             const sep = this.next();
             if (sep && sep.t === 'op' && sep.v === ')') break;
-            if (!sep || sep.v !== ',') throw new QueryError(`Falta «)» en ${t.v}(…)`);
+            if (!sep || sep.v !== ',') throw new QueryError(`Missing “)” in ${t.v}(…)`);
           }
         } else {
           this.next();
@@ -133,14 +133,14 @@ class Parser {
       }
       return { k: 'field', name: t.v };
     }
-    throw new QueryError(`No esperaba «${t.v}»`);
+    throw new QueryError(`Did not expect “${t.v}”`);
   }
 }
 
 export function parseQuery(src) {
   const p = new Parser(tokenize(src));
-  const head = p.expect((t) => t.t === 'id', 'TASK, LIST o TABLE').v.toUpperCase();
-  if (!['TASK', 'LIST', 'TABLE'].includes(head)) throw new QueryError(`Tipo de consulta desconocido: ${head}. Usa TASK, LIST o TABLE`);
+  const head = p.expect((t) => t.t === 'id', 'TASK, LIST or TABLE').v.toUpperCase();
+  if (!['TASK', 'LIST', 'TABLE'].includes(head)) throw new QueryError(`Unknown query type: ${head}. Use TASK, LIST or TABLE`);
   const q = { type: head, columns: [], from: [], where: [], groupBy: null, sort: [], limit: null };
 
   if (head === 'TABLE') {
@@ -154,7 +154,7 @@ export function parseQuery(src) {
       let label = e.k === 'field' ? e.name : 'valor';
       if (p.isKw('AS')) {
         p.next();
-        label = p.expect((t) => t.t === 'str' || t.t === 'id', 'un nombre de columna').v;
+        label = p.expect((t) => t.t === 'str' || t.t === 'id', 'a column name').v;
       }
       q.columns.push({ expr: e, label });
       if (p.peek() && p.peek().t === 'op' && p.peek().v === ',') p.next();
@@ -162,13 +162,13 @@ export function parseQuery(src) {
   }
 
   while (p.peek()) {
-    const kw = p.expect((t) => t.t === 'id', 'FROM, WHERE, GROUP BY, SORT o LIMIT').v.toUpperCase();
+    const kw = p.expect((t) => t.t === 'id', 'FROM, WHERE, GROUP BY, SORT or LIMIT').v.toUpperCase();
     if (kw === 'FROM') {
       for (;;) {
         const neg = Boolean(p.peek() && p.peek().t === 'op' && p.peek().v === '!');
         if (neg) p.next();
         const s = p.next();
-        if (!s || (s.t !== 'str' && s.t !== 'tag')) throw new QueryError('FROM necesita "carpeta" o #etiqueta');
+        if (!s || (s.t !== 'str' && s.t !== 'tag')) throw new QueryError('FROM needs "folder" or #tag');
         q.from.push({ kind: s.t === 'tag' ? 'tag' : 'folder', value: s.v.replace(/^\/+|\/+$/g, ''), neg });
         if (p.isKw('OR') || p.isKw('AND')) q.fromOp = p.next().v.toUpperCase();
         else break;
@@ -192,16 +192,16 @@ export function parseQuery(src) {
         else break;
       }
     } else if (kw === 'LIMIT') {
-      q.limit = p.expect((t) => t.t === 'num', 'un número').v;
+      q.limit = p.expect((t) => t.t === 'num', 'a number').v;
     } else {
-      throw new QueryError(`${kw} no está soportado`);
+      throw new QueryError(`${kw} is not supported`);
     }
   }
   return q;
 }
 
 // ---------------------------------------------------------------------------
-// Evaluación
+// Evaluation
 
 const pad = (n) => String(n).padStart(2, '0');
 function isoDay(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
@@ -230,7 +230,7 @@ function getField(ctx, name) {
   return key ? note.fm[key] : null;
 }
 
-// Ojo: los strings tienen un método heredado .link(), así que se comprueba que sea un objeto.
+// Careful: strings have an inherited .link() method, so it checks that it is an object.
 const isLink = (v) => v != null && typeof v === 'object' && !Array.isArray(v) && 'link' in v;
 const str = (v) => (v == null ? '' : isLink(v) ? v.link.name : String(v));
 
@@ -240,7 +240,7 @@ function compare(a, b) {
   if (b == null) return 1;
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   if (typeof a === 'boolean' || typeof b === 'boolean') return Number(a) - Number(b);
-  return str(a).localeCompare(str(b), 'es', { numeric: true, sensitivity: 'base' });
+  return str(a).localeCompare(str(b), 'en', { numeric: true, sensitivity: 'base' });
 }
 
 function equals(a, b) {
@@ -287,12 +287,13 @@ function evalExpr(e, ctx) {
         case 'date': {
           const raw = e.args[0] && e.args[0].k === 'field' ? e.args[0].name.toLowerCase() : str(args[0]).toLowerCase();
           const now = ctx.now ? new Date(ctx.now) : new Date();
+          // 'hoy', 'mañana' and 'ayer' are kept so queries written in Spanish keep working.
           if (raw === 'today' || raw === 'hoy') return isoDay(now);
           if (raw === 'tomorrow' || raw === 'mañana') return isoDay(new Date(now.getTime() + 864e5));
           if (raw === 'yesterday' || raw === 'ayer') return isoDay(new Date(now.getTime() - 864e5));
           return str(args[0]).slice(0, 10);
         }
-        default: throw new QueryError(`Función desconocida: ${e.name}()`);
+        default: throw new QueryError(`Unknown function: ${e.name}()`);
       }
     }
     default: return null;
@@ -314,7 +315,7 @@ function inSource(note, from, op = 'OR') {
   });
 }
 
-// notes: salida de parseNote. opts.exclude: carpetas que no se consultan (plantillas).
+// notes: output of parseNote. opts.exclude: folders that are not queried (templates).
 export function runQuery(q, notes, { exclude = [], now } = {}) {
   const pool = notes.filter((n) => inSource(n, q.from, q.fromOp)
     && !exclude.some((f) => f && (n.path.startsWith(`${f}/`) || n.path === f)));
@@ -348,13 +349,13 @@ export function runQuery(q, notes, { exclude = [], now } = {}) {
       groups.get(key).tasks.push(r.task);
     }
     const list = [...groups.values()];
-    if (!q.sort.length) list.sort((a, b) => a.note.path.localeCompare(b.note.path, 'es'));
+    if (!q.sort.length) list.sort((a, b) => a.note.path.localeCompare(b.note.path, 'en'));
     return { type: 'TASK', groups: list, count: rows.length };
   }
 
   let rows = pool.filter((note) => pass({ note, now }));
   if (q.sort.length) rows = sortRows(rows, (n) => ({ note: n, now }));
-  else rows.sort((a, b) => a.path.localeCompare(b.path, 'es'));
+  else rows.sort((a, b) => a.path.localeCompare(b.path, 'en'));
   if (q.limit != null) rows = rows.slice(0, q.limit);
   if (q.type === 'LIST') return { type: 'LIST', notes: rows, count: rows.length };
   return {
@@ -367,7 +368,7 @@ export function runQuery(q, notes, { exclude = [], now } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Presentación (HTML seguro: todo pasa por escapeHtml o inline)
+// Presentation (safe HTML: everything goes through escapeHtml or inline)
 
 const noteLink = (note) => `<a class="internal-link" href="#" data-target="${escapeHtml(note.path)}">${escapeHtml(note.name)}</a>`;
 
@@ -381,17 +382,17 @@ function cell(v) {
 
 export function renderResult(res) {
   if (res.type === 'TASK') {
-    if (!res.groups.length) return '<p class="query-empty">Sin tareas.</p>';
+    if (!res.groups.length) return '<p class="query-empty">No tasks.</p>';
     return res.groups.map((g) => `<div class="query-group"><div class="query-group-title">${noteLink(g.note)}</div><ul class="query-tasks">${
-      g.tasks.map((t) => `<li class="task${t.completed ? ' done' : ''}"><input type="checkbox" class="task-checkbox" data-note="${escapeHtml(g.note.id)}" data-line="${t.line}"${t.completed ? ' checked' : ''} aria-label="Marcar tarea"><span class="task-text">${inline(t.text)}</span></li>`).join('')
+      g.tasks.map((t) => `<li class="task${t.completed ? ' done' : ''}"><input type="checkbox" class="task-checkbox" data-note="${escapeHtml(g.note.id)}" data-line="${t.line}"${t.completed ? ' checked' : ''} aria-label="Toggle task"><span class="task-text">${inline(t.text)}</span></li>`).join('')
     }</ul></div>`).join('');
   }
   if (res.type === 'LIST') {
-    if (!res.notes.length) return '<p class="query-empty">Sin resultados.</p>';
+    if (!res.notes.length) return '<p class="query-empty">No results.</p>';
     return `<ul class="query-list">${res.notes.map((n) => `<li>${noteLink(n)}</li>`).join('')}</ul>`;
   }
-  if (!res.rows.length) return '<p class="query-empty">Sin resultados.</p>';
-  const head = `${res.withoutId ? '' : '<th>Nota</th>'}${res.headers.map((hd) => `<th>${escapeHtml(hd)}</th>`).join('')}`;
+  if (!res.rows.length) return '<p class="query-empty">No results.</p>';
+  const head = `${res.withoutId ? '' : '<th>Note</th>'}${res.headers.map((hd) => `<th>${escapeHtml(hd)}</th>`).join('')}`;
   const body = res.rows.map((r) => `<tr>${res.withoutId ? '' : `<td>${noteLink(r.note)}</td>`}${r.values.map((v) => `<td>${cell(v)}</td>`).join('')}</tr>`).join('');
   return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }

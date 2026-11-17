@@ -1,11 +1,11 @@
-// Cifrado de extremo a extremo con WebCrypto.
+// End-to-end encryption with WebCrypto.
 //
 // Esquema:
-// - Una clave de datos (DEK) AES-256-GCM aleatoria cifra todo el contenido.
-// - La DEK se guarda "envuelta" (cifrada) con una clave derivada de la frase de paso
-//   y, aparte, con una clave derivada del código de recuperación.
-// - Cada fichero se cifra con un IV aleatorio nuevo y con su identificador como
-//   dato adicional autenticado (AAD), para que no se pueda cambiar un fichero por otro.
+// - A random AES-256-GCM data key (DEK) encrypts all the content.
+// - The DEK is stored "wrapped" (encrypted) with a key derived from the passphrase
+//   and, separately, with a key derived from the recovery code.
+// - Each file is encrypted with a new random IV and with its identifier as
+//   additional authenticated data (AAD), so one file cannot be swapped for another.
 
 const subtle = globalThis.crypto.subtle;
 const enc = new TextEncoder();
@@ -15,7 +15,7 @@ export const IV_BYTES = 12;
 
 export function randomBytes(n) {
   const b = new Uint8Array(n);
-  // getRandomValues admite como mucho 65.536 bytes por llamada.
+  // getRandomValues accepts at most 65,536 bytes per call.
   for (let i = 0; i < n; i += 65536) globalThis.crypto.getRandomValues(b.subarray(i, Math.min(n, i + 65536)));
   return b;
 }
@@ -36,7 +36,7 @@ export function fromB64(b64) {
   return out;
 }
 
-// Identificador aleatorio para nombres de fichero (no revela nada del título).
+// Random identifier for file names (reveals nothing about the title).
 export function randomId(bytes = 12) {
   return Array.from(randomBytes(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
 }
@@ -74,7 +74,7 @@ export async function decryptBytes(key, data, aad) {
   return new Uint8Array(await subtle.decrypt(params, key, data.subarray(IV_BYTES)));
 }
 
-// Texto -> base64(iv || cifrado). Es lo que se guarda en el repo.
+// Text -> base64(iv || ciphertext). This is what is stored in the repository.
 export async function encryptText(key, text, aad) {
   return toB64(await encryptBytes(key, enc.encode(text), aad));
 }
@@ -83,7 +83,7 @@ export async function decryptText(key, b64, aad) {
   return dec.decode(await decryptBytes(key, fromB64(b64.trim()), aad));
 }
 
-// Código de recuperación legible: 25 caracteres en 5 grupos (~125 bits).
+// Readable recovery code: 25 characters in 5 groups (~125 bits).
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export function newRecoveryCode() {
   const bytes = randomBytes(25);
@@ -94,7 +94,7 @@ export function normalizeRecoveryCode(code) {
   return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-// Crea la bóveda: DEK nueva envuelta con la frase de paso y con el código de recuperación.
+// Creates the vault: a new DEK wrapped with the passphrase and with the recovery code.
 export async function createVault(passphrase, iterations) {
   const rawDek = randomBytes(32);
   const recoveryCode = newRecoveryCode();
@@ -131,8 +131,8 @@ async function wrapSlot(raw, secret, iterations) {
   };
 }
 
-// Cambia la frase de paso: comprueba la actual y vuelve a envolver la misma DEK con la nueva
-// (las notas no se recifran). Sube las iteraciones si `iterations` es mayor que las guardadas.
+// Changes the passphrase: checks the current one and wraps the same DEK again with the new one
+// (notes are not re-encrypted). Raises the iterations if `iterations` is higher than the stored ones.
 export async function changePassphrase(vault, oldPassphrase, newPassphrase, iterations = 0) {
   let raw;
   try {
@@ -146,7 +146,7 @@ export async function changePassphrase(vault, oldPassphrase, newPassphrase, iter
   return updated;
 }
 
-// Genera un código de recuperación nuevo (el anterior deja de servir). Pide la frase actual.
+// Generates a new recovery code (the previous one stops working). Asks for the current passphrase.
 export async function renewRecoveryCode(vault, passphrase, iterations = 0) {
   let raw;
   try {
@@ -166,7 +166,7 @@ async function unwrapWith(slot, secret) {
   return decryptBytes(kek, fromB64(slot.wrapped), 'dek');
 }
 
-// Devuelve la DEK o lanza Error('bad_secret') si la frase no es correcta.
+// Returns the DEK, or throws Error('bad_secret') if the passphrase is wrong.
 export async function unlockVault(vault, passphrase) {
   let raw;
   try {
@@ -179,9 +179,9 @@ export async function unlockVault(vault, passphrase) {
   return dek;
 }
 
-// Rota la clave: DEK nueva al azar, envuelta con la frase (que se comprueba) y con un código de
-// recuperación nuevo. Devuelve también la DEK antigua en base64 (`oldKey`) para guardarla cifrada con
-// la nueva en el llavero, y así poder seguir leyendo el historial.
+// Rotates the key: a new random DEK, wrapped with the passphrase (which is checked) and with a new
+// recovery code. Also returns the old DEK in base64 (`oldKey`) to store it encrypted with the new one
+// in the keyring, so the history can still be read.
 export async function rotateVault(vault, passphrase, iterations = 0) {
   let raw;
   try {
@@ -211,7 +211,7 @@ export async function importKey(b64) {
   return key;
 }
 
-// Abre la DEK con la frase de paso o, si no encaja, con el código de recuperación.
+// Opens the DEK with the passphrase or, if that fails, with the recovery code.
 export async function unlockWithAny(vault, secret) {
   for (const [slot, value] of [[vault.keys.passphrase, secret], [vault.keys.recovery, normalizeRecoveryCode(secret)]]) {
     try {
@@ -219,13 +219,13 @@ export async function unlockWithAny(vault, secret) {
       const dek = await importDek(raw);
       raw.fill(0);
       return dek;
-    } catch { /* probar el siguiente */ }
+    } catch { /* try the next one */ }
   }
   throw new Error('bad_secret');
 }
 
-// Con el código de recuperación se fija una frase de paso nueva.
-// Devuelve la bóveda actualizada y la DEK.
+// With the recovery code, a new passphrase is set.
+// Returns the updated vault and the DEK.
 export async function recoverVault(vault, recoveryCode, newPassphrase) {
   let raw;
   try {

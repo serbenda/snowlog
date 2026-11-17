@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Git runs this hook for an automatic merge instead of pre-commit, and runs it only then: what it commits is
+# git's own merge of the two sides, whose commits are checked on their own (pre-commit, pre-push), and
+# pre-push compares the merge with git's merge of its parents. So here pre-commit only scans for secrets.
+# (git writes MERGE_HEAD only after this hook, so the other side can't be read here.) A merge with
+# conflicts, or with --no-commit, is finished with git commit: pre-commit then checks it in full.
+exec "$(dirname "$0")/pre-commit" --automerge

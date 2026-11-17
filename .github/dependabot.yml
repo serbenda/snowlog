@@ -1,0 +1,64 @@
+version: 2
+updates:
+  # Keeps the GitHub Actions of the workflows up to date (they are pinned to a commit SHA, so
+  # nothing updates them otherwise). This part doesn't depend on the stack; in phase P03 add the
+  # stack's ecosystem (npm, pip, gomod, cargo, pub…) below (see docs/SETUP.md → Stack checklist).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "development"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Wait a week before proposing a newly published version: a compromised release is usually
+    # caught and pulled within days. Keep this block on every ecosystem added in phase P03.
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The scanner images the SAST and Dependencies jobs run (Semgrep, OSV-Scanner), pinned by tag and digest
+  # in .scanners/*/Dockerfile (outside .github/: Dependabot opens PRs there only for
+  # GitHub Actions). Same cooldown: a new scanner release waits a week.
+  - package-ecosystem: "docker"
+    directories: ["/.scanners/*"]
+    target-branch: "development"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci"
+    groups:
+      scanners:
+        patterns: ["*"]
+
+  # The desktop app's Rust crates (Tauri), same cooldown.
+  - package-ecosystem: "cargo"
+    directory: "/desktop/src-tauri"
+    target-branch: "development"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "build"
+    groups:
+      tauri:
+        patterns: ["*"]
+
+  # The dev container's base image (pinned by digest in .devcontainer/Dockerfile), same cooldown.
+  - package-ecosystem: "docker"
+    directory: "/.devcontainer"
+    target-branch: "development"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci"

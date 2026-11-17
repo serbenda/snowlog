@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Git runs this hook for git am instead of pre-commit, so it runs the same checks:
+# guardrail files only by the owner, and Gitleaks on what is about to be committed.
+exec "$(dirname "$0")/pre-commit" "$@"

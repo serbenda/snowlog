@@ -1,12 +1,12 @@
-// Fusión a tres bandas por líneas (como hace git): a partir de la versión común (`base`), junta los
-// cambios de `mine` y de `theirs`. Si los dos cambiaron las mismas líneas de forma distinta, hay choque
-// y no se fusiona (la app guarda entonces la otra versión como copia, como antes).
+// Three-way line merge (as git does): from the common version (`base`), it combines the
+// changes in `mine` and in `theirs`. If both changed the same lines differently, it is a clash
+// and nothing is merged (the app then keeps the other version as a copy, as before).
 
-const MAX_CELLS = 4e6; // notas enormes: no se intenta (se trata como choque)
+const MAX_CELLS = 4e6; // huge notes: not attempted (treated as a clash)
 
-// Pares [i, j] de líneas iguales de a y b, en orden (subsecuencia común más larga).
+// Pairs [i, j] of equal lines of a and b, in order (longest common subsequence).
 function lcs(a, b) {
-  // Recorta lo común al principio y al final: es lo habitual y ahorra casi todo el trabajo.
+  // Trims what is common at the start and the end: the usual case, and it saves almost all the work.
   let start = 0;
   while (start < a.length && start < b.length && a[start] === b[start]) start += 1;
   let endA = a.length;
@@ -59,14 +59,14 @@ export function merge3(base, mine, theirs) {
     if (same(ca, co)) out.push(...cb);
     else if (same(cb, co)) out.push(...ca);
     else if (same(ca, cb)) out.push(...ca);
-    // Los dos añadieron líneas en el mismo sitio sin borrar nada (lo típico en un diario): se quedan
-    // las dos tandas, primero las de aquí.
+    // Both added lines at the same place without deleting anything (typical in a journal): both
+    // batches stay, ours first.
     else if (!co.length) out.push(...ca, ...cb);
     else return false;
     return true;
   };
   for (let k = 0; k < O.length; k++) {
-    // Línea de la base que sigue igual en las dos versiones: punto de sincronía.
+    // A base line that is unchanged in both versions: a sync point.
     if (!ma.has(k) || !mb.has(k) || ma.get(k) < a || mb.get(k) < b) continue;
     if (!chunk(k, ma.get(k), mb.get(k))) return { text: '', conflict: true };
     out.push(O[k]);

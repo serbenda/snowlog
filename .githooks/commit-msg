@@ -1,9 +1,76 @@
-#!/bin/sh
-# Quita del mensaje cualquier atribución a herramientas de IA.
-# Activar una vez por clon: git config core.hooksPath .githooks
-msg="$1"
-tmp="$(mktemp)"
-grep -viE '^(co-authored-by:.*(claude|anthropic|noreply@anthropic\.com)|claude-session:|.*generated with \[?claude)' "$msg" > "$tmp"
-# Quita líneas en blanco sobrantes al final
-sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$tmp" > "$msg"
-rm -f "$tmp"
+#!/usr/bin/env bash
+# Git hook (applies to any tool or person): refuses commit messages with automatic AI assistant signatures,
+# checks the subject follows Conventional Commits, and checks the author. applypatch-msg runs it for git am too.
+# Enabled with: git config core.hooksPath .githooks   (scripts/setup-repo.sh does it)
+set -euo pipefail
+
+msg_file="$1"
+# The same pattern as pre-push and CI's Authorship job (.github/workflows/ci.yml). Signatures are trailers and
+# tool footers, matched where they start a line, after any quote or list marks (#, >, -, *): a trailer
+# (Co-Authored-By, Co-developed-by, Assisted-by, Generated-by: never added, by any tool or person; Signed-off-by
+# or Authored-by naming an AI tool), a line saying an AI tool generated, made, created, wrote, authored or
+# assisted it ("Generated with Claude Code v2", "Authored by Copilot"), a line that is only the Claude Code link,
+# a Claude Code session link, or 🤖. A sentence that starts that way is refused too ("Written with Cursor in
+# mind…"): say it another way. Mentions inside a sentence, and tool-like names ("openai-codegen",
+# "Copilot-style"), are fine. C locale: a stray byte can't hide a match.
+pattern='^[[:space:]#>*_-]*((co-authored|co-developed|assisted|generated)-by:|(signed-off|authored)-by:[[:space:]]*\[?(claude|cursor|copilot|codex|gemini|aider|chatgpt|openai|anthropic|devin|windsurf|gpt)|claude-session:|(generated|made|created|written|authored|assisted)[*_[:space:]]+(with|by|using|via|in)[*_[:space:]]+(the[[:space:]]+)?\[?[*_]*((github|microsoft)[[:space:]]+)?(claude|cursor|copilot|codex|gemini|aider|chatgpt|openai|anthropic|devin|windsurf|gpt)(-[[:alnum:].]*[0-9][[:alnum:].]*|-(code|cli|agent))?([^[:alnum:]-]|$)|(\[[^]]*\]\()?<?https?://(claude\.ai/code|claude\.com/claude-code)/?[)>]*[[:space:].]*$)|claude\.ai/code/session|noreply@anthropic|🤖'
+# The comment character git uses (core.commentChar; "auto" or anything longer than one character: #).
+cc="$(git config core.commentChar 2>/dev/null || true)"
+[[ ${#cc} == 1 ]] || cc="#"
+# The whole message is checked, comment lines too: with -m, -F or --cleanup=verbatim git keeps them. Below
+# commit -v's scissors line only the diff git adds there is skipped, from its first "diff --git" line on;
+# what comes before that is checked too (git keeps it when the message didn't come from the editor).
+raw="$(awk -v sc="$cc ------------------------ >8 ------------------------" -v cc="$cc" '
+  $0 == sc { cut = 1; next }
+  cut && /^diff --git / { diff = 1 }
+  diff { next }
+  cut && (index($0, cc " Do not modify") == 1 || index($0, cc " Everything below") == 1) { next }
+  { print }' "$msg_file")"
+body="$(awk -v sc="$cc ------------------------ >8 ------------------------" -v cc="$cc" '
+  $0 == sc { exit } index($0, cc) != 1 { print }' "$msg_file")"
+# grep reads to the end (never -q): with pipefail an early exit would make the writer fail and hide a match.
+if printf '%s\n' "$raw" | LC_ALL=C grep -Ei "$pattern" >/dev/null; then
+  echo "commit-msg: the message has an AI assistant signature (Co-Authored-By, \"Generated with …\", 🤖…):" >&2
+  printf '%s\n' "$raw" | LC_ALL=C grep -Ei "$pattern" | sed 's/^/    /' >&2
+  echo "  Remove it and commit again: commits are signed only by the owner." >&2
+  exit 1
+fi
+
+# Secrets in the message itself (it goes to GitHub like the code). Same scan as pre-commit's: gitleaks:allow
+# and GITLEAKS_* variables ignored.
+while IFS= read -r v; do unset "$v"; done < <(env | sed -n 's/^\(GITLEAKS_[A-Za-z0-9_]*\)=.*/\1/p')
+if ! command -v gitleaks >/dev/null 2>&1 || ! gitleaks stdin --help >/dev/null 2>&1; then
+  echo "commit-msg: gitleaks (8.19 or newer) is not installed, so the message can't be checked for secrets." >&2
+  exit 1
+fi
+opts=(--redact --no-banner --log-level warn --ignore-gitleaks-allow)
+[[ -f .gitleaks.toml ]] && opts+=(--config .gitleaks.toml)
+if ! printf '%s\n' "$raw" | gitleaks stdin "${opts[@]}"; then
+  echo "commit-msg: possible secret in the commit message. Remove it and commit again." >&2
+  exit 1
+fi
+
+# Conventional Commits subject (AGENTS.md), type in any case. Git's own messages (merges, reverts,
+# fixup!/squash!, merge --squash) and a repository's "Initial commit" are fine. The subject is the first line
+# git keeps (comments dropped).
+subject="$(printf '%s\n' "$body" | sed '/^[[:space:]]*$/d' | head -n 1)"
+if ! printf '%s' "$subject" | LC_ALL=C grep -Ei '^((feat|fix|docs|chore|refactor|test|ci|perf|build|style|revert)(\([^)]+\))?!?: .+|Merge .+|Revert ".+|(fixup|squash|amend)! .+|Squashed commit of the following:|Initial commit)$' >/dev/null; then
+  echo "commit-msg: the subject must follow Conventional Commits: type(scope): description" >&2
+  echo "  types: feat fix docs chore refactor test ci perf build style revert   (got: ${subject:-an empty subject})" >&2
+  exit 1
+fi
+
+# The owner's identity, from .github/OWNER as last committed (the staged copy only before the first commit):
+# a changed copy on disk doesn't change who the owner is.
+owner_field() { { git show HEAD:.github/OWNER 2>/dev/null || git show :.github/OWNER 2>/dev/null; } |
+  sed -n "s/^$1=//p" | head -n 1; }
+expected="$(owner_field email | tr '[:upper:]' '[:lower:]')"
+[[ -n "$expected" ]] || { echo "commit-msg: .github/OWNER has no email, so the author can't be checked." >&2; exit 1; }
+# git var also reflects --author and GIT_AUTHOR_EMAIL. Under git am it shows the configured identity, not the
+# patch's: applypatch-msg checks that one before it runs this file.
+actual="$(git var GIT_AUTHOR_IDENT | sed -E 's/.*<([^>]*)>.*/\1/')"
+if [[ "$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')" != "$expected" ]]; then
+  echo "commit-msg: the author email is '$actual' and must be '$expected' (.github/OWNER)." >&2
+  echo "  git config user.email \"$expected\"" >&2
+  exit 1
+fi

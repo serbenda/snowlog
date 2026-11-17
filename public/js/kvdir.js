@@ -1,9 +1,9 @@
-// Carpeta "de mentira" guardada dentro del navegador, para la versión portátil en Firefox y Safari
-// (que no dejan elegir carpetas del disco ni usar el almacenamiento de ficheros abiertos con file://).
-// Imita lo justo de FileSystemDirectoryHandle para que LocalVault funcione igual que con una carpeta.
-// Cada cambio se guarda enseguida en IndexedDB o, si no hay, en localStorage.
+// A "fake" folder stored inside the browser, for the portable build in Firefox and Safari
+// (which neither let you pick folders on disk nor use file storage for pages opened with file://).
+// It mimics just enough of FileSystemDirectoryHandle for LocalVault to work as with a real folder.
+// Every change is saved at once to IndexedDB or, if there is none, to localStorage.
 
-const notFound = (name) => Object.assign(new Error(`No existe: ${name}`), { name: 'NotFoundError' });
+const notFound = (name) => Object.assign(new Error(`Not found: ${name}`), { name: 'NotFoundError' });
 
 function toB64(bytes) {
   let s = '';
@@ -88,13 +88,13 @@ class KvDir {
   async removeEntry(name, { recursive = false } = {}) {
     const h = this.children.get(name);
     if (!h) throw notFound(name);
-    if (h.kind === 'directory' && h.children.size && !recursive) throw Object.assign(new Error('No está vacía'), { name: 'InvalidModificationError' });
+    if (h.kind === 'directory' && h.children.size && !recursive) throw Object.assign(new Error('Not empty'), { name: 'InvalidModificationError' });
     this.children.delete(name);
     await this.onChange();
   }
 }
 
-// Todo el árbol como lista plana: [{ p: 'Carpeta/nota.md', d: base64, m: mtime }] y carpetas vacías ({ p, dir: true }).
+// The whole tree as a flat list: [{ p: 'Folder/note.md', d: base64, m: mtime }] and empty folders ({ p, dir: true }).
 function flatten(dir, prefix = '', out = []) {
   for (const [name, h] of dir.children) {
     const p = prefix ? `${prefix}/${name}` : name;
@@ -108,12 +108,12 @@ function flatten(dir, prefix = '', out = []) {
   return out;
 }
 
-// backend: { load(): Promise<lista|null>, save(lista): Promise }. Devuelve la carpeta raíz.
-export async function openKvDir(backend, name = 'este navegador') {
+// backend: { load(): Promise<list|null>, save(list): Promise }. Returns the root folder.
+export async function openKvDir(backend, name = 'this browser') {
   let saving = Promise.resolve();
   let pending = false;
   const root = new KvDir(name, () => {
-    // Varios cambios seguidos se guardan juntos, pero sin esperar: nada queda solo en memoria.
+    // Several changes in a row are saved together, but without waiting: nothing stays only in memory.
     if (pending) return saving;
     pending = true;
     saving = saving.then(() => {
@@ -136,7 +136,7 @@ export async function openKvDir(backend, name = 'este navegador') {
   return root;
 }
 
-// Dónde guardar: IndexedDB si el navegador lo deja, si no localStorage. null si ninguno.
+// Where to save: IndexedDB if the browser allows it, otherwise localStorage. null if neither.
 export async function browserBackend(key = 'snowlog-portable') {
   try {
     const db = await new Promise((resolve, reject) => {
@@ -152,7 +152,7 @@ export async function browserBackend(key = 'snowlog-portable') {
     });
     await run('readwrite', (st) => st.put(1, '__prueba'));
     return { kind: 'idb', load: () => run('readonly', (st) => st.get('files')), save: (list) => run('readwrite', (st) => st.put(list, 'files')) };
-  } catch { /* sin IndexedDB: se prueba localStorage */ }
+  } catch { /* no IndexedDB: try localStorage */ }
   try {
     localStorage.setItem('__snowlog_prueba', '1');
     localStorage.removeItem('__snowlog_prueba');
