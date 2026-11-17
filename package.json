@@ -2,7 +2,7 @@
   "name": "snowlog",
   "private": true,
   "type": "module",
-  "description": "Snowlog: cuaderno de notas personal al estilo Obsidian, cifrado de extremo a extremo, sobre GitHub y GitHub Pages.",
+  "description": "Snowlog: a personal notebook, end-to-end encrypted, on GitHub and GitHub Pages.",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "build:portable": "node scripts/build-portable.mjs",

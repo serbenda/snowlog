@@ -1,5 +1,5 @@
-// Login con GitHub (GitHub App + Cloudflare Worker) o con token personal,
-// y almacenamiento local de credenciales SIEMPRE cifradas con la clave de la bóveda.
+// Sign-in with GitHub (GitHub App + Cloudflare Worker) or with a personal token,
+// and local storage of credentials, ALWAYS encrypted with the vault key.
 
 import { CONFIG } from './config.js';
 import * as C from './crypto.js';
@@ -22,7 +22,7 @@ export function startOAuth() {
   location.assign(url.toString());
 }
 
-// Si volvemos de GitHub con ?code=…, lo cambia por un token. Si no, devuelve null.
+// When coming back from GitHub with ?code=…, exchanges it for a token. Otherwise returns null.
 export async function finishOAuth() {
   const params = new URLSearchParams(location.search);
   const code = params.get('code');
@@ -74,7 +74,7 @@ export async function refresh(cred) {
 
 export const patCred = (token) => ({ type: 'pat', token: token.trim() });
 
-// --- Caché local (todo lo sensible va cifrado con la clave de la bóveda) ---
+// --- Local cache (everything sensitive is encrypted with the vault key) ---
 
 export function cachedVault() {
   try {
@@ -110,5 +110,5 @@ export function forgetDevice() {
     localStorage.removeItem(LS_VAULT);
     localStorage.removeItem(LS_CRED);
     localStorage.removeItem('snowlog.last');
-  } catch { /* nada que borrar */ }
+  } catch { /* nothing to delete */ }
 }

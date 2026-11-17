@@ -1,21 +1,20 @@
-// Copiado de serbenda/sketch (js/escena.js, commit 80f776f) con scripts/update-sketch.mjs. No editar aquí.
-// Escena de un dibujo: una lista de elementos con su estilo. Funciones puras (sin DOM) para crear,
-// medir, tocar, mover, girar, redimensionar, enlazar, guardar, abrir (también .excalidraw) y
-// convertir en trazos.
+// Copied from serbenda/sketch (js/scene.js, commit d868eaa) by scripts/update-sketch.mjs. Do not edit here.
+// A drawing's scene: a list of elements with their style. Pure functions (no DOM) to create, measure,
+// hit-test, move, rotate, resize, bind, save, open (also .excalidraw) and turn into strokes.
 //
-// Además de x, y, w, h y el estilo, un elemento puede llevar:
-//   angle        giro en radianes alrededor de su centro (formas y texto)
-//   group        id de grupo: se seleccionan y mueven juntos
-//   containerId  (texto) forma que lo contiene: va centrado dentro y la sigue
-//   startId/endId (flecha) formas a las que va pegada por cada punta
+// Besides x, y, w, h and the style, an element can have:
+//   angle         rotation in radians around its center (shapes and text)
+//   group         group id: selected and moved together
+//   containerId   (text) the shape that holds it: centered inside, follows it
+//   startId/endId (arrow) the shapes each end is attached to
 
-import { polylinePath, ellipsePath, freehandPath, hachurePath, arrowHead } from './sketch-trazo.js';
+import { polylinePath, ellipsePath, freehandPath, hachurePath, arrowHead } from './sketch-stroke.js';
 
 export const TYPES = ['rectangle', 'ellipse', 'diamond', 'line', 'arrow', 'draw', 'text'];
 export const FORMAT = 'sketch';
 export const VERSION = 1;
 export const LINE_HEIGHT = 1.25;
-export const FONT_NAME = 'Sketch Mano';
+export const FONT_NAME = 'Sketch Hand';
 export const FONT = `"${FONT_NAME}", "Segoe Print", "Bradley Hand", "Comic Sans MS", "Chalkboard SE", cursive`;
 const ARROW_GAP = 6;
 
@@ -50,11 +49,11 @@ export const isContainer = (el) => el.type === 'rectangle' || el.type === 'ellip
 export const isBoundText = (el) => el.type === 'text' && !!el.containerId;
 const isBindable = (el) => isContainer(el) || (el.type === 'text' && !el.containerId);
 
-// --- Texto: medida y líneas ---
-// La medida real la pone quien pinta (canvas.measureText); sin DOM se estima.
+// --- Text: measuring and lines ---
+// The real measure comes from the renderer (canvas.measureText); without a DOM it is estimated.
 let measure = (text, fontSize) => text.length * fontSize * 0.5;
-// Los elementos no se cambian nunca en el sitio (cada cambio crea uno nuevo), así que su caja se puede
-// guardar por objeto. Al cambiar la medida de los textos se empieza de cero.
+// Elements are never changed in place (every change creates a new one), so their box can be cached per
+// object. A new text measurer starts the cache again.
 let boxes = new WeakMap();
 export function setTextMeasurer(fn) {
   measure = fn;
@@ -75,7 +74,7 @@ function wrap(line, width, fontSize) {
       out.push(cur.trimEnd());
       cur = word.trimStart();
     }
-    // Palabra mucho más larga que la caja: se parte por letras (si solo se pasa un poco, se deja).
+    // A word much wider than the box is split by letters (if it is only a little wider, it stays).
     while (measure(cur, fontSize) > width * 1.6 && cur.length > 1) {
       let n = cur.length - 1;
       while (n > 1 && measure(cur.slice(0, n), fontSize) > width) n--;
@@ -87,14 +86,14 @@ function wrap(line, width, fontSize) {
   return out;
 }
 
-// Líneas que se pintan: las del texto, partidas al ancho de la forma si va dentro de una.
+// Lines to paint: the text's own, wrapped to the shape's width when it is inside one.
 export function textLines(el) {
   const raw = String(el.text || '').split('\n');
   if (!el.containerId || !(el.w > 0)) return raw;
   return raw.flatMap((l) => wrap(l, el.w, el.fontSize));
 }
 
-// --- Geometría ---
+// --- Geometry ---
 export function rotatePoint(p, c, a) {
   if (!a) return { x: p.x, y: p.y };
   const cos = Math.cos(a);
@@ -102,7 +101,7 @@ export function rotatePoint(p, c, a) {
   return { x: c.x + (p.x - c.x) * cos - (p.y - c.y) * sin, y: c.y + (p.x - c.x) * sin + (p.y - c.y) * cos };
 }
 
-// Caja del elemento sin girar: { x, y, w, h } con w y h positivos.
+// The element's unrotated box: { x, y, w, h } with positive w and h.
 export function bounds(el) {
   let b = boxes.get(el);
   if (!b) {
@@ -133,7 +132,7 @@ export function center(el) {
   return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
 }
 
-// Esquinas de la caja, ya giradas.
+// The box's corners, rotated.
 export function corners(el) {
   const b = bounds(el);
   const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
@@ -141,7 +140,7 @@ export function corners(el) {
     .map((p) => rotatePoint(p, c, isLinear(el) ? 0 : el.angle || 0));
 }
 
-// Caja que ocupa en pantalla (con el giro).
+// The box it takes on screen (with its rotation).
 export function aabb(el) {
   if (isLinear(el) || !el.angle) return bounds(el);
   const ps = corners(el);
@@ -166,13 +165,13 @@ function distToSegment(px, py, x1, y1, x2, y2) {
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 }
 
-// Punto en el sistema del elemento sin girar.
+// A point in the element's unrotated frame.
 function toLocal(el, x, y) {
   if (isLinear(el) || !el.angle) return { x, y };
   return rotatePoint({ x, y }, center(el), -el.angle);
 }
 
-// ¿Toca el punto (x, y) el elemento? Las formas sin relleno solo se tocan por el borde.
+// Does the point (x, y) hit the element? Shapes without fill are only hit on their outline.
 export function hitTest(el, x, y, tol = 6) {
   ({ x, y } = toLocal(el, x, y));
   const b = bounds(el);
@@ -208,7 +207,7 @@ export function hitTest(el, x, y, tol = 6) {
   return false;
 }
 
-// ¿Está el punto dentro de la forma (con o sin relleno)?
+// Is the point inside the shape (filled or not)?
 export function insideShape(el, x, y, tol = 0) {
   if (!isBindable(el)) return false;
   ({ x, y } = toLocal(el, x, y));
@@ -229,13 +228,13 @@ function diamondPoints(b) {
   ];
 }
 
-// Elemento de más arriba bajo el punto (el último dibujado).
+// The topmost element under the point (the last one drawn).
 export function elementAt(elements, x, y, tol) {
   for (let i = elements.length - 1; i >= 0; i--) if (hitTest(elements[i], x, y, tol)) return elements[i];
   return null;
 }
 
-// Forma de más arriba que contiene el punto (para escribir dentro o pegar una flecha).
+// The topmost shape containing the point (to write inside it or attach an arrow).
 export function shapeAt(elements, x, y, { tol = 0, except = null, containersOnly = false } = {}) {
   for (let i = elements.length - 1; i >= 0; i--) {
     const e = elements[i];
@@ -258,7 +257,7 @@ export function moveElement(el, dx, dy) {
   return { ...el, x: el.x + dx, y: el.y + dy };
 }
 
-// Redimensiona para que la caja del elemento pase de `from` a `to` (escala puntos, centros y tamaños).
+// Resizes so the element's box goes from `from` to `to` (scales points, centers and sizes).
 export function resizeElement(el, from, to) {
   const sx = from.w ? to.w / from.w : 1;
   const sy = from.h ? to.h / from.h : 1;
@@ -283,8 +282,8 @@ export function resizeElement(el, from, to) {
   return { ...el, x: mapX(c.x) - w / 2, y: mapY(c.y) - h / 2, w, h };
 }
 
-// Redimensiona un solo elemento arrastrando un tirador (n, s, e, w, ne…) hasta el punto p, en el
-// sistema del propio elemento (sirve igual si está girado).
+// Resizes one element by dragging a handle (n, s, e, w, ne…) to the point p, in the element's own frame
+// (so it works the same when rotated).
 export function resizeByHandle(el, handle, p, { keepRatio = false } = {}) {
   const b = bounds(el);
   const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
@@ -307,7 +306,7 @@ export function resizeByHandle(el, handle, p, { keepRatio = false } = {}) {
   }
   const w = Math.max(1, Math.abs(x2 - x1));
   const h = Math.max(1, Math.abs(y2 - y1));
-  // Centro nuevo, de vuelta al sistema del dibujo.
+  // New center, back in the drawing's frame.
   const nc = rotatePoint({ x: (x1 + x2) / 2, y: (y1 + y2) / 2 }, c, el.angle || 0);
   if (el.type === 'text') {
     const t = { ...el, fontSize: Math.max(8, Math.round(el.fontSize * (h / (b.h || 1)))) };
@@ -323,7 +322,7 @@ const normAngle = (a) => {
   return r < 1e-9 || TAU - r < 1e-9 ? 0 : r;
 };
 
-// Gira el elemento `delta` radianes alrededor del punto c.
+// Rotates the element `delta` radians around the point c.
 export function rotateElement(el, c, delta) {
   if (isLinear(el)) {
     const abs = el.points.map((p) => rotatePoint({ x: el.x + p.x, y: el.y + p.y }, c, delta));
@@ -338,7 +337,7 @@ export function rotateElement(el, c, delta) {
   return out;
 }
 
-// Agranda (o encoge) un elemento sin mover su centro. Los textos cambian de tamaño de letra.
+// Grows (or shrinks) an element without moving its center. Texts change their font size.
 export function growElement(el, dw, dh) {
   if (el.type === 'text') {
     const fontSize = clamp(el.fontSize + Math.sign(dw || dh) * 2, 6, 400);
@@ -355,7 +354,7 @@ export function growElement(el, dw, dh) {
   return { ...el, x: c.x - w / 2, y: c.y - h / 2, w, h };
 }
 
-// Normaliza: anchos y altos positivos (tras dibujar hacia arriba o a la izquierda).
+// Normalizes: positive width and height (after drawing upwards or to the left).
 export function normalize(el) {
   if (isLinear(el) || el.type === 'text') return el;
   const b = bounds(el);
@@ -369,9 +368,9 @@ export function isEmpty(el) {
   return b.w < 2 && b.h < 2;
 }
 
-// --- Enlaces: texto dentro de formas y flechas pegadas ---
+// --- Bindings: text inside shapes and attached arrows ---
 
-// Punto del borde de la forma en la dirección de `toward`, separado `gap`.
+// The point on the shape's outline in the direction of `toward`, `gap` away from it.
 export function outlinePoint(el, toward, gap = ARROW_GAP) {
   const b = bounds(el);
   const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
@@ -389,7 +388,7 @@ export function outlinePoint(el, toward, gap = ARROW_GAP) {
   return rotatePoint({ x: c.x + dx * k, y: c.y + dy * k }, c, isLinear(el) ? 0 : el.angle || 0);
 }
 
-// Hueco para el texto dentro de cada forma.
+// The room for text inside each shape.
 function innerBox(el) {
   const b = bounds(el);
   const k = el.type === 'ellipse' ? Math.SQRT1_2 : el.type === 'diamond' ? 0.5 : 1;
@@ -397,8 +396,8 @@ function innerBox(el) {
   return { w: Math.max(10, b.w * k - pad * 2), cx: b.x + b.w / 2, cy: b.y + b.h / 2 };
 }
 
-// Vuelve a colocar lo enlazado: textos dentro de su forma y puntas de flecha en el borde de la suya.
-// Quita los enlaces a elementos que ya no existen. No cambia el array recibido.
+// Lays out what is bound: texts inside their shape and arrow ends on their shape's outline. Drops
+// bindings to elements that no longer exist. Does not change the array it receives.
 export function syncBindings(elements) {
   const byId = new Map(elements.map((e) => [e.id, e]));
   return elements.map((el) => {
@@ -441,9 +440,9 @@ export function syncBindings(elements) {
   });
 }
 
-// Fusión a tres bandas de dos versiones de un dibujo (la mía y la de otro dispositivo) desde la que
-// ambas partieron, elemento a elemento por id. Si los dos cambiaron el mismo elemento de forma
-// distinta gana el mío y `conflict` es true (quien llama puede guardar la otra versión aparte).
+// Three-way merge of two versions of a drawing (mine and another device's) from the one both started
+// from, element by element by id. If both changed the same element differently, mine wins and
+// `conflict` is true (the caller can keep the other version separately).
 export function mergeScenes(base, mine, theirs) {
   const key = (e) => JSON.stringify(e);
   const B = new Map(base.elements.map((e) => [e.id, key(e)]));
@@ -456,7 +455,7 @@ export function mergeScenes(base, mine, theirs) {
     const b = B.get(m.id);
     const km = key(m);
     if (!t) {
-      // Lo borraron allí: se va si aquí no se tocó; si aquí se cambió, se queda.
+      // Deleted there: it goes if it was not touched here; if it changed here, it stays.
       if (b === undefined || km !== b) out.push(m);
       continue;
     }
@@ -468,12 +467,12 @@ export function mergeScenes(base, mine, theirs) {
       out.push(m);
     }
   }
-  // Lo nuevo de allí, en su sitio relativo (detrás del elemento que lo precede allí).
+  // What is new there, in its relative place (after the element that precedes it there).
   let prev = null;
   for (const t of theirs.elements) {
     if (!M.has(t.id)) {
       const b = B.get(t.id);
-      // Si aquí se borró y allí no cambió, sigue borrado.
+      // Deleted here and unchanged there: it stays deleted.
       if (b === undefined || key(t) !== b) {
         const at = prev ? out.findIndex((e) => e.id === prev) + 1 : 0;
         out.splice(at, 0, t);
@@ -487,7 +486,7 @@ export function mergeScenes(base, mine, theirs) {
   return { scene: { ...mine, background: bg, elements: syncBindings(out) }, conflict };
 }
 
-// Copias de unos elementos, desplazadas: ids nuevos y enlaces y grupos rehechos entre las copias.
+// Copies of some elements, offset: new ids, and bindings and groups remapped between the copies.
 export function cloneElements(list, dx = 0, dy = 0) {
   const ids = new Map(list.map((e) => [e.id, newId()]));
   const groups = new Map();
@@ -507,7 +506,7 @@ export function cloneElements(list, dx = 0, dy = 0) {
   });
 }
 
-// --- Abrir y guardar (lo que llega de un fichero se valida: nunca se confía en él) ---
+// --- Open and save (whatever comes from a file is validated: it is never trusted) ---
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const COLOR_RE = /^(#[0-9a-f]{3,8}|transparent|rgba?\([\d\s.,%]+\)|[a-z]{3,20})$/i;
 const color = (v, d) => (typeof v === 'string' && COLOR_RE.test(v.trim()) ? v.trim() : d);
@@ -577,7 +576,7 @@ export function serializeScene(scene) {
   return `${JSON.stringify({ type: FORMAT, version: VERSION, background: scene.background, elements: scene.elements })}\n`;
 }
 
-// Formato .excalidraw (JSON público): se traducen los tipos y estilos que tienen equivalente.
+// The .excalidraw format (public JSON): the types and styles with an equivalent are translated.
 export function fromExcalidraw(data) {
   const map = { rectangle: 'rectangle', ellipse: 'ellipse', diamond: 'diamond', line: 'line', arrow: 'arrow', freedraw: 'draw', text: 'text' };
   const elements = [];
@@ -612,7 +611,7 @@ export function fromExcalidraw(data) {
   return { type: FORMAT, version: VERSION, background: color(data.appState?.viewBackgroundColor, '#ffffff'), elements: syncBindings(elements) };
 }
 
-// --- Elemento → trazos a pintar: [{ path, stroke?, fill?, width, dashed, opacity, clip? }] ---
+// --- Element → strokes to paint: [{ path, stroke?, fill?, width, dashed, opacity, clip? }] ---
 const turnPath = (path, c, a) => path.map((cmd) => {
   if (cmd.op === 'Z') return cmd;
   const p = rotatePoint(cmd, c, a);
@@ -628,7 +627,7 @@ export function drawOps(el) {
   const ops = [];
   const filled = el.fill && el.fill !== 'transparent';
   let outline = null;
-  let shape = null; // contorno limpio para rellenar o recortar el rayado
+  let shape = null; // clean outline to fill or to clip the hachure
   if (el.type === 'rectangle') {
     const pts = [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }];
     outline = polylinePath(pts, { ...opts, closed: true });
@@ -665,7 +664,7 @@ export function drawOps(el) {
   return ops.map((op) => ({ ...op, path: turnPath(op.path, c, el.angle), ...(op.clip ? { clip: turnPath(op.clip, c, el.angle) } : {}) }));
 }
 
-// Texto → líneas con su posición, anclaje (start | middle) y giro alrededor de c.
+// Text → lines with their position, anchor (start | middle) and rotation around c.
 export function textLayout(el) {
   const b = bounds(el);
   const lh = el.fontSize * LINE_HEIGHT;

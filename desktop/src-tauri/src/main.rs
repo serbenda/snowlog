@@ -1,10 +1,10 @@
-// Snowlog de escritorio: solo abre la ventana con la web. No expone ninguna orden al JavaScript
-// (sin IPC propio ni plugins), así que la web no puede tocar el sistema más allá de lo que haría
-// en un navegador.
+// Snowlog desktop: it only opens the window with the web app. It exposes no command to JavaScript
+// (no IPC of its own and no plugins), so the web app cannot touch the system beyond what it could
+// do in a browser.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
     tauri::Builder::default()
         .run(tauri::generate_context!())
-        .expect("no se ha podido abrir Snowlog");
+        .expect("could not open Snowlog");
 }

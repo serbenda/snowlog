@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Servidor MCP de Snowlog (JSON-RPC 2.0 por stdio, sin dependencias).
+// Snowlog MCP server (JSON-RPC 2.0 over stdio, no dependencies).
 //
-//   node agent/mcp.js --dir ~/ruta/al/clon/de/snowlog-notes [--remote origin] [--branch main]
+//   node agent/mcp.js --dir ~/path/to/the/snowlog-notes/clone [--remote origin] [--branch main]
 //
-// Descifra y cifra en local con los módulos de la app. La frase de paso se pide con un diálogo del
-// sistema (o SNOWLOG_ASKPASS) la primera vez que hace falta; ninguna herramienta la recibe ni la
-// devuelve. Por stdout solo van mensajes del protocolo; los avisos van por stderr y nunca llevan
-// texto de las notas.
+// It decrypts and encrypts locally with the app's modules. The passphrase is asked for with a system
+// dialog (or SNOWLOG_ASKPASS) the first time it is needed; no tool receives or returns it.
+// Only protocol messages go to stdout; notices go to stderr and never include note
+// text.
 
 import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
@@ -19,79 +19,79 @@ import * as ops from './ops.js';
 const VERSION = '0.1.0';
 const PROTOCOL = '2025-06-18';
 
-const INSTRUCTIONS = `Bóveda de notas de Snowlog (Markdown cifrado; aquí se ve ya descifrado).
-- Las notas se nombran por su ruta sin extensión: «Carpeta/Nota». También vale solo el nombre si no se repite.
-- Enlaza con [[Nota]], [[Carpeta/Nota]], [[Nota#Sección]] o [[Nota|texto]]. Etiquetas: #etiqueta o tags en el frontmatter.
-- Para añadir a una nota existente usa append_note (con heading para una sección) en lugar de reescribirla entera.
-- Cada escritura es un commit en el repo de notas; agrupa los cambios en pocas llamadas.
-- Si la bóveda está bloqueada, la primera herramienta que la necesite pedirá la frase al usuario en un diálogo del sistema. Nunca pidas la frase en el chat.`;
+const INSTRUCTIONS = `Snowlog notes vault (encrypted Markdown; seen here already decrypted).
+- Notes are named by their path without extension: “Folder/Note”. The name alone also works if it is unique.
+- Link with [[Note]], [[Folder/Note]], [[Note#Section]] or [[Note|text]]. Tags: #tag or tags in the frontmatter.
+- To add to an existing note use append_note (with heading for a section) instead of rewriting it whole.
+- Every write is a commit in the notes repository; group changes into few calls.
+- If the vault is locked, the first tool that needs it asks the user for the passphrase in a system dialog. Never ask for the passphrase in the chat.`;
 
 const str = (description) => ({ type: 'string', description });
 const tools = [
   {
     name: 'vault_status', fn: ops.status,
-    description: 'Estado de la bóveda: si está desbloqueada, número de notas y carpetas, y las carpetas del diario y de plantillas. No pide la frase.',
+    description: 'Vault status: whether it is unlocked, the number of notes and folders, and the daily and templates folders. Does not ask for the passphrase.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'unlock', fn: ops.unlock,
-    description: 'Desbloquea la bóveda: muestra al usuario un diálogo del sistema para que escriba la frase de paso. La frase nunca llega aquí.',
+    description: 'Unlocks the vault: shows the user a system dialog to type the passphrase. The passphrase never reaches this tool.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'lock', fn: ops.lock,
-    description: 'Bloquea la bóveda y borra de memoria la clave y las notas descifradas.',
+    description: 'Locks the vault and wipes the key and the decrypted notes from memory.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'list_notes', fn: ops.listNotes,
-    description: 'Lista notas y carpetas, opcionalmente dentro de una carpeta.',
-    inputSchema: { type: 'object', properties: { folder: str('Carpeta, p. ej. «Proyectos». Vacío = toda la bóveda.'), recursive: { type: 'boolean', description: 'Incluir subcarpetas (por defecto sí).' } } },
+    description: 'Lists notes and folders, optionally inside a folder.',
+    inputSchema: { type: 'object', properties: { folder: str('Folder, e.g. “Projects”. Empty = the whole vault.'), recursive: { type: 'boolean', description: 'Include subfolders (yes by default).' } } },
   },
   {
     name: 'read_note', fn: ops.readNote,
-    description: 'Lee una nota (Markdown con su frontmatter).',
-    inputSchema: { type: 'object', properties: { path: str('Ruta o nombre de la nota, sin .md.') }, required: ['path'] },
+    description: 'Reads a note (Markdown with its frontmatter).',
+    inputSchema: { type: 'object', properties: { path: str('Path or name of the note, without .md.') }, required: ['path'] },
   },
   {
     name: 'search', fn: ops.search,
-    description: 'Búsqueda de texto completo sin distinguir mayúsculas ni acentos. Sintaxis: palabras (todas), "frase exacta", -excluir, tag:#etiqueta, path:Carpeta.',
-    inputSchema: { type: 'object', properties: { query: str('Consulta.'), limit: { type: 'integer', description: 'Máximo de notas (20 por defecto).' } }, required: ['query'] },
+    description: 'Full-text search, ignoring case and accents. Syntax: words (all of them), "exact phrase", -exclude, tag:#tag, path:Folder.',
+    inputSchema: { type: 'object', properties: { query: str('Query.'), limit: { type: 'integer', description: 'Maximum number of notes (20 by default).' } }, required: ['query'] },
   },
   {
     name: 'list_tags', fn: ops.listTags,
-    description: 'Etiquetas de la bóveda con el número de notas que las usan.',
+    description: 'Tags in the vault with the number of notes that use them.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'links', fn: ops.links,
-    description: 'Enlaces [[…]] que salen de una nota, con la nota a la que apuntan o null si no existe.',
-    inputSchema: { type: 'object', properties: { path: str('Ruta o nombre de la nota.') }, required: ['path'] },
+    description: 'Outgoing [[…]] links of a note, with the note they point to, or null if it does not exist.',
+    inputSchema: { type: 'object', properties: { path: str('Path or name of the note.') }, required: ['path'] },
   },
   {
     name: 'backlinks', fn: ops.backlinks,
-    description: 'Notas que enlazan a esta nota (enlaces entrantes), con las líneas donde la enlazan.',
-    inputSchema: { type: 'object', properties: { path: str('Ruta o nombre de la nota.') }, required: ['path'] },
+    description: 'Notes that link to this note (backlinks), with the lines where they link to it.',
+    inputSchema: { type: 'object', properties: { path: str('Path or name of the note.') }, required: ['path'] },
   },
   {
     name: 'create_note', fn: ops.createNote,
-    description: 'Crea una nota nueva. Con template, parte de esa plantilla ({{title}}, {{date}}…) y añade text después.',
-    inputSchema: { type: 'object', properties: { path: str('Ruta de la nota nueva, p. ej. «Proyectos/Idea».'), text: str('Contenido Markdown.'), template: str('Plantilla (ruta o nombre dentro de la carpeta de plantillas).') }, required: ['path'] },
+    description: 'Creates a new note. With template, it starts from that template ({{title}}, {{date}}…) and appends text after it.',
+    inputSchema: { type: 'object', properties: { path: str('Path of the new note, e.g. “Projects/Idea”.'), text: str('Markdown content.'), template: str('Template (path, or name inside the templates folder).') }, required: ['path'] },
   },
   {
     name: 'write_note', fn: ops.writeNote,
-    description: 'Reemplaza el contenido entero de una nota. Si cambió en otro dispositivo, se juntan los cambios o se guarda una copia.',
-    inputSchema: { type: 'object', properties: { path: str('Ruta o nombre de la nota.'), text: str('Contenido completo nuevo.'), create: { type: 'boolean', description: 'Crearla si no existe.' } }, required: ['path', 'text'] },
+    description: 'Replaces the whole content of a note. If it changed on another device, the changes are combined or a copy is saved.',
+    inputSchema: { type: 'object', properties: { path: str('Path or name of the note.'), text: str('The complete new content.'), create: { type: 'boolean', description: 'Create it if it does not exist.' } }, required: ['path', 'text'] },
   },
   {
     name: 'append_note', fn: ops.appendNote,
-    description: 'Añade texto al final de una nota, o al final de una sección si se indica heading.',
-    inputSchema: { type: 'object', properties: { path: str('Ruta o nombre de la nota.'), text: str('Texto Markdown que añadir.'), heading: str('Encabezado de la sección, sin #.'), create: { type: 'boolean', description: 'Crearla si no existe (sin heading).' } }, required: ['path', 'text'] },
+    description: 'Appends text at the end of a note, or at the end of a section if heading is given.',
+    inputSchema: { type: 'object', properties: { path: str('Path or name of the note.'), text: str('Markdown text to append.'), heading: str('Heading of the section, without #.'), create: { type: 'boolean', description: 'Create it if it does not exist (without heading).' } }, required: ['path', 'text'] },
   },
   {
     name: 'daily_note', fn: ops.dailyNote,
-    description: 'Nota diaria (carpeta del diario, AAAA-MM-DD). Devuelve su texto; si no existe la crea con la plantilla del diario.',
-    inputSchema: { type: 'object', properties: { date: str('Fecha AAAA-MM-DD (hoy por defecto).'), create: { type: 'boolean', description: 'Crearla si no existe (sí por defecto).' } } },
+    description: 'Daily note (daily folder, YYYY-MM-DD). Returns its text; if it does not exist, creates it from the daily template.',
+    inputSchema: { type: 'object', properties: { date: str('Date YYYY-MM-DD (today by default).'), create: { type: 'boolean', description: 'Create it if it does not exist (yes by default).' } } },
   },
 ];
 const byName = new Map(tools.map((t) => [t.name, t]));
@@ -105,7 +105,7 @@ function parseArgs(argv) {
     else if (a === '--branch') o.branch = argv[++i];
     else if (a === '--no-remote') o.remote = null;
   }
-  if (!o.dir) throw new Error('Falta --dir (o SNOWLOG_VAULT_DIR) con el clon del repo de notas.');
+  if (!o.dir) throw new Error('Missing --dir (or SNOWLOG_VAULT_DIR) with the clone of the notes repository.');
   o.dir = resolve(o.dir.replace(/^~(?=\/|$)/, homedir()));
   return o;
 }
@@ -122,8 +122,8 @@ export function createServer(session, write) {
       const result = await tool.fn(session, args || {});
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (e) {
-      // Solo mensajes propios (sin texto de notas ni secretos); el resto, genérico.
-      const msg = e instanceof SessionError ? e.message : `Error al operar con la bóveda (${e.status ?? e.code ?? e.name}).`;
+      // Only our own messages (no note text or secrets); anything else, generic.
+      const msg = e instanceof SessionError ? e.message : `Error working with the vault (${e.status ?? e.code ?? e.name}).`;
       if (!(e instanceof SessionError)) process.stderr.write(`snowlog-mcp: ${name}: ${e.name} ${e.status ?? ''}\n`);
       return { content: [{ type: 'text', text: msg }], isError: true };
     }
@@ -148,10 +148,10 @@ export function createServer(session, write) {
     } else if (method === 'tools/list') {
       reply(id, { tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
     } else if (method === 'tools/call') {
-      // De una en una: cada escritura parte del índice que dejó la anterior.
+      // One at a time: each write starts from the index the previous one left.
       queue = queue.then(() => call(params?.name, params?.arguments)).then((r) => reply(id, r));
     } else if (method.startsWith('notifications/')) {
-      // initialized, cancelled…: nada que hacer
+      // initialized, cancelled…: nothing to do
     } else if (isRequest) {
       fail(id, -32601, `Method not found: ${method}`);
     }

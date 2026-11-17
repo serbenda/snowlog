@@ -83,7 +83,7 @@ jobs:
           export WEBKIT_DISABLE_DMABUF_RENDERER=1
           xvfb-run -a -s "-screen 0 1280x820x24" bash -c '
             tauri-driver > driver.log 2>&1 &
-            node desktop/prueba.mjs "$PWD/desktop/src-tauri/target/release/snowlog" "$0" || { cat driver.log; exit 1; }' \
+            node desktop/smoke-test.mjs "$PWD/desktop/src-tauri/target/release/snowlog" "$0" || { cat driver.log; exit 1; }' \
             '!document.getElementById("lock").hidden || !document.getElementById("app").hidden'
 
       - uses: actions/upload-artifact@v4

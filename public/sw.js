@@ -1,8 +1,8 @@
-// Service worker de Snowlog: guarda la propia web (HTML, CSS, JS e icono) para abrirla sin conexión.
-// Nunca guarda nada de GitHub ni del login: las notas sin conexión salen de la caché cifrada
-// de la app (IndexedDB), no de aquí.
+// Snowlog service worker: stores the web app itself (HTML, CSS, JS and icon) so it opens offline.
+// It never stores anything from GitHub or the sign-in: offline notes come from the app's encrypted
+// cache (IndexedDB), not from here.
 
-const VERSION = 'snowlog-v1';
+const VERSION = 'snowlog-v2';
 const SHELL = [
   './',
   'index.html',
@@ -32,9 +32,9 @@ const SHELL = [
   'js/query.js',
   'js/search.js',
   'js/sketch-editor.js',
-  'js/sketch-escena.js',
-  'js/sketch-pintar.js',
-  'js/sketch-trazo.js',
+  'js/sketch-render.js',
+  'js/sketch-scene.js',
+  'js/sketch-stroke.js',
   'js/templates.js',
   'js/vault.js',
   'js/zip.js',
@@ -50,7 +50,7 @@ self.addEventListener('activate', (ev) => {
     .then(() => self.clients.claim()));
 });
 
-// Primero la red (para tener siempre la última versión); si no hay, lo guardado.
+// Network first (to always have the latest version); if there is none, the stored copy.
 self.addEventListener('fetch', (ev) => {
   const req = ev.request;
   const url = new URL(req.url);

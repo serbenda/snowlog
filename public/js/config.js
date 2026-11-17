@@ -1,43 +1,43 @@
-// Configuración de Snowlog. Ningún valor de aquí es secreto:
-// el client secret de la GitHub App vive solo en el Worker.
+// Snowlog configuration. Nothing here is secret:
+// the GitHub App client secret lives only in the Worker.
 export const CONFIG = {
-  // 'online': notas cifradas en GitHub. 'portable': la versión de un solo fichero (la pone el empaquetador).
+  // 'online': encrypted notes on GitHub. 'portable': the single-file build (set by the bundler).
   mode: 'online',
 
-  // Repo privado donde se guardan las notas cifradas.
+  // Private repository that holds the encrypted notes.
   notesRepo: { owner: 'serbenda', repo: 'snowlog-notes', branch: 'main' },
 
-  // Client ID de la GitHub App (empieza por "Iv"). Vacío = solo login con token personal.
+  // GitHub App client ID (starts with "Iv"). Empty = personal token sign-in only.
   githubClientId: 'Iv23li5tmgS4GIWdO2HH',
 
-  // URL del Cloudflare Worker que intercambia el login, sin barra final.
-  // Ejemplo: 'https://snowlog-auth.serbenda.workers.dev'
+  // URL of the Cloudflare Worker that completes the sign-in, without a trailing slash.
+  // Example: 'https://snowlog-auth.serbenda.workers.dev'
   authWorker: 'https://snowlog-auth.serbenda.workers.dev',
 
-  // Organización del día a día (como una bóveda de Obsidian con panel y nota diaria).
-  // Son los valores por defecto: cada bóveda puede cambiarlos en «Ajustes» dentro de la app.
+  // Day-to-day organization: a dashboard note and a daily note.
+  // These are the defaults: each vault can change them in "Settings" inside the app.
+  // Vaults that already use the earlier Spanish names keep them (templates.js → LEGACY_WORKSPACE).
   workspace: {
-    home: 'Inicio', // nota del panel principal
-    dailyFolder: 'Diario', // carpeta de las notas diarias (AAAA-MM-DD)
-    templatesFolder: 'Plantillas', // carpeta de plantillas (no aparecen en las consultas)
-    attachmentsFolder: 'Adjuntos', // donde van las imágenes y PDF que se pegan
-    drawingsFolder: 'Dibujos', // donde se crean los dibujos (sketch)
-    dailyTemplate: 'Plantillas/Nota diaria',
-    openDailyOnStart: true, // abrir la nota de hoy al entrar, si existe la carpeta del diario
+    home: 'Home', // dashboard note
+    dailyFolder: 'Daily', // folder of the daily notes (YYYY-MM-DD)
+    templatesFolder: 'Templates', // templates folder (left out of queries)
+    attachmentsFolder: 'Attachments', // where pasted images and PDFs go
+    drawingsFolder: 'Drawings', // where drawings (sketch) are created
+    dailyTemplate: 'Templates/Daily note',
+    openDailyOnStart: true, // open today's note on start, if the daily folder exists
   },
 
-  // Minutos sin actividad antes de bloquear y borrar la clave de memoria.
+  // Minutes of inactivity before locking and wiping the key from memory.
   lockAfterMinutes: 10,
 
-  // Iteraciones de PBKDF2-SHA256 al crear una bóveda nueva.
+  // PBKDF2-SHA256 iterations when creating a new vault.
   kdfIterations: 600000,
 
-  // Espera tras dejar de escribir antes de guardar (ms).
-  // Guardado: tras saveDelayMs sin escribir, y como mucho cada saveMaxWaitMs escribiendo sin parar.
-  // En online cada guardado es un commit; en local, una escritura en disco (localSaveDelayMs).
+  // Saving: after saveDelayMs without typing, and at most every saveMaxWaitMs while typing non-stop.
+  // Online, every save is a commit; locally, a write to disk (localSaveDelayMs).
   saveDelayMs: 4000,
   saveMaxWaitMs: 30000,
   localSaveDelayMs: 1000,
-  // Días sin copia de seguridad antes de recordarla (0 = nunca).
+  // Days without a backup before a reminder (0 = never).
   backupReminderDays: 7,
 };

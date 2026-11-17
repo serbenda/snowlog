@@ -1,8 +1,8 @@
-// Grafo de notas: nodos = notas, aristas = [[enlaces]] entre ellas.
-// Disposición por fuerzas (repulsión entre nodos, muelles en los enlaces y un poco de gravedad
-// hacia el centro), sin librerías. Las funciones son puras para poder probarlas.
+// Note graph: nodes = notes, edges = [[links]] between them.
+// Force-directed layout (repulsion between nodes, springs on links and a little gravity
+// towards the center), with no libraries. The functions are pure so they can be tested.
 
-// notes: notas del índice (noteindex.js), con `links` (nombres o rutas en minúsculas).
+// notes: notes from the index (noteindex.js), with `links` (lowercase names or paths).
 export function buildGraph(notes) {
   const byPath = new Map();
   const byName = new Map();
@@ -31,7 +31,7 @@ export function buildGraph(notes) {
   return { nodes, links };
 }
 
-// Solo la nota y las que están a `depth` saltos o menos.
+// Only the note and those `depth` hops away or fewer.
 export function localGraph(graph, id, depth = 1) {
   const start = graph.nodes.findIndex((n) => n.id === id);
   if (start < 0) return { nodes: [], links: [] };
@@ -66,10 +66,10 @@ function recount(g) {
   return g;
 }
 
-// Posiciones iniciales en espiral (deterministas: el mismo grafo sale siempre igual).
+// Initial positions on a spiral (deterministic: the same graph always comes out the same).
 export function initLayout(graph) {
   graph.nodes.forEach((n, i) => {
-    const a = i * 2.399963; // ángulo áureo
+    const a = i * 2.399963; // golden angle
     const r = 12 * Math.sqrt(i + 1);
     n.x = r * Math.cos(a);
     n.y = r * Math.sin(a);
@@ -79,7 +79,7 @@ export function initLayout(graph) {
   return graph;
 }
 
-// Un paso de la simulación. Devuelve la energía (para saber cuándo se ha quedado quieto).
+// One simulation step. Returns the energy (to know when it has settled).
 export function step(graph, { repulsion = 2600, spring = 0.035, length = 110, gravity = 0.01, damping = 0.82, fixed = -1 } = {}) {
   const { nodes, links } = graph;
   const n = nodes.length;
@@ -95,7 +95,7 @@ export function step(graph, { repulsion = 2600, spring = 0.035, length = 110, gr
         dy = 0.1;
         d2 = dx * dx + dy * dy;
       }
-      if (d2 > 360000) continue; // lejos: no se empujan
+      if (d2 > 360000) continue; // far apart: they do not push each other
       const f = repulsion / d2;
       const d = Math.sqrt(d2);
       a.vx += (dx / d) * f;

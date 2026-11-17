@@ -1,6 +1,6 @@
-// ZIP mínimo sin compresión (método "store"), suficiente para exportar notas de texto.
-// readZip solo lee zips sin compresión, como los que genera makeZip.
-// Sin dependencias: se genera en el navegador y se descarga, sin pasar por la red.
+// Minimal ZIP without compression ("store" method), enough to export text notes.
+// readZip only reads uncompressed zips, like the ones makeZip writes.
+// No dependencies: it is built in the browser and downloaded, without going through the network.
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -24,7 +24,7 @@ function dosTime(d) {
   return { time, date };
 }
 
-// files: [{ path, text }] o [{ path, data: Uint8Array }]. Devuelve un Uint8Array con el .zip.
+// files: [{ path, text }] or [{ path, data: Uint8Array }]. Returns a Uint8Array with the .zip.
 export function makeZip(files, now = new Date()) {
   const enc = new TextEncoder();
   const { time, date } = dosTime(now);
@@ -39,8 +39,8 @@ export function makeZip(files, now = new Date()) {
     const lv = new DataView(local.buffer);
     lv.setUint32(0, 0x04034b50, true);
     lv.setUint16(4, 20, true);
-    lv.setUint16(6, 0x0800, true); // nombres en UTF-8
-    lv.setUint16(8, 0, true); // sin compresión
+    lv.setUint16(6, 0x0800, true); // UTF-8 names
+    lv.setUint16(8, 0, true); // no compression
     lv.setUint16(10, time, true);
     lv.setUint16(12, date, true);
     lv.setUint32(14, crc, true);
@@ -84,7 +84,7 @@ export function makeZip(files, now = new Date()) {
   return out;
 }
 
-// Lee un .zip sin compresión: [{ path, data: Uint8Array }]. Comprueba el CRC de cada fichero.
+// Reads an uncompressed .zip: [{ path, data: Uint8Array }]. Checks each file's CRC.
 export function readZip(bytes) {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let end = -1;

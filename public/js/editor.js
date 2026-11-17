@@ -1,6 +1,6 @@
-// Ayudas del editor: funciones puras sobre (texto, selección) que devuelven una edición.
-// Una edición es { start, end, insert, selStart, selEnd }: sustituir [start, end) por `insert`
-// y dejar la selección en [selStart, selEnd) del texto resultante.
+// Editor helpers: pure functions over (text, selection) that return an edit.
+// An edit is { start, end, insert, selStart, selEnd }: replace [start, end) with `insert`
+// and leave the selection at [selStart, selEnd) of the resulting text.
 
 import { escapeHtml } from './markdown.js';
 
@@ -12,8 +12,8 @@ const lineEnd = (text, pos) => {
 
 const ITEM_RE = /^(\s*)((?:>\s*)*)([-*+]|(\d+)([.)]))(\s+)(\[[ xX]\]\s+)?/;
 
-// Intro al final de un elemento de lista, tarea o cita: sigue la lista.
-// Si el elemento está vacío, lo quita (termina la lista). null = comportamiento normal.
+// Enter at the end of a list item, task or quote: continues the list.
+// If the item is empty, removes it (ends the list). null = normal behavior.
 export function continueList(text, start, end) {
   if (start !== end) return null;
   const ls = lineStart(text, start);
@@ -29,7 +29,7 @@ export function continueList(text, start, end) {
   if (!m) return null;
   const [prefix, indent, q, bullet, num, sep, space, task] = m;
   if (!line.slice(prefix.length).trim()) {
-    // Elemento vacío: si estaba sangrado, sube un nivel; si no, termina la lista.
+    // Empty item: if it was indented, move up a level; otherwise end the list.
     if (indent.length) {
       const outdented = indent.replace(/^(\t| {1,4})/, '');
       const insert = `${outdented}${q}${bullet}${space}${task || ''}`;
@@ -42,7 +42,7 @@ export function continueList(text, start, end) {
   return { start, end, insert, selStart: start + insert.length, selEnd: start + insert.length };
 }
 
-// Tab / Mayús+Tab sobre las líneas seleccionadas (o la línea actual si es de lista).
+// Tab / Shift+Tab on the selected lines (or the current line if it is a list item).
 // null = Tab normal (insertar tabulador).
 export function indentLines(text, start, end, outdent = false, unit = '    ') {
   const ls = lineStart(text, start);
@@ -72,7 +72,7 @@ export function indentLines(text, start, end, outdent = false, unit = '    ') {
   };
 }
 
-// Ctrl+B / Ctrl+I: rodea la selección o la quita si ya estaba.
+// Ctrl+B / Ctrl+I: wraps the selection, or unwraps it if it was already wrapped.
 export function toggleWrap(text, start, end, mark) {
   const n = mark.length;
   const sel = text.slice(start, end);
@@ -86,7 +86,7 @@ export function toggleWrap(text, start, end, mark) {
   return { start, end, insert: `${mark}${sel}${mark}`, selStart: start + n, selEnd: end + n };
 }
 
-// Ctrl+K: enlace Markdown con la selección como texto.
+// Ctrl+K: a Markdown link with the selection as its text.
 export function insertLink(text, start, end) {
   const sel = text.slice(start, end);
   if (/^https?:\/\/\S+$/.test(sel)) {
@@ -97,7 +97,7 @@ export function insertLink(text, start, end) {
   return { start, end, insert, selStart: urlAt, selEnd: urlAt + 8 };
 }
 
-// Ctrl+Intro: marca o desmarca la tarea de la línea; si no es tarea, la convierte en una.
+// Ctrl+Enter: ticks or unticks the line's task; if it is not a task, turns it into one.
 export function toggleTask(text, start) {
   const ls = lineStart(text, start);
   const le = lineEnd(text, start);
@@ -111,14 +111,14 @@ export function toggleTask(text, start) {
   return { start: ls, end: le, insert: next, selStart: start + delta, selEnd: start + delta };
 }
 
-// ¿Está el cursor dentro de un [[enlace a medio escribir? Devuelve { start, query } o null.
+// Is the cursor inside a half-typed [[link? Returns { start, query } or null.
 export function linkQuery(text, pos) {
   const ls = lineStart(text, pos);
   const m = text.slice(ls, pos).match(/\[\[([^\][|#\n]*)$/);
   return m ? { start: pos - m[1].length, query: m[1] } : null;
 }
 
-// Completa el enlace: sustituye la consulta por el nombre y cierra con ]] si hace falta.
+// Completes the link: replaces the query with the name and closes it with ]] if needed.
 export function completeLink(text, pos, q, name) {
   const closed = text.slice(pos, pos + 2) === ']]';
   const insert = closed ? name : `${name}]]`;
@@ -126,7 +126,7 @@ export function completeLink(text, pos, q, name) {
   return { start: q.start, end: pos, insert, selStart: after, selEnd: after };
 }
 
-// Notas que encajan con lo escrito: primero las que empiezan igual, luego las que lo contienen.
+// Notes that match what was typed: first those that start the same, then those that contain it.
 export function suggestNotes(notes, query, limit = 8) {
   const q = query.trim().toLowerCase();
   const scored = [];
@@ -141,13 +141,13 @@ export function suggestNotes(notes, query, limit = 8) {
     else if (lpath.includes(q)) score = 1;
     if (score >= 0) scored.push({ n, name, score });
   }
-  scored.sort((a, b) => b.score - a.score || (b.n.updated || '').localeCompare(a.n.updated || '') || a.name.localeCompare(b.name, 'es'));
+  scored.sort((a, b) => b.score - a.score || (b.n.updated || '').localeCompare(a.n.updated || '') || a.name.localeCompare(b.name, 'en'));
   return scored.slice(0, limit).map(({ n, name }) => ({ id: n.id, name, path: n.path }));
 }
 
 // ---------------------------------------------------------------------------
-// Resaltado mientras se escribe. Solo cambia colores (nunca tamaños ni grosores),
-// para que el texto resaltado ocupe exactamente lo mismo que el del cuadro de texto.
+// Highlighting while typing. It only changes colors (never sizes or weights),
+// so the highlighted text takes exactly the same space as the text in the text box.
 
 function hlInline(raw) {
   const slots = [];

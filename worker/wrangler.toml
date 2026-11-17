@@ -4,10 +4,10 @@ compatibility_date = "2026-11-01"
 workers_dev = true
 
 [vars]
-# Origen de la web publicada en GitHub Pages, sin barra final.
+# Origin of the web app published on GitHub Pages, without a trailing slash.
 ALLOWED_ORIGIN = "https://snowlog.bendi.dev"
-# Client ID de la GitHub App (no es secreto).
+# GitHub App client ID (not a secret).
 GITHUB_CLIENT_ID = "Iv23li5tmgS4GIWdO2HH"
 
-# El client secret NO va aquí. Guárdalo con:
+# The client secret does NOT go here. Store it with:
 #   npx wrangler secret put GITHUB_CLIENT_SECRET

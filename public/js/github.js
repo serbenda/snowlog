@@ -1,5 +1,5 @@
-// Cliente mínimo de la API REST de GitHub para un único repo.
-// Cada guardado es UN commit atómico (Git Data API), con varios ficheros si hace falta.
+// Minimal client of the GitHub REST API for a single repository.
+// Every save is ONE atomic commit (Git Data API), with several files if needed.
 
 const API = 'https://api.github.com';
 
@@ -11,15 +11,15 @@ export class GitHubError extends Error {
 }
 
 export class GitHubRepo {
-  // getToken: función async que devuelve el token vigente.
-  // onUnauthorized: función async que intenta renovar el token; devuelve true si lo logra.
+  // getToken: async function that returns the current token.
+  // onUnauthorized: async function that tries to refresh the token; returns true if it succeeds.
   constructor({ owner, repo, branch }, getToken, onUnauthorized) {
     this.owner = owner;
     this.repo = repo;
     this.branch = branch;
     this.getToken = getToken;
     this.onUnauthorized = onUnauthorized;
-    this.head = null; // sha del último commit conocido
+    this.head = null; // sha of the last known commit
   }
 
   get base() {
@@ -46,7 +46,7 @@ export class GitHubRepo {
       let msg = res.statusText;
       try {
         msg = (await res.json()).message || msg;
-      } catch { /* sin cuerpo */ }
+      } catch { /* no body */ }
       throw new GitHubError(res.status, msg);
     }
     if (accept.includes('raw')) return res.text();
@@ -54,12 +54,12 @@ export class GitHubRepo {
     return res.json();
   }
 
-  // Comprueba que el token ve el repo. Devuelve los datos del repo.
+  // Checks that the token can see the repository. Returns the repository data.
   async check() {
     return this.request('GET', '');
   }
 
-  // sha del último commit de la rama, o null si el repo está vacío.
+  // sha of the branch's last commit, or null if the repository is empty.
   async fetchHead() {
     try {
       const ref = await this.request('GET', `/git/ref/heads/${encodeURIComponent(this.branch)}`);
@@ -71,7 +71,7 @@ export class GitHubRepo {
     return this.head;
   }
 
-  // Lee un fichero de texto en el commit actual (o en `ref`). Devuelve null si no existe.
+  // Reads a text file at the current commit (or at `ref`). Returns null if it does not exist.
   async readText(path, ref) {
     if (!ref && !this.head) await this.fetchHead();
     const at = ref || this.head;
@@ -86,8 +86,8 @@ export class GitHubRepo {
     }
   }
 
-  // Lee muchos ficheros de texto de una vez (GraphQL, hasta 100 por petición).
-  // Devuelve Map(path → texto | null). Si GraphQL no está disponible, lanza y el que llama lee uno a uno.
+  // Reads many text files at once (GraphQL, up to 100 per request).
+  // Returns Map(path → text | null). If GraphQL is not available, it throws and the caller reads one by one.
   async readMany(paths, ref) {
     if (!ref && !this.head) await this.fetchHead();
     const at = ref || this.head;
@@ -107,7 +107,7 @@ export class GitHubRepo {
     return out;
   }
 
-  // Commits que cambiaron un fichero, del más reciente al más antiguo: [{ sha, date }].
+  // Commits that changed a file, newest first: [{ sha, date }].
   async history(path, { perPage = 50, page = 1 } = {}) {
     if (!this.head) await this.fetchHead();
     if (!this.head) return [];
@@ -115,7 +115,7 @@ export class GitHubRepo {
     return list.map((c) => ({ sha: c.sha, date: c.commit?.committer?.date || c.commit?.author?.date || '' }));
   }
 
-  // Primer commit de un repo vacío.
+  // First commit of an empty repository.
   async createFirstFile(path, text, message) {
     const res = await this.request('PUT', `/contents/${encodePath(path)}`, {
       body: { message, content: btoa(unescape(encodeURIComponent(text))), branch: this.branch },
@@ -123,9 +123,9 @@ export class GitHubRepo {
     this.head = res.commit.sha;
   }
 
-  // changes: [{ path, content }] para crear o cambiar, [{ path, delete: true }] para borrar.
-  // Lanza GitHubError(409) si alguien ha escrito antes (no es avance rápido).
-  // blobs: true sube antes cada fichero por separado (para commits muy grandes, como rotar la clave).
+  // changes: [{ path, content }] to create or change, [{ path, delete: true }] to delete.
+  // Throws GitHubError(409) if someone wrote first (not a fast-forward).
+  // blobs: true uploads each file separately first (for very large commits, such as rotating the key).
   async commit(changes, message, { blobs = false } = {}) {
     if (!this.head) await this.fetchHead();
     const parent = await this.request('GET', `/git/commits/${this.head}`);

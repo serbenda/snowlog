@@ -1,4 +1,4 @@
-// Sistema de ficheros en memoria con la forma de FileSystemDirectoryHandle (lo justo para los tests).
+// In-memory file system shaped like FileSystemDirectoryHandle (just enough for the tests).
 
 class MemFile {
   constructor(name, data = new Uint8Array(), mtime = Date.now()) {
@@ -35,7 +35,7 @@ class MemFile {
 }
 
 export class MemDir {
-  constructor(name = 'raíz') {
+  constructor(name = 'root') {
     this.kind = 'directory';
     this.name = name;
     this.children = new Map();
@@ -68,7 +68,7 @@ export class MemDir {
     this.children.delete(name);
   }
 
-  // Ayudas para los tests
+  // Helpers for the tests
   put(path, text) {
     const parts = path.split('/');
     let d = this;

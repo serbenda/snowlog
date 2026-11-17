@@ -4,14 +4,14 @@ import { parseNote } from '../public/js/noteindex.js';
 import { buildGraph, localGraph, initLayout, step } from '../public/js/graph.js';
 
 const notes = [
-  parseNote({ id: 'a', path: 'Proyectos/Web', text: '[[HU-01]] y [[Proyectos/HU-02]] y [[No existe]] y otra vez [[HU-01]]' }),
-  parseNote({ id: 'b', path: 'Proyectos/HU-01', text: 'vuelve a [[Web]]' }),
-  parseNote({ id: 'c', path: 'Proyectos/HU-02', text: '[[Reunión]]' }),
-  parseNote({ id: 'd', path: 'Reunión', text: 'sin enlaces' }),
-  parseNote({ id: 'e', path: 'Suelta', text: 'nadie me enlaza' }),
+  parseNote({ id: 'a', path: 'Projects/Web', text: '[[US-01]] and [[Projects/US-02]] and [[Does not exist]] and again [[US-01]]' }),
+  parseNote({ id: 'b', path: 'Projects/US-01', text: 'back to [[Web]]' }),
+  parseNote({ id: 'c', path: 'Projects/US-02', text: '[[Meeting]]' }),
+  parseNote({ id: 'd', path: 'Meeting', text: 'no links' }),
+  parseNote({ id: 'e', path: 'Loose', text: 'nobody links to me' }),
 ];
 
-test('nodos y enlaces, sin duplicados ni enlaces rotos', () => {
+test('nodes and links, without duplicates or broken links', () => {
   const g = buildGraph(notes);
   assert.equal(g.nodes.length, 5);
   const pairs = g.links.map((l) => [g.nodes[l.s].id, g.nodes[l.t].id].sort().join('-')).sort();
@@ -20,7 +20,7 @@ test('nodos y enlaces, sin duplicados ni enlaces rotos', () => {
   assert.equal(g.nodes.find((n) => n.id === 'e').deg, 0);
 });
 
-test('grafo local: la nota y sus vecinas', () => {
+test('local graph: the note and its neighbors', () => {
   const g = buildGraph(notes);
   assert.deepEqual(localGraph(g, 'c').nodes.map((n) => n.id).sort(), ['a', 'c', 'd']);
   assert.deepEqual(localGraph(g, 'd', 2).nodes.map((n) => n.id).sort(), ['a', 'c', 'd']);
@@ -28,22 +28,22 @@ test('grafo local: la nota y sus vecinas', () => {
   assert.equal(localGraph(g, 'e').links.length, 0);
 });
 
-test('la simulación se estabiliza y separa los nodos', () => {
+test('the simulation settles and keeps nodes apart', () => {
   const g = initLayout(buildGraph(notes));
   let e = Infinity;
   for (let i = 0; i < 400; i++) e = step(g);
-  assert.ok(e < 0.01, `energía ${e}`);
+  assert.ok(e < 0.01, `energy ${e}`);
   for (let i = 0; i < g.nodes.length; i++) {
     for (let j = i + 1; j < g.nodes.length; j++) {
       const d = Math.hypot(g.nodes[i].x - g.nodes[j].x, g.nodes[i].y - g.nodes[j].y);
-      assert.ok(d > 10, `nodos ${i} y ${j} demasiado juntos`);
+      assert.ok(d > 10, `nodes ${i} and ${j} too close`);
     }
   }
   const linked = g.links.map((l) => Math.hypot(g.nodes[l.s].x - g.nodes[l.t].x, g.nodes[l.s].y - g.nodes[l.t].y));
-  assert.ok(Math.max(...linked) < 200, 'los enlazados quedan cerca');
+  assert.ok(Math.max(...linked) < 200, 'linked nodes stay close');
 });
 
-test('1.000 notas: un paso de simulación es rápido', () => {
+test('1,000 notes: one simulation step is fast', () => {
   const many = Array.from({ length: 1000 }, (_, i) => parseNote({ id: String(i), path: `N${i}`, text: `[[N${(i * 7) % 1000}]] [[N${(i + 1) % 1000}]]` }));
   const g = initLayout(buildGraph(many));
   const t0 = performance.now();

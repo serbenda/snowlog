@@ -1,16 +1,16 @@
-// Copiado de serbenda/sketch (js/editor.js, commit 80f776f) con scripts/update-sketch.mjs. No editar aquí.
-// Editor de dibujos: barra de herramientas, lienzo y panel de estilo. Se monta en cualquier
-// contenedor (la web de sketch o Snowlog) y no usa innerHTML: todo se crea con el DOM.
+// Copied from serbenda/sketch (js/editor.js, commit d868eaa) by scripts/update-sketch.mjs. Do not edit here.
+// Drawing editor: toolbar, canvas and style panel. It mounts in any container (the sketch site or
+// Snowlog) and never uses innerHTML: everything is built with the DOM.
 //
-//   const ed = createEditor(contenedor, { scene, onChange, readOnly })
+//   const ed = createEditor(container, { scene, onChange, readOnly })
 //   ed.getScene() · ed.setScene(scene) · ed.zoomToFit() · ed.focus() · ed.destroy()
 
-import * as E from './sketch-escena.js';
-import { paintScene, measureWithCanvas, fontReady } from './sketch-pintar.js';
+import * as E from './sketch-scene.js';
+import { paintScene, measureWithCanvas, fontReady } from './sketch-render.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 
-// Iconos propios, de línea.
+// Our own line icons.
 const ICONS = {
   select: 'M5 3l14 8-6 2-3 6z',
   hand: 'M8 13V5a1.5 1.5 0 0 1 3 0v6 M11 11V4a1.5 1.5 0 0 1 3 0v7 M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-3l-2-4a1.5 1.5 0 0 1 2.6-1.5L8 13',
@@ -44,9 +44,9 @@ const ICONS = {
 };
 
 const TOOLS = [
-  ['select', 'Seleccionar', 'V'], ['hand', 'Mover el lienzo', 'H'], ['rectangle', 'Rectángulo', 'R'],
-  ['diamond', 'Rombo', 'D'], ['ellipse', 'Elipse', 'O'], ['arrow', 'Flecha', 'A'], ['line', 'Línea', 'L'],
-  ['draw', 'Lápiz', 'P'], ['text', 'Texto', 'T'], ['eraser', 'Borrar', 'E'],
+  ['select', 'Select', 'V'], ['hand', 'Pan the canvas', 'H'], ['rectangle', 'Rectangle', 'R'],
+  ['diamond', 'Diamond', 'D'], ['ellipse', 'Ellipse', 'O'], ['arrow', 'Arrow', 'A'], ['line', 'Line', 'L'],
+  ['draw', 'Pencil', 'P'], ['text', 'Text', 'T'], ['eraser', 'Eraser', 'E'],
 ];
 
 const STROKES = ['#1e1e1e', '#e03131', '#2f9e44', '#1971c2', '#f08c00', '#9c36b5'];
@@ -85,23 +85,23 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   let style = { ...E.DEFAULT_STYLE };
   const undo = [];
   const redo = [];
-  let action = null; // lo que se está haciendo con el puntero
+  let action = null; // what the pointer is doing
   let editingText = null;
   let raf = 0;
   let clipboard = null;
 
   // --- DOM ---
-  const helpId = `sk-ayuda-${Math.random().toString(36).slice(2, 8)}`;
-  const root = el('div', { class: `sk-editor${readOnly ? ' sk-readonly' : ''}`, tabindex: '0', role: 'application', 'aria-label': readOnly ? 'Dibujo' : 'Pizarra', 'aria-describedby': readOnly ? null : helpId });
+  const helpId = `sk-help-${Math.random().toString(36).slice(2, 8)}`;
+  const root = el('div', { class: `sk-editor${readOnly ? ' sk-readonly' : ''}`, tabindex: '0', role: 'application', 'aria-label': readOnly ? 'Drawing' : 'Whiteboard', 'aria-describedby': readOnly ? null : helpId });
   const help = el('p', { class: 'sk-sr', id: helpId },
-    'Herramientas: V seleccionar, R rectángulo, D rombo, O elipse, A flecha, L línea, P lápiz, T texto, E borrar. '
-    + 'Intro crea la forma elegida en el centro o escribe dentro de la seleccionada. Tab y Mayús+Tab recorren los elementos; '
-    + 'flechas los mueven; Alt+flechas cambian su tamaño; [ y ] los giran; Supr los borra; Escape quita la selección.');
-  const canvas = el('canvas', { class: 'sk-canvas', 'aria-label': 'Lienzo de dibujo' });
-  const textBox = el('textarea', { class: 'sk-textbox', 'aria-label': 'Texto', spellcheck: 'false', hidden: true });
+    'Tools: V select, R rectangle, D diamond, O ellipse, A arrow, L line, P pencil, T text, E eraser. '
+    + 'Enter creates the chosen shape in the center, or writes inside the selected one. Tab and Shift+Tab go through the elements; '
+    + 'arrow keys move them; Alt+arrow keys resize them; [ and ] rotate them; Delete removes them; Escape clears the selection.');
+  const canvas = el('canvas', { class: 'sk-canvas', 'aria-label': 'Drawing canvas' });
+  const textBox = el('textarea', { class: 'sk-textbox', 'aria-label': 'Text', spellcheck: 'false', hidden: true });
   const status = el('div', { class: 'sk-sr', 'aria-live': 'polite' });
   const toolButtons = new Map();
-  const toolbar = el('div', { class: 'sk-toolbar', role: 'toolbar', 'aria-label': 'Herramientas' },
+  const toolbar = el('div', { class: 'sk-toolbar', role: 'toolbar', 'aria-label': 'Tools' },
     ...TOOLS.map(([id, label, key]) => {
       const b = el('button', { class: 'sk-btn', type: 'button', title: `${label} (${key})`, 'aria-label': label, 'aria-pressed': 'false', onclick: () => setTool(id) }, icon(id));
       toolButtons.set(id, b);
@@ -115,63 +115,63 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     return b;
   };
   const btn = (name, label, onclick) => el('button', { class: 'sk-btn', type: 'button', title: label, 'aria-label': label.replace(/ \(.*\)$/, ''), onclick }, icon(name));
-  const strokeColor = el('input', { type: 'color', class: 'sk-color', 'aria-label': 'Otro color de trazo', value: style.stroke });
-  const fillColor = el('input', { type: 'color', class: 'sk-color', 'aria-label': 'Otro color de relleno', value: '#a5d8ff' });
+  const strokeColor = el('input', { type: 'color', class: 'sk-color', 'aria-label': 'Other stroke color', value: style.stroke });
+  const fillColor = el('input', { type: 'color', class: 'sk-color', 'aria-label': 'Other fill color', value: '#a5d8ff' });
   const seg = (name, options, onPick) => el('div', { class: 'sk-seg', role: 'group', 'aria-label': name },
     ...options.map(([value, label]) => el('button', { class: 'sk-segbtn', type: 'button', 'data-value': String(value), onclick: () => onPick(value) }, label)));
-  const groupBtn = btn('group', 'Agrupar (Ctrl+G)', () => groupSelected());
-  const ungroupBtn = btn('ungroup', 'Desagrupar (Ctrl+Mayús+G)', () => ungroupSelected());
-  const distH = btn('distH', 'Repartir en horizontal', () => distribute('x'));
-  const distV = btn('distV', 'Repartir en vertical', () => distribute('y'));
+  const groupBtn = btn('group', 'Group (Ctrl+G)', () => groupSelected());
+  const ungroupBtn = btn('ungroup', 'Ungroup (Ctrl+Shift+G)', () => ungroupSelected());
+  const distH = btn('distH', 'Distribute horizontally', () => distribute('x'));
+  const distV = btn('distV', 'Distribute vertically', () => distribute('y'));
   const alignBlock = el('div', {},
-    el('div', { class: 'sk-label' }, 'Alinear'),
+    el('div', { class: 'sk-label' }, 'Align'),
     el('div', { class: 'sk-row' },
-      btn('alignLeft', 'Alinear a la izquierda', () => align('left')),
-      btn('alignCenter', 'Centrar en horizontal', () => align('center')),
-      btn('alignRight', 'Alinear a la derecha', () => align('right')),
-      btn('alignTop', 'Alinear arriba', () => align('top')),
-      btn('alignMiddle', 'Centrar en vertical', () => align('middle')),
-      btn('alignBottom', 'Alinear abajo', () => align('bottom')),
+      btn('alignLeft', 'Align left', () => align('left')),
+      btn('alignCenter', 'Center horizontally', () => align('center')),
+      btn('alignRight', 'Align right', () => align('right')),
+      btn('alignTop', 'Align top', () => align('top')),
+      btn('alignMiddle', 'Center vertically', () => align('middle')),
+      btn('alignBottom', 'Align bottom', () => align('bottom')),
       distH, distV));
-  const panel = el('div', { class: 'sk-panel', 'aria-label': 'Estilo' },
-    el('div', { class: 'sk-label' }, 'Trazo'),
-    el('div', { class: 'sk-row', 'data-prop': 'stroke' }, ...STROKES.map((c) => swatch(c, (v) => setStyle({ stroke: v }), `Trazo ${c}`)), strokeColor),
-    el('div', { class: 'sk-label' }, 'Relleno'),
-    el('div', { class: 'sk-row', 'data-prop': 'fill' }, ...FILLS.map((c) => swatch(c, (v) => setStyle({ fill: v }), c === 'transparent' ? 'Sin relleno' : `Relleno ${c}`)), fillColor),
-    seg('Tipo de relleno', [['hachure', 'Rayado'], ['solid', 'Sólido']], (v) => setStyle({ fillStyle: v })),
-    el('div', { class: 'sk-label' }, 'Grosor'),
-    seg('Grosor', [[1, 'Fino'], [2, 'Medio'], [4, 'Grueso']], (v) => setStyle({ width: v })),
-    el('div', { class: 'sk-label' }, 'Línea'),
-    seg('Línea', [[false, 'Continua'], [true, 'Discontinua']], (v) => setStyle({ dashed: v })),
-    el('div', { class: 'sk-label' }, 'Trazo a mano'),
-    seg('Trazo a mano', [[0, 'Recto'], [1, 'A mano'], [2, 'Muy a mano']], (v) => setStyle({ roughness: v })),
-    el('div', { class: 'sk-label' }, 'Texto'),
-    seg('Tamaño del texto', [[16, 'S'], [24, 'M'], [36, 'L'], [56, 'XL']], (v) => setStyle({ fontSize: v })),
+  const panel = el('div', { class: 'sk-panel', 'aria-label': 'Style' },
+    el('div', { class: 'sk-label' }, 'Stroke'),
+    el('div', { class: 'sk-row', 'data-prop': 'stroke' }, ...STROKES.map((c) => swatch(c, (v) => setStyle({ stroke: v }), `Stroke ${c}`)), strokeColor),
+    el('div', { class: 'sk-label' }, 'Fill'),
+    el('div', { class: 'sk-row', 'data-prop': 'fill' }, ...FILLS.map((c) => swatch(c, (v) => setStyle({ fill: v }), c === 'transparent' ? 'No fill' : `Fill ${c}`)), fillColor),
+    seg('Fill style', [['hachure', 'Hachure'], ['solid', 'Solid']], (v) => setStyle({ fillStyle: v })),
+    el('div', { class: 'sk-label' }, 'Width'),
+    seg('Stroke width', [[1, 'Thin'], [2, 'Medium'], [4, 'Bold']], (v) => setStyle({ width: v })),
+    el('div', { class: 'sk-label' }, 'Line'),
+    seg('Line style', [[false, 'Solid'], [true, 'Dashed']], (v) => setStyle({ dashed: v })),
+    el('div', { class: 'sk-label' }, 'Sloppiness'),
+    seg('Sloppiness', [[0, 'Straight'], [1, 'Hand-drawn'], [2, 'Sketchy']], (v) => setStyle({ roughness: v })),
+    el('div', { class: 'sk-label' }, 'Text'),
+    seg('Text size', [[16, 'S'], [24, 'M'], [36, 'L'], [56, 'XL']], (v) => setStyle({ fontSize: v })),
     alignBlock,
-    el('div', { class: 'sk-label' }, 'Capas y acciones'),
+    el('div', { class: 'sk-label' }, 'Layers and actions'),
     el('div', { class: 'sk-row' },
-      btn('front', 'Traer al frente', () => reorder(1)),
-      btn('back', 'Enviar al fondo', () => reorder(-1)),
-      btn('copy', 'Duplicar (Ctrl+D)', () => duplicate()),
+      btn('front', 'Bring to front', () => reorder(1)),
+      btn('back', 'Send to back', () => reorder(-1)),
+      btn('copy', 'Duplicate (Ctrl+D)', () => duplicate()),
       groupBtn, ungroupBtn,
-      btn('trash', 'Eliminar (Supr)', () => removeSelected())));
-  const zoomLabel = el('button', { class: 'sk-zoomlabel', type: 'button', title: 'Volver al 100 %', 'aria-label': 'Volver al 100 %', onclick: () => zoomAt(1 / view.zoom) }, '100 %');
+      btn('trash', 'Delete (Del)', () => removeSelected())));
+  const zoomLabel = el('button', { class: 'sk-zoomlabel', type: 'button', title: 'Reset to 100%', 'aria-label': 'Reset to 100%', onclick: () => zoomAt(1 / view.zoom) }, '100%');
   const bottom = el('div', { class: 'sk-bottom' },
     el('div', { class: 'sk-group' },
-      btn('minus', 'Alejar', () => zoomAt(1 / 1.2)),
+      btn('minus', 'Zoom out', () => zoomAt(1 / 1.2)),
       zoomLabel,
-      btn('plus', 'Acercar', () => zoomAt(1.2)),
-      btn('fit', 'Ver todo el dibujo', () => zoomToFit())),
+      btn('plus', 'Zoom in', () => zoomAt(1.2)),
+      btn('fit', 'Fit the whole drawing', () => zoomToFit())),
     el('div', { class: 'sk-group' },
-      btn('undo', 'Deshacer (Ctrl+Z)', () => doUndo()),
-      btn('redo', 'Rehacer (Ctrl+Y)', () => doRedo())));
+      btn('undo', 'Undo (Ctrl+Z)', () => doUndo()),
+      btn('redo', 'Redo (Ctrl+Y)', () => doRedo())));
   const stage = el('div', { class: 'sk-stage' }, canvas, textBox);
   if (readOnly) root.append(stage);
   else root.append(stage, toolbar, panel, bottom, status, help);
   container.append(root);
   const ctx = canvas.getContext('2d');
 
-  // --- Escena y selección ---
+  // --- Scene and selection ---
   const toWorld = (sx, sy) => {
     const r = canvas.getBoundingClientRect();
     return { x: (sx - r.left - view.x) / view.zoom, y: (sy - r.top - view.y) / view.zoom };
@@ -181,9 +181,9 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   const primary = () => selection().filter((e) => !E.isBoundText(e));
   const update = (elements) => { scene.elements = E.syncBindings(elements); };
 
-  // El texto de dentro de una forma se elige con su forma.
+  // The text inside a shape is selected with its shape.
   const owner = (e) => (e && E.isBoundText(e) ? byId(e.containerId) || e : e);
-  // Añade a unos ids el resto de su grupo y los textos de dentro de sus formas.
+  // Adds to some ids the rest of their group and the texts inside their shapes.
   function expand(ids) {
     const set = new Set(ids);
     const groups = new Set(scene.elements.filter((e) => set.has(e.id) && e.group).map((e) => e.group));
@@ -195,13 +195,13 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     selected = expand(ids);
     announce();
   }
-  const NAMES = { rectangle: 'rectángulo', ellipse: 'elipse', diamond: 'rombo', line: 'línea', arrow: 'flecha', draw: 'trazo', text: 'texto' };
+  const NAMES = { rectangle: 'rectangle', ellipse: 'ellipse', diamond: 'diamond', line: 'line', arrow: 'arrow', draw: 'drawing', text: 'text' };
   function announce() {
     const p = primary();
-    status.textContent = !p.length ? '' : p.length === 1 ? `Seleccionado: ${NAMES[p[0].type]}` : `Seleccionados: ${p.length} elementos`;
+    status.textContent = !p.length ? '' : p.length === 1 ? `Selected: ${NAMES[p[0].type]}` : `Selected: ${p.length} elements`;
   }
 
-  // Marco de lo seleccionado: un elemento (con su giro), los extremos de una línea o una caja.
+  // The selection's frame: one element (with its rotation), the ends of a line, or a box.
   function frame() {
     const s = primary();
     if (!s.length) return null;
@@ -225,7 +225,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     const y2 = f.y + f.h + pad;
     const c = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
     const raw = { nw: [x1, y1], ne: [x2, y1], sw: [x1, y2], se: [x2, y2], n: [c.x, y1], s: [c.x, y2], w: [x1, c.y], e: [x2, c.y], rot: [c.x, y1 - 22 / view.zoom] };
-    // Con cajas pequeñas, solo las esquinas.
+    // Small boxes get only the corners.
     if (f.w * view.zoom < 30 || f.h * view.zoom < 30) for (const k of ['n', 's', 'e', 'w']) delete raw[k];
     const out = {};
     for (const [k, [x, y]] of Object.entries(raw)) {
@@ -235,7 +235,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     return out;
   }
 
-  // --- Dibujo ---
+  // --- Painting ---
   function outlineOf(e, grow) {
     const c = E.center(e);
     const b = E.bounds(e);
@@ -295,7 +295,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       }
     }
     if (action?.target) {
-      // Forma a la que se va a pegar la flecha.
+      // The shape the arrow is about to attach to.
       ctx.lineWidth = 3 / view.zoom;
       ctx.globalAlpha = 0.5;
       const t = byId(action.target);
@@ -314,7 +314,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   }
   const redraw = () => { if (!raf) raf = requestAnimationFrame(render); };
 
-  // --- Historial ---
+  // --- History ---
   function commit() {
     undo.push(JSON.stringify(scene.elements));
     if (undo.length > 200) undo.shift();
@@ -342,7 +342,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     restore(redo.pop());
   }
 
-  // --- Herramientas y estilo ---
+  // --- Tools and style ---
   function setTool(t) {
     finishText();
     tool = t;
@@ -364,7 +364,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     }
   }
 
-  // Unidades para alinear y repartir: cada grupo cuenta como una.
+  // Units to align and distribute: each group counts as one.
   function units() {
     const map = new Map();
     for (const e of primary()) {
@@ -375,7 +375,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     return [...map.values()].map((els) => ({ ids: els.map((e) => e.id), box: E.sceneBounds(els) }));
   }
 
-  // El panel muestra el estilo de lo seleccionado (o el que se usará al dibujar).
+  // The panel shows the selection's style (or the one used for drawing next).
   function syncPanel() {
     const s = primary();
     const cur = s.length ? s[s.length - 1] : style;
@@ -401,7 +401,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     scene.elements.push(e);
   }
 
-  // Mueve unos elementos. Una flecha que se mueve sin su forma deja de estar pegada a ella.
+  // Moves some elements. An arrow moved without its shape is no longer attached to it.
   function moved(list, ids, dx, dy) {
     return list.map((e) => {
       if (!ids.has(e.id)) return e;
@@ -484,7 +484,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     changed();
   }
 
-  // Reparte con el mismo hueco entre unidades (de la primera a la última).
+  // Distributes with an equal gap between units (from the first to the last).
   function distribute(axis) {
     const us = units();
     if (us.length < 3) return;
@@ -507,13 +507,13 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     changed();
   }
 
-  // Centro de lo que se ve, en coordenadas del dibujo.
+  // The center of what is visible, in drawing coordinates.
   function viewCenter() {
     const r = canvas.getBoundingClientRect();
     return { x: (r.width / 2 - view.x) / view.zoom, y: (r.height / 2 - view.y) / view.zoom };
   }
 
-  // Crear con el teclado: la forma elegida, de tamaño normal, en el centro de la vista.
+  // Creating with the keyboard: the chosen shape, at a normal size, in the center of the view.
   function createAtCenter() {
     const c = viewCenter();
     if (tool === 'text') {
@@ -530,7 +530,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     changed();
   }
 
-  // Si lo seleccionado queda fuera de la vista, la vista va hacia ello.
+  // If the selection is out of view, the view moves to it.
   function revealSelection() {
     const s = primary();
     if (!s.length) return;
@@ -543,7 +543,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     }
   }
 
-  // --- Texto ---
+  // --- Text ---
   function placeTextBox(t) {
     const r = canvas.getBoundingClientRect();
     const sr = stage.getBoundingClientRect();
@@ -582,7 +582,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     textBox.focus({ preventScroll: true });
     setTimeout(() => { if (editingText === id) textBox.focus({ preventScroll: true }); }, 0);
   }
-  // Escribir dentro de una forma: abre su texto o crea uno.
+  // Writing inside a shape: opens its text or creates one.
   function editInside(shape) {
     commit();
     let t = scene.elements.find((e) => e.containerId === shape.id);
@@ -631,7 +631,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     ev.stopPropagation();
   });
 
-  // --- Zoom y vista ---
+  // --- Zoom and view ---
   function zoomAt(factor, sx, sy) {
     const r = canvas.getBoundingClientRect();
     const px = sx ?? r.left + r.width / 2;
@@ -655,7 +655,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     redraw();
   }
 
-  // --- Puntero ---
+  // --- Pointer ---
   const pointers = new Map();
   function handleAt(wx, wy) {
     const f = frame();
@@ -664,17 +664,17 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     for (const [name, [hx, hy]] of Object.entries(handles(f))) if (Math.abs(wx - hx) <= tol && Math.abs(wy - hy) <= tol) return name;
     return null;
   }
-  // Forma a la que se pegaría una punta de flecha en p.
+  // The shape an arrow end at p would attach to.
   const bindTarget = (p, except) => E.shapeAt(scene.elements.filter((e) => !E.isBoundText(e)), p.x, p.y, { tol: 4 / view.zoom, except })?.id || null;
   const CURSORS = { n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', rot: 'grab', p0: 'move', p1: 'move' };
 
   canvas.addEventListener('pointerdown', (ev) => {
     if (tool !== 'text') root.focus({ preventScroll: true });
-    else ev.preventDefault(); // que el clic no quite el foco al cuadro de texto que se va a abrir
+    else ev.preventDefault(); // so the click does not take focus away from the text box about to open
     canvas.setPointerCapture(ev.pointerId);
     pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     if (pointers.size === 2) {
-      // Dos dedos: pellizcar para acercar y arrastrar para mover.
+      // Two fingers: pinch to zoom and drag to pan.
       const [a, b] = [...pointers.values()];
       action = { kind: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, view: { ...view } };
       return;
@@ -811,7 +811,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       if (action.handle.includes('n')) y = p.y;
       if (action.handle.includes('s')) y2 = p.y;
       if (ev.shiftKey && b.w && b.h) {
-        // Mantener la proporción.
+        // Keep the aspect ratio.
         const k = Math.max((x2 - x) / b.w, (y2 - y) / b.h);
         if (action.handle.includes('w')) x = x2 - b.w * k;
         else x2 = x + b.w * k;
@@ -827,7 +827,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     } else if (action.kind === 'rotate') {
       let delta = Math.atan2(p.y - action.c.y, p.x - action.c.x) - action.a0;
       if (ev.shiftKey) {
-        // De 15 en 15 grados.
+        // In 15-degree steps.
         const step = Math.PI / 12;
         const base = action.single ? action.single.angle || 0 : 0;
         delta = Math.round((base + delta) / step) * step - base;
@@ -854,7 +854,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
         if (e.type === 'draw') return { ...e, points: [...e.points, { x: dx, y: dy }] };
         if (e.type === 'line' || e.type === 'arrow') {
           if (ev.shiftKey) {
-            // Ángulos de 15 en 15 grados.
+            // Angles in 15-degree steps.
             const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12);
             const d = Math.hypot(dx, dy);
             dx = Math.cos(a) * d;
@@ -945,11 +945,11 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     }
   }, { passive: false });
 
-  // --- Teclado ---
+  // --- Keyboard ---
   let spaceDown = false;
   const KEYS = Object.fromEntries(TOOLS.map(([id, , key]) => [key.toLowerCase(), id]));
   root.addEventListener('keydown', (ev) => {
-    // Los atajos valen en todo el editor salvo al escribir en un campo.
+    // Shortcuts work anywhere in the editor except while typing in a field.
     if (ev.target.closest('input, textarea, select')) return;
     const mod = ev.ctrlKey || ev.metaKey;
     const k = ev.key.toLowerCase();
@@ -974,7 +974,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     if (mod) return;
     if ((ev.key === 'Delete' || ev.key === 'Backspace') && selected.size) { ev.preventDefault(); removeSelected(); return; }
     if (ev.key === 'Escape') { selected.clear(); announce(); setTool('select'); return; }
-    // Tab recorre los elementos mientras hay algo seleccionado (Escape lo suelta y Tab sale del editor).
+    // Tab goes through the elements while something is selected (Escape clears it and Tab leaves the editor).
     if (ev.key === 'Tab' && ev.target === root && selected.size) {
       const list = [];
       for (const e of scene.elements) if (!E.isBoundText(e) && !list.some((x) => e.group && x.group === e.group)) list.push(e);
@@ -1053,7 +1053,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   const ro = new ResizeObserver(() => redraw());
   ro.observe(canvas);
 
-  // Con la letra a mano ya cargada, los textos miden otra cosa: se vuelven a colocar.
+  // Once the handwriting font loads, texts measure differently: lay them out again.
   let alive = true;
   fontReady(document).then(() => {
     if (!alive) return;

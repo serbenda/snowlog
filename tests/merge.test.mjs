@@ -2,51 +2,51 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { merge3 } from '../public/js/merge.js';
 
-const base = ['# Lista', '- leche', '- pan', '', '## Notas', 'nada todavía', 'fin'].join('\n');
+const base = ['# List', '- milk', '- bread', '', '## Notes', 'nothing yet', 'end'].join('\n');
 
-test('cambios en sitios distintos se juntan', () => {
-  const mine = base.replace('- pan', '- pan integral');
-  const theirs = base.replace('nada todavía', 'llamar al fontanero');
-  assert.deepEqual(merge3(base, mine, theirs), { text: base.replace('- pan', '- pan integral').replace('nada todavía', 'llamar al fontanero'), conflict: false });
+test('changes in different places are combined', () => {
+  const mine = base.replace('- bread', '- wholemeal bread');
+  const theirs = base.replace('nothing yet', 'call the plumber');
+  assert.deepEqual(merge3(base, mine, theirs), { text: base.replace('- bread', '- wholemeal bread').replace('nothing yet', 'call the plumber'), conflict: false });
 });
 
-test('si solo cambió uno, gana ese; si los dos igual, también', () => {
-  const mine = base.replace('fin', 'FIN');
+test('if only one side changed, it wins; if both changed the same way, too', () => {
+  const mine = base.replace('end', 'END');
   assert.equal(merge3(base, mine, base).text, mine);
   assert.equal(merge3(base, base, mine).text, mine);
   assert.equal(merge3(base, mine, mine).text, mine);
 });
 
-test('añadir líneas en el mismo sitio desde los dos lados: se quedan las dos', () => {
-  const mine = `${base}\n- 10:00 escrito en el portátil`;
-  const theirs = `${base}\n- 10:05 escrito en el móvil`;
+test('adding lines at the same place from both sides: both stay', () => {
+  const mine = `${base}\n- 10:00 written on the laptop`;
+  const theirs = `${base}\n- 10:05 written on the phone`;
   const r = merge3(base, mine, theirs);
   assert.equal(r.conflict, false);
-  assert.ok(r.text.endsWith('- 10:00 escrito en el portátil\n- 10:05 escrito en el móvil'));
+  assert.ok(r.text.endsWith('- 10:00 written on the laptop\n- 10:05 written on the phone'));
 });
 
-test('cambiar la misma línea de forma distinta es un choque', () => {
-  const r = merge3(base, base.replace('- leche', '- leche sin lactosa'), base.replace('- leche', '- leche de avena'));
+test('changing the same line differently is a clash', () => {
+  const r = merge3(base, base.replace('- milk', '- lactose-free milk'), base.replace('- milk', '- oat milk'));
   assert.equal(r.conflict, true);
 });
 
-test('borrar en un lado y cambiar en el otro la misma línea es un choque', () => {
-  assert.equal(merge3(base, base.replace('- pan\n', ''), base.replace('- pan', '- pan de centeno')).conflict, true);
+test('deleting a line on one side and changing it on the other is a clash', () => {
+  assert.equal(merge3(base, base.replace('- bread\n', ''), base.replace('- bread', '- rye bread')).conflict, true);
 });
 
-test('borrados y añadidos en sitios distintos', () => {
-  const mine = base.replace('- leche\n', '');
-  const theirs = base.replace('## Notas', '## Notas\n- nueva idea');
+test('deletions and additions in different places', () => {
+  const mine = base.replace('- milk\n', '');
+  const theirs = base.replace('## Notes', '## Notes\n- new idea');
   const r = merge3(base, mine, theirs);
   assert.equal(r.conflict, false);
-  assert.equal(r.text, ['# Lista', '- pan', '', '## Notas', '- nueva idea', 'nada todavía', 'fin'].join('\n'));
+  assert.equal(r.text, ['# List', '- bread', '', '## Notes', '- new idea', 'nothing yet', 'end'].join('\n'));
 });
 
-test('notas grandes: rápido', () => {
-  const big = Array.from({ length: 5000 }, (_, i) => `línea ${i}`).join('\n');
+test('large notes: fast', () => {
+  const big = Array.from({ length: 5000 }, (_, i) => `line ${i}`).join('\n');
   const t0 = performance.now();
-  const r = merge3(big, big.replace('línea 10\n', 'línea diez\n'), big.replace('línea 4000\n', 'línea cuatro mil\n'));
+  const r = merge3(big, big.replace('line 10\n', 'line ten\n'), big.replace('line 4000\n', 'line four thousand\n'));
   assert.equal(r.conflict, false);
-  assert.ok(r.text.includes('línea diez') && r.text.includes('línea cuatro mil'));
+  assert.ok(r.text.includes('line ten') && r.text.includes('line four thousand'));
   assert.ok(performance.now() - t0 < 500);
 });

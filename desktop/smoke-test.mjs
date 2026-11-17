@@ -1,6 +1,6 @@
-// Prueba de humo de la app de escritorio por WebDriver (tauri-driver en 127.0.0.1:4444): abre la
-// app, espera a que la web dentro cumpla una condición y la cierra. Sin dependencias.
-// Uso: node desktop/prueba.mjs <ejecutable> "<expresión JS que debe ser verdadera>"
+// Smoke test of the desktop app over WebDriver (tauri-driver on 127.0.0.1:4444): opens the app,
+// waits until the web app inside meets a condition, and closes it. No dependencies.
+// Usage: node desktop/smoke-test.mjs <executable> "<JS expression that must be true>"
 
 const [app, cond] = process.argv.slice(2);
 const BASE = 'http://127.0.0.1:4444';
@@ -16,7 +16,7 @@ async function call(method, path, body) {
   return json.value;
 }
 
-// tauri-driver tarda un poco en escuchar
+// tauri-driver takes a moment to start listening
 for (let i = 0; ; i++) {
   try {
     await fetch(`${BASE}/status`);
@@ -35,9 +35,9 @@ try {
     ok = await run(`return !!(${cond});`).catch(() => false);
     if (!ok) await new Promise((r) => setTimeout(r, 500));
   }
-  const info = await run('return { titulo: document.title, url: location.href, ancho: innerWidth, alto: innerHeight };');
-  console.log('La web dentro de la app:', JSON.stringify(info));
-  if (!ok) throw new Error(`No se cumple: ${cond}`);
+  const info = await run('return { title: document.title, url: location.href, width: innerWidth, height: innerHeight };');
+  console.log('The web app inside the window:', JSON.stringify(info));
+  if (!ok) throw new Error(`Condition not met: ${cond}`);
   console.log(`OK: ${cond}`);
 } finally {
   await call('DELETE', `/session/${sessionId}`).catch(() => {});

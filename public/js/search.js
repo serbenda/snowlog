@@ -1,13 +1,13 @@
-// Búsqueda de texto completo sobre el índice en memoria (notas ya descifradas).
-// Sin distinguir mayúsculas ni acentos. Sintaxis:
-//   palabras            todas deben aparecer en la nota (en el texto o en el nombre)
-//   "frase exacta"      entre comillas
-//   -palabra            la nota no debe contenerla
-//   tag:#proyecto       la nota tiene esa etiqueta (o una hija: proyecto/web)
-//   path:Diario         la ruta de la nota contiene ese texto
+// Full-text search over the in-memory index (notes already decrypted).
+// Ignores case and accents. Syntax:
+//   words               all must appear in the note (in the text or the name)
+//   "exact phrase"      in quotes
+//   -word               the note must not contain it
+//   tag:#project        the note has that tag (or a child: project/web)
+//   path:Daily          the note's path contains that text
 
-// Pliega a minúsculas sin acentos manteniendo la longitud, para que las posiciones
-// encontradas en el texto plegado sirvan también en el original.
+// Folds to lowercase without accents keeping the length, so positions found in the
+// folded text also work in the original.
 export function fold(s) {
   let out = '';
   for (let i = 0; i < s.length; i++) {
@@ -40,7 +40,7 @@ export function parseSearch(input) {
 
 export const isEmptySearch = (q) => !q.terms.length && !q.not.length && !q.tags.length && !q.paths.length;
 
-// Texto plegado de cada nota; se recalcula solo si la nota cambia (parseNote crea otro objeto).
+// Folded text of each note; recomputed only if the note changes (parseNote creates a new object).
 const folded = new WeakMap();
 function foldedOf(note) {
   let f = folded.get(note);
@@ -53,7 +53,7 @@ function foldedOf(note) {
 
 const hasTag = (note, tag) => [...note.tags].some((t) => t === tag || t.startsWith(`${tag}/`));
 
-// Fragmento de una línea alrededor de lo encontrado, con las posiciones para resaltar.
+// A one-line snippet around the match, with the positions to highlight.
 function snippet(line, ranges, width = 140) {
   let from = 0;
   if (line.length > width) from = Math.max(0, Math.min(ranges[0][0] - 40, line.length - width));
@@ -66,8 +66,8 @@ function snippet(line, ranges, width = 140) {
   return { text, marks };
 }
 
-// Devuelve [{ note, score, matches: [{ line, text, marks }], count }] ordenado por relevancia,
-// con `total` = número de notas que encajan.
+// Returns [{ note, score, matches: [{ line, text, marks }], count }] sorted by relevance,
+// with `total` = number of matching notes.
 export function searchNotes(notes, input, { limit = 200, perNote = 3 } = {}) {
   const q = typeof input === 'string' ? parseSearch(input) : input;
   if (isEmptySearch(q)) return [];
@@ -109,14 +109,14 @@ export function searchNotes(notes, input, { limit = 200, perNote = 3 } = {}) {
   }
   results.sort((a, b) => b.score - a.score || (b.note.mtime || '').localeCompare(a.note.mtime || ''));
   const out = results.slice(0, limit);
-  out.total = results.length; // notas que encajan, aunque solo se devuelvan `limit`
+  out.total = results.length; // matching notes, even if only `limit` are returned
   return out;
 }
 
-// Etiquetas con el número de notas que las usan, de más a menos usadas.
+// Tags with the number of notes that use them, most used first.
 export function tagCounts(notes) {
   const counts = new Map();
   for (const n of notes) for (const t of n.tags) counts.set(t, (counts.get(t) || 0) + 1);
   return [...counts].map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'es'));
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'en'));
 }

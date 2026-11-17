@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Crea una bóveda de PRUEBA para probar el servidor MCP sin tocar las notas de verdad:
+// Creates a TEST vault to try the MCP server without touching the real notes:
 //
-//   node agent/test-vault.mjs <carpeta-nueva>
+//   node agent/test-vault.mjs <new-folder>
 //
-// Dentro deja `remote.git` (hace de GitHub) y `notas` (el clon con el que trabaja el servidor), con
-// el espacio inicial (Inicio, plantillas) y el proyecto de ejemplo de la app. La frase de paso se pide
-// con el mismo diálogo que el servidor (o SNOWLOG_ASKPASS), dos veces para confirmarla.
+// Inside it leaves `remote.git` (standing in for GitHub) and `notes` (the clone the server works on),
+// with the starter space (Home, templates) and the app's example project. The passphrase is asked for
+// with the same dialog as the server (or SNOWLOG_ASKPASS), twice to confirm it.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
@@ -19,37 +19,37 @@ import { exampleSpace } from '../public/js/examples.js';
 
 const dir = process.argv[2] && resolve(process.argv[2]);
 if (!dir) {
-  console.error('Uso: node agent/test-vault.mjs <carpeta-nueva>');
+  console.error('Usage: node agent/test-vault.mjs <new-folder>');
   process.exit(1);
 }
 if (existsSync(dir) && readdirSync(dir).length) {
-  console.error(`La carpeta ${dir} ya existe y no está vacía.`);
+  console.error(`The folder ${dir} already exists and is not empty.`);
   process.exit(1);
 }
 
 const git = (...args) => execFileSync('git', args, { stdio: ['ignore', 'pipe', 'inherit'] });
 const remote = join(dir, 'remote.git');
-const notes = join(dir, 'notas');
+const notes = join(dir, 'notes');
 git('init', '-q', '--bare', '-b', 'main', remote);
 git('init', '-q', '-b', 'main', notes);
 git('-C', notes, 'remote', 'add', 'origin', remote);
-git('-C', notes, 'config', 'user.name', 'Snowlog (bóveda de prueba)');
-git('-C', notes, 'config', 'user.email', 'prueba@snowlog.invalid');
+git('-C', notes, 'config', 'user.name', 'Snowlog (test vault)');
+git('-C', notes, 'config', 'user.email', 'test@snowlog.invalid');
 
-const secret = await askPassphrase('Frase de paso para la bóveda de PRUEBA de Snowlog');
+const secret = await askPassphrase('Passphrase for the Snowlog TEST vault');
 if (!secret) process.exit(1);
-const again = await askPassphrase('Repite la frase de paso de la bóveda de PRUEBA');
+const again = await askPassphrase('Repeat the TEST vault passphrase');
 if (again !== secret) {
-  console.error('Las frases no coinciden.');
+  console.error('The passphrases do not match.');
   process.exit(1);
 }
 
 const { vault } = await Vault.create(new GitDirRepo({ dir: notes }), secret, CONFIG.kdfIterations);
 const starter = starterSpace(CONFIG.workspace);
 const example = exampleSpace({ dailyFolder: CONFIG.workspace.dailyFolder });
-await vault.importNotes(starter.notes, { message: 'configurar mi espacio', folders: starter.folders });
-await vault.importNotes(example.notes.filter((n) => !vault.findByPath(n.path)), { message: 'cargar ejemplos', folders: example.folders });
+await vault.importNotes(starter.notes, { message: 'set up my space', folders: starter.folders });
+await vault.importNotes(example.notes.filter((n) => !vault.findByPath(n.path)), { message: 'load examples', folders: example.folders });
 
-console.log(`Bóveda de prueba creada con ${vault.notes().length} notas.`);
-console.log(`Clon: ${notes}`);
-console.log(`Servidor MCP para esta bóveda:\n  node ${resolve(new URL('./mcp.js', import.meta.url).pathname)} --dir ${notes}`);
+console.log(`Test vault created with ${vault.notes().length} notes.`);
+console.log(`Clone: ${notes}`);
+console.log(`MCP server for this vault:\n  node ${resolve(new URL('./mcp.js', import.meta.url).pathname)} --dir ${notes}`);

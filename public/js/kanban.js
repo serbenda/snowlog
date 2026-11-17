@@ -1,28 +1,28 @@
-// Tableros Kanban guardados como Markdown normal, legibles en cualquier editor:
+// Kanban boards saved as plain Markdown, readable in any editor:
 //
 //   ---
 //   kanban-plugin: basic
 //   ---
 //
-//   ## Pendiente
+//   ## To do
 //
-//   - [ ] Una tarjeta
-//   - [ ] Otra, con más texto
-//       que sigue en líneas sangradas
+//   - [ ] A card
+//   - [ ] Another, with more text
+//       that continues on indented lines
 //
-//   ## Hecho
+//   ## Done
 //
-//   - [x] Terminada
+//   - [x] Finished
 //
-// Cada `## Título` es una columna y cada elemento de lista bajo él, una tarjeta. Lo que hay antes
-// de la primera columna y un bloque final `%% … %%` se conservan tal cual. Si no se toca nada,
-// serialize(parse(texto)) devuelve el mismo texto.
+// Each `## Title` is a column and each list item under it, a card. Whatever comes before
+// the first column and a final `%% … %%` block are kept as they are. If nothing is touched,
+// serialize(parse(text)) returns the same text.
 
 import { parseFrontmatter } from './markdown.js';
 
 const CARD_RE = /^([-*+])\s+(?:\[([ xX])\]\s+)?(.*)$/;
 
-// ¿Es un tablero? Por la propiedad `kanban-plugin` (compatible) o `kanban: true`.
+// Is it a board? By the `kanban-plugin` property (compatible) or `kanban: true`.
 export function isBoard(text) {
   const fm = parseFrontmatter(text).data || {};
   return fm['kanban-plugin'] != null || fm.kanban === true || String(fm.kanban).toLowerCase() === 'true';
@@ -32,7 +32,7 @@ export function parseBoard(text) {
   const lines = text.split('\n');
   let i = 0;
   const pre = [];
-  // Frontmatter y lo que haya antes de la primera columna.
+  // Frontmatter and whatever comes before the first column.
   if (lines[0] === '---') {
     const end = lines.indexOf('---', 1);
     if (end > 0) {
@@ -41,13 +41,13 @@ export function parseBoard(text) {
     }
   }
   while (i < lines.length && !/^##\s/.test(lines[i])) pre.push(lines[i++]);
-  // Bloque final de ajustes (%% … %%), que otras herramientas usan: se guarda sin tocar.
+  // Final settings block (%% … %%), which other tools use: kept untouched.
   let postStart = lines.length;
   for (let j = lines.length - 1; j >= i; j--) {
     if (lines[j].trim() === '') continue;
     const last = lines[j].trim();
     if (last.endsWith('%%')) {
-      // Una sola línea «%% … %%», o un bloque que empieza en una línea anterior con «%%».
+      // A single “%% … %%” line, or a block that starts on an earlier line with “%%”.
       let k = last.startsWith('%%') && last.length > 2 ? j : j - 1;
       while (k >= i && !lines[k].trim().startsWith('%%')) k--;
       if (k >= i) postStart = k;
@@ -75,7 +75,7 @@ export function parseBoard(text) {
     } else if (line.trim() === '') {
       card = null;
     } else {
-      // Texto suelto dentro de la columna (no es una tarjeta): se conserva.
+      // Loose text inside the column (not a card): kept.
       lane.extra.push(line);
       card = null;
     }
@@ -105,7 +105,7 @@ export function serializeBoard(board) {
   return out.join('\n');
 }
 
-// --- Cambios (devuelven un tablero nuevo; el original no se toca) ---
+// --- Changes (they return a new board; the original is not touched) ---
 const clone = (b) => structuredClone(b);
 
 export function moveCard(board, from, to) {
@@ -173,11 +173,11 @@ export const NEW_BOARD = `---
 kanban-plugin: basic
 ---
 
-## Pendiente
+## To do
 
-- [ ] Primera tarjeta
+- [ ] First card
 
-## En curso
+## In progress
 
-## Hecho
+## Done
 `;

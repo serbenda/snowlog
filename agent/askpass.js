@@ -1,12 +1,12 @@
-// Pedir la frase de paso sin que pase por el agente que usa el servidor.
+// Ask for the passphrase without it passing through the agent that uses the server.
 //
-// - Por defecto (macOS), un diálogo del sistema con la entrada oculta. La frase va del diálogo
-//   a este proceso por una tubería; no se escribe en disco, ni en argumentos, ni en variables de entorno.
-// - SNOWLOG_ASKPASS=/ruta/programa: como SSH_ASKPASS. Se ejecuta el programa con el mensaje como
-//   argumento y su salida estándar es la frase. Sirve para otros sistemas y para las pruebas con
-//   una bóveda de prueba.
+// - By default (macOS), a system dialog with hidden input. The passphrase goes from the dialog
+//   to this process through a pipe; it is never written to disk, arguments or environment variables.
+// - SNOWLOG_ASKPASS=/path/program: like SSH_ASKPASS. The program runs with the message as its
+//   argument and its standard output is the passphrase. It serves other systems and tests with
+//   a test vault.
 //
-// Devuelve la frase, o null si se cancela.
+// Returns the passphrase, or null if cancelled.
 
 import { spawn } from 'node:child_process';
 
@@ -20,10 +20,10 @@ function run(cmd, args) {
   });
 }
 
-// Texto para AppleScript entre comillas.
+// Text for AppleScript, between quotes.
 const asString = (s) => `"${String(s).replace(/[\\"]/g, '\\$&')}"`;
 
-export async function askPassphrase(message = 'Frase de paso de la bóveda de Snowlog') {
+export async function askPassphrase(message = 'Snowlog vault passphrase') {
   const askpass = process.env.SNOWLOG_ASKPASS;
   if (askpass) {
     const { code, out } = await run(askpass, [message]);

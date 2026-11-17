@@ -1,11 +1,12 @@
-// Sesión con la bóveda: la DEK vive solo en la memoria de este proceso y se olvida al bloquear
-// (a mano o tras `lockAfterMs` sin uso). La frase de paso se pide con `askPassphrase` y se descarta
-// en cuanto se deriva la clave: nunca se devuelve, se guarda ni aparece en errores.
+// A session with the vault: the DEK lives only in this process's memory and is forgotten on lock
+// (by hand or after `lockAfterMs` without use). The passphrase is asked for with `askPassphrase` and
+// discarded as soon as the key is derived: it is never returned, stored or included in errors.
 
 import { Vault } from '../public/js/vault.js';
 import * as C from '../public/js/crypto.js';
 import { CONFIG } from '../public/js/config.js';
 import { parseNote } from '../public/js/noteindex.js';
+import { workspaceSettings } from '../public/js/templates.js';
 
 export class SessionError extends Error {
   constructor(code, message) {
@@ -22,7 +23,7 @@ export class Session {
     this.refreshMs = refreshMs;
     this.attempts = attempts;
     this.vault = null;
-    this.parsed = new Map(); // id → nota analizada (parseNote), por versión
+    this.parsed = new Map(); // id → parsed note (parseNote), per version
     this.timer = null;
     this.freshAt = 0;
     this.lockedReason = null;
@@ -35,8 +36,8 @@ export class Session {
   async unlock() {
     if (this.vault) return this.vault;
     const vaultFile = await Vault.fetchVaultFile(this.repo);
-    if (!vaultFile) throw new SessionError('no_vault', 'En este repo no hay una bóveda de Snowlog.');
-    let message = 'Frase de paso de la bóveda de Snowlog';
+    if (!vaultFile) throw new SessionError('no_vault', 'There is no Snowlog vault in this repository.');
+    let message = 'Snowlog vault passphrase';
     let dek = null;
     for (let i = 0; i < this.attempts && !dek; i++) {
       const secret = await this.askPassphrase(message);
@@ -44,10 +45,10 @@ export class Session {
       try {
         dek = await C.unlockVault(vaultFile, secret);
       } catch {
-        message = 'Frase incorrecta. Vuelve a escribir la frase de paso de Snowlog';
+        message = 'Wrong passphrase. Type the Snowlog passphrase again';
       }
     }
-    if (!dek) throw new SessionError('bad_secret', 'Frase de paso incorrecta.');
+    if (!dek) throw new SessionError('bad_secret', 'Wrong passphrase.');
     const vault = new Vault(this.repo, dek);
     await vault.loadIndex();
     this.vault = vault;
@@ -58,7 +59,7 @@ export class Session {
   }
 
   lock(reason = 'manual') {
-    this.vault = null; // la DEK y las notas descifradas se quedan sin referencias
+    this.vault = null; // the DEK and the decrypted notes are left without references
     this.parsed.clear();
     this.lockedReason = reason;
     if (this.timer) clearTimeout(this.timer);
@@ -72,7 +73,7 @@ export class Session {
     this.timer.unref?.();
   }
 
-  // Bóveda lista para usar: desbloquea si hace falta y trae lo que hayan cambiado otros dispositivos.
+  // A vault ready to use: unlocks if needed and brings in what other devices changed.
   async open({ refresh = false } = {}) {
     if (!this.vault) {
       await this.unlock();
@@ -82,11 +83,11 @@ export class Session {
         await this.vault.loadIndex();
       } catch (e) {
         if (e.message === 'key_changed') {
-          // Se rotó la clave desde la app: hay que volver a pedir la frase.
+          // The key was rotated from the app: the passphrase must be asked for again.
           this.lock('key_changed');
           await this.unlock();
         } else if (e instanceof TypeError) {
-          throw new SessionError('offline', 'Sin conexión con el repo de notas.');
+          throw new SessionError('offline', 'No connection to the notes repository.');
         } else throw e;
       }
       this.freshAt = Date.now();
@@ -95,18 +96,18 @@ export class Session {
     return this.vault;
   }
 
-  // Tras escribir: si Vault se quedó sin conexión, lo escrito solo está en memoria. Se avisa.
+  // After writing: if Vault went offline, what was written is only in memory. It says so.
   assertSaved() {
     if (this.vault?.offline) {
-      throw new SessionError('offline', 'Sin conexión: el cambio no se ha subido. Vuelve a intentarlo con red.');
+      throw new SessionError('offline', 'Offline: the change was not uploaded. Try again with a connection.');
     }
   }
 
   settings() {
-    return { ...CONFIG.workspace, ...(this.vault?.getSettings() || {}) };
+    return workspaceSettings(CONFIG.workspace, this.vault?.getSettings() || {}, this.vault?.index);
   }
 
-  // Todas las notas descifradas y analizadas (para buscar y para los enlaces).
+  // Every note, decrypted and parsed (for search and for links).
   async allNotes() {
     const v = await this.open();
     const metas = v.notes();

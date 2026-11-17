@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -21,76 +21,76 @@
 </div>
 
 <div id="app" class="app" hidden>
-  <nav class="ribbon" aria-label="Acciones">
-    <button class="ribbon-btn" data-action="toggle-left" aria-label="Mostrar u ocultar archivos" title="Archivos"></button>
-    <button class="ribbon-btn" data-action="switcher" aria-label="Abrir nota (Ctrl+O)" title="Abrir nota (Ctrl+O)"></button>
-    <button class="ribbon-btn" data-action="palette" aria-label="Paleta de comandos (Ctrl+P)" title="Paleta de comandos (Ctrl+P)"></button>
-    <button class="ribbon-btn" data-action="new-note" aria-label="Nueva nota (Ctrl+N)" title="Nueva nota (Ctrl+N)"></button>
-    <button class="ribbon-btn" data-action="today" aria-label="Nota de hoy (Ctrl+D)" title="Nota de hoy (Ctrl+D)"></button>
-    <button class="ribbon-btn" data-action="home" aria-label="Panel principal" title="Panel principal"></button>
-    <button class="ribbon-btn" data-action="graph" aria-label="Vista de grafo (Ctrl+G)" title="Vista de grafo (Ctrl+G)"></button>
+  <nav class="ribbon" aria-label="Actions">
+    <button class="ribbon-btn" data-action="toggle-left" aria-label="Show or hide files" title="Files"></button>
+    <button class="ribbon-btn" data-action="switcher" aria-label="Open note (Ctrl+O)" title="Open note (Ctrl+O)"></button>
+    <button class="ribbon-btn" data-action="palette" aria-label="Command palette (Ctrl+P)" title="Command palette (Ctrl+P)"></button>
+    <button class="ribbon-btn" data-action="new-note" aria-label="New note (Ctrl+N)" title="New note (Ctrl+N)"></button>
+    <button class="ribbon-btn" data-action="today" aria-label="Today's note (Ctrl+D)" title="Today's note (Ctrl+D)"></button>
+    <button class="ribbon-btn" data-action="home" aria-label="Dashboard" title="Dashboard"></button>
+    <button class="ribbon-btn" data-action="graph" aria-label="Graph view (Ctrl+G)" title="Graph view (Ctrl+G)"></button>
     <span class="ribbon-spacer"></span>
-    <button class="ribbon-btn" data-action="settings" aria-label="Ajustes" title="Ajustes"></button>
-    <button class="ribbon-btn" data-action="lock" aria-label="Bloquear" title="Bloquear"></button>
-    <button class="ribbon-btn" data-action="logout" aria-label="Cerrar sesión en este dispositivo" title="Cerrar sesión"></button>
+    <button class="ribbon-btn" data-action="settings" aria-label="Settings" title="Settings"></button>
+    <button class="ribbon-btn" data-action="lock" aria-label="Lock" title="Lock"></button>
+    <button class="ribbon-btn" data-action="logout" aria-label="Sign out on this device" title="Sign out"></button>
   </nav>
 
-  <aside class="sidebar sidebar-left" id="left" aria-label="Archivos">
-    <div class="left-tabs" role="tablist" aria-label="Panel izquierdo">
-      <button class="icon-btn left-tab" role="tab" data-tab="files" aria-label="Archivos" title="Archivos" aria-selected="true"></button>
-      <button class="icon-btn left-tab" role="tab" data-tab="search" aria-label="Buscar (Ctrl+Mayús+F)" title="Buscar (Ctrl+Mayús+F)" aria-selected="false"></button>
-      <button class="icon-btn left-tab" role="tab" data-tab="tags" aria-label="Etiquetas" title="Etiquetas" aria-selected="false"></button>
-      <button class="icon-btn left-tab" role="tab" data-tab="bookmarks" aria-label="Marcadores" title="Marcadores" aria-selected="false"></button>
+  <aside class="sidebar sidebar-left" id="left" aria-label="Files">
+    <div class="left-tabs" role="tablist" aria-label="Left panel">
+      <button class="icon-btn left-tab" role="tab" data-tab="files" aria-label="Files" title="Files" aria-selected="true"></button>
+      <button class="icon-btn left-tab" role="tab" data-tab="search" aria-label="Search (Ctrl+Shift+F)" title="Search (Ctrl+Shift+F)" aria-selected="false"></button>
+      <button class="icon-btn left-tab" role="tab" data-tab="tags" aria-label="Tags" title="Tags" aria-selected="false"></button>
+      <button class="icon-btn left-tab" role="tab" data-tab="bookmarks" aria-label="Bookmarks" title="Bookmarks" aria-selected="false"></button>
     </div>
     <div class="sidebar-header" data-pane="files">
-      <span class="sidebar-title">Archivos</span>
+      <span class="sidebar-title">Files</span>
       <span class="sidebar-actions">
-        <button class="icon-btn" data-action="new-note" aria-label="Nueva nota" title="Nueva nota"></button>
-        <button class="icon-btn" data-action="new-folder" aria-label="Nueva carpeta" title="Nueva carpeta"></button>
-        <button class="icon-btn" data-action="import" aria-label="Importar carpeta de Markdown" title="Importar carpeta"></button>
-        <button class="icon-btn" data-action="collapse-all" aria-label="Plegar todo" title="Plegar todo"></button>
+        <button class="icon-btn" data-action="new-note" aria-label="New note" title="New note"></button>
+        <button class="icon-btn" data-action="new-folder" aria-label="New folder" title="New folder"></button>
+        <button class="icon-btn" data-action="import" aria-label="Import a Markdown folder" title="Import folder"></button>
+        <button class="icon-btn" data-action="collapse-all" aria-label="Collapse all" title="Collapse all"></button>
       </span>
     </div>
     <div class="tree" id="tree" role="tree" tabindex="-1" data-pane="files"></div>
     <div class="left-pane" data-pane="search" hidden>
-      <input class="search-input" id="search-input" type="search" placeholder="Buscar en todas las notas" aria-label="Buscar en todas las notas" autocomplete="off" spellcheck="false">
-      <p class="search-help" id="search-info">Sin acentos ni mayúsculas. También <code>"frase"</code>, <code>-palabra</code>, <code>tag:#etiqueta</code> y <code>path:carpeta</code>.</p>
+      <input class="search-input" id="search-input" type="search" placeholder="Search all notes" aria-label="Search all notes" autocomplete="off" spellcheck="false">
+      <p class="search-help" id="search-info">Ignores accents and case. Also <code>"phrase"</code>, <code>-word</code>, <code>tag:#tag</code> and <code>path:folder</code>.</p>
       <div class="search-results" id="search-results" role="list"></div>
     </div>
     <div class="left-pane" data-pane="bookmarks" hidden>
-      <div class="sidebar-header"><span class="sidebar-title">Marcadores</span></div>
+      <div class="sidebar-header"><span class="sidebar-title">Bookmarks</span></div>
       <div class="tag-list" id="bookmark-list" role="list"></div>
     </div>
     <div class="left-pane" data-pane="tags" hidden>
-      <div class="sidebar-header"><span class="sidebar-title">Etiquetas</span></div>
+      <div class="sidebar-header"><span class="sidebar-title">Tags</span></div>
       <div class="tag-list" id="tag-list" role="list"></div>
     </div>
   </aside>
 
   <main class="workspace">
     <header class="view-header">
-      <button class="icon-btn mobile-only" data-action="toggle-left" aria-label="Archivos"></button>
+      <button class="icon-btn mobile-only" data-action="toggle-left" aria-label="Files"></button>
       <div class="breadcrumb" id="breadcrumb"></div>
       <span class="view-actions">
-        <button class="icon-btn" id="mode-btn" data-action="toggle-mode" aria-label="Cambiar a lectura (Ctrl+E)" title="Lectura (Ctrl+E)"></button>
-        <button class="icon-btn" data-action="note-menu" aria-label="Más opciones" title="Más opciones"></button>
-        <button class="icon-btn" data-action="toggle-right" aria-label="Mostrar u ocultar el esquema" title="Esquema"></button>
+        <button class="icon-btn" id="mode-btn" data-action="toggle-mode" aria-label="Switch to reading (Ctrl+E)" title="Reading (Ctrl+E)"></button>
+        <button class="icon-btn" data-action="note-menu" aria-label="More options" title="More options"></button>
+        <button class="icon-btn" data-action="toggle-right" aria-label="Show or hide the outline" title="Outline"></button>
       </span>
     </header>
 
     <div class="view-content" id="view">
       <div class="empty" id="empty">
-        <p class="empty-title">No hay ninguna nota abierta</p>
-        <button class="link-btn" data-action="new-note">Crear una nota (Ctrl+N)</button>
-        <button class="link-btn" data-action="switcher">Abrir una nota (Ctrl+O)</button>
+        <p class="empty-title">No note is open</p>
+        <button class="link-btn" data-action="new-note">Create a note (Ctrl+N)</button>
+        <button class="link-btn" data-action="switcher">Open a note (Ctrl+O)</button>
       </div>
       <div class="note" id="note" hidden>
-        <input class="inline-title" id="title" aria-label="Título de la nota" spellcheck="false" autocomplete="off">
+        <input class="inline-title" id="title" aria-label="Note title" spellcheck="false" autocomplete="off">
         <div class="editor-wrap" id="editor-wrap">
           <pre class="editor-hl" id="editor-hl" aria-hidden="true"></pre>
-          <textarea class="editor" id="editor" aria-label="Contenido de la nota" spellcheck="true"></textarea>
+          <textarea class="editor" id="editor" aria-label="Note content" spellcheck="true"></textarea>
           <pre class="editor-mirror" id="editor-mirror" aria-hidden="true"></pre>
-          <div class="suggest" id="suggest" role="listbox" aria-label="Notas para enlazar" hidden></div>
+          <div class="suggest" id="suggest" role="listbox" aria-label="Notes to link" hidden></div>
         </div>
         <article class="reading markdown" id="reading" hidden></article>
       </div>
@@ -105,16 +105,16 @@
     </footer>
   </main>
 
-  <aside class="sidebar sidebar-right" id="right" aria-label="Panel lateral">
+  <aside class="sidebar sidebar-right" id="right" aria-label="Side panel">
     <div class="right-scroll">
-      <section class="side-section" aria-label="Calendario"><div class="calendar" id="calendar"></div></section>
+      <section class="side-section" aria-label="Calendar"><div class="calendar" id="calendar"></div></section>
       <section class="side-section">
-        <div class="sidebar-header"><span class="sidebar-title">Esquema</span></div>
-        <nav class="outline" id="outline" aria-label="Esquema"></nav>
+        <div class="sidebar-header"><span class="sidebar-title">Outline</span></div>
+        <nav class="outline" id="outline" aria-label="Outline"></nav>
       </section>
       <section class="side-section">
-        <div class="sidebar-header"><span class="sidebar-title">Enlaces entrantes</span></div>
-        <nav class="outline" id="backlinks" aria-label="Enlaces entrantes"></nav>
+        <div class="sidebar-header"><span class="sidebar-title">Backlinks</span></div>
+        <nav class="outline" id="backlinks" aria-label="Backlinks"></nav>
       </section>
     </div>
   </aside>

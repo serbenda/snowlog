@@ -9,213 +9,227 @@ import { LocalVault } from '../public/js/localvault.js';
 import { makeZip, crc32 } from '../public/js/zip.js';
 
 function sampleFolder() {
-  const root = new MemDir('MisNotas');
-  root.put('Inicio.md', '# Inicio\n[[Reforma]]');
-  root.put('Proyectos/Casa/Reforma.md', '---\nstatus: activo\n---\n# Reforma');
-  root.put('Proyectos/Casa/plano.png', new Uint8Array([137, 80, 78, 71]));
-  root.put('Diario/2026-11-12.md', '- [ ] #compromiso algo');
+  const root = new MemDir('MyNotes');
+  root.put('Home.md', '# Home\n[[Renovation]]');
+  root.put('Projects/House/Renovation.md', '---\nstatus: active\n---\n# Renovation');
+  root.put('Projects/House/plan.png', new Uint8Array([137, 80, 78, 71]));
+  root.put('Daily/2026-11-12.md', '- [ ] #commitment something');
   root.put('.obsidian/app.json', '{}');
-  root.put('.trash/viejo.md', 'borrado');
-  root.put('Notas sueltas.txt', 'no es una nota');
+  root.put('.trash/old.md', 'deleted');
+  root.put('Loose notes.txt', 'not a note');
   return root;
 }
 
-test('carga solo notas .md y carpetas visibles, como una bóveda de Obsidian', async () => {
+test('loads only .md notes and visible folders, like a Markdown vault', async () => {
   const v = await new LocalVault(sampleFolder()).load();
-  assert.equal(v.label, 'MisNotas');
-  assert.deepEqual(v.notes().map((n) => n.path).sort(), ['Diario/2026-11-12', 'Inicio', 'Proyectos/Casa/Reforma']);
-  assert.deepEqual(v.index.folders.sort(), ['Diario', 'Proyectos', 'Proyectos/Casa']);
-  assert.equal(await v.read(v.findByTitle('reforma').id), '---\nstatus: activo\n---\n# Reforma');
+  assert.equal(v.label, 'MyNotes');
+  assert.deepEqual(v.notes().map((n) => n.path).sort(), ['Daily/2026-11-12', 'Home', 'Projects/House/Renovation']);
+  assert.deepEqual(v.index.folders.sort(), ['Daily', 'Projects', 'Projects/House']);
+  assert.equal(await v.read(v.findByTitle('renovation').id), '---\nstatus: active\n---\n# Renovation');
 });
 
-test('crear, guardar y renombrar escriben ficheros .md normales', async () => {
+test('create, save and rename write plain .md files', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
-  const id = await v.createNote('Ideas/Viaje', 'hola');
-  assert.equal(root.text('Ideas/Viaje.md'), 'hola');
-  await v.saveNote(id, 'hola de nuevo');
-  assert.equal(root.text('Ideas/Viaje.md'), 'hola de nuevo');
-  await v.renameNote(id, 'Ideas/Viaje a Japón');
-  assert.ok(root.list().includes('Ideas/Viaje a Japón.md'));
-  assert.ok(!root.list().includes('Ideas/Viaje.md'));
-  await assert.rejects(v.createNote('Inicio'), /exists/);
+  const id = await v.createNote('Ideas/Trip', 'hello');
+  assert.equal(root.text('Ideas/Trip.md'), 'hello');
+  await v.saveNote(id, 'hello again');
+  assert.equal(root.text('Ideas/Trip.md'), 'hello again');
+  await v.renameNote(id, 'Ideas/Trip to Japan ñ');
+  assert.ok(root.list().includes('Ideas/Trip to Japan ñ.md'));
+  assert.ok(!root.list().includes('Ideas/Trip.md'));
+  await assert.rejects(v.createNote('Home'), /exists/);
   await assert.rejects(v.createNote('a:b'), /bad_chars/);
 });
 
-test('borrar mueve a la papelera .trash, sin perder nada', async () => {
+test('deleting moves to the .trash folder, losing nothing', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
-  await v.deleteNote(v.findByTitle('Inicio').id);
-  assert.ok(!root.list().includes('Inicio.md'));
-  assert.equal(root.text('.trash/Inicio.md'), '# Inicio\n[[Reforma]]');
-  await v.deleteFolder('Proyectos');
-  assert.ok(root.list().includes('.trash/Proyectos/Casa/plano.png'));
-  assert.ok(root.list().includes('.trash/Proyectos/Casa/Reforma.md'));
-  assert.ok(!root.list().some((p) => p.startsWith('Proyectos')));
+  await v.deleteNote(v.findByTitle('Home').id);
+  assert.ok(!root.list().includes('Home.md'));
+  assert.equal(root.text('.trash/Home.md'), '# Home\n[[Renovation]]');
+  await v.deleteFolder('Projects');
+  assert.ok(root.list().includes('.trash/Projects/House/plan.png'));
+  assert.ok(root.list().includes('.trash/Projects/House/Renovation.md'));
+  assert.ok(!root.list().some((p) => p.startsWith('Projects')));
   assert.equal(v.notes().length, 1);
 });
 
-test('renombrar una carpeta mueve también los adjuntos', async () => {
+test('renaming a folder moves the attachments too', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
-  await v.renameFolder('Proyectos/Casa', 'Proyectos/Hogar');
-  assert.ok(root.list().includes('Proyectos/Hogar/plano.png'));
-  assert.ok(root.list().includes('Proyectos/Hogar/Reforma.md'));
-  assert.ok(!root.list().includes('Proyectos/Casa/'));
-  assert.equal(v.findByTitle('Reforma').path, 'Proyectos/Hogar/Reforma');
-  await assert.rejects(v.renameFolder('Proyectos', 'Diario'), /exists/);
+  await v.renameFolder('Projects/House', 'Projects/Home');
+  assert.ok(root.list().includes('Projects/Home/plan.png'));
+  assert.ok(root.list().includes('Projects/Home/Renovation.md'));
+  assert.ok(!root.list().includes('Projects/House/'));
+  assert.equal(v.findByTitle('Renovation').path, 'Projects/Home/Renovation');
+  await assert.rejects(v.renameFolder('Projects', 'Daily'), /exists/);
 });
 
-test('importar y exportar', async () => {
-  const root = new MemDir('vacía');
+test('import and export', async () => {
+  const root = new MemDir('empty');
   const v = await new LocalVault(root).load();
-  const res = await v.importNotes([{ path: 'A/uno', text: '1' }, { path: 'A/uno', text: '2' }], { folders: ['Archivo'] });
-  assert.deepEqual(res.map((r) => r.path), ['A/uno', 'A/uno (importada)']);
-  assert.ok(root.list().includes('Archivo/'));
-  assert.deepEqual((await v.exportAll()).map((f) => f.path).sort(), ['A/uno (importada).md', 'A/uno.md']);
+  const res = await v.importNotes([{ path: 'A/one', text: '1' }, { path: 'A/one', text: '2' }], { folders: ['Archive'] });
+  assert.deepEqual(res.map((r) => r.path), ['A/one', 'A/one (imported)']);
+  assert.ok(root.list().includes('Archive/'));
+  assert.deepEqual((await v.exportAll()).map((f) => f.path).sort(), ['A/one (imported).md', 'A/one.md']);
 });
 
-test('el .zip exportado se abre con herramientas estándar', () => {
+test('the exported .zip opens with standard tools', () => {
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926);
-  const zip = makeZip([{ path: 'Diario/2026-11-13.md', text: '# Viernes ñ' }, { path: 'Inicio.md', text: 'hola' }]);
+  const zip = makeZip([{ path: 'Daily/2026-11-13.md', text: '# Friday ñ' }, { path: 'Home.md', text: 'hello' }]);
   const dir = mkdtempSync(join(tmpdir(), 'zip-'));
-  const file = join(dir, 'notas.zip');
+  const file = join(dir, 'notes.zip');
   writeFileSync(file, zip);
   const out = execFileSync('python3', ['-I', '-c',
     'import sys,zipfile;z=zipfile.ZipFile(sys.argv[1]);assert z.testzip() is None;print("|".join(n+"="+z.read(n).decode() for n in z.namelist()))', file]).toString().trim();
-  assert.equal(out, 'Diario/2026-11-13.md=# Viernes ñ|Inicio.md=hola');
+  assert.equal(out, 'Daily/2026-11-13.md=# Friday ñ|Home.md=hello');
 });
 
-test('saveMany en local escribe cada fichero', async () => {
+test('saveMany writes each file locally', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
-  const id = v.findByTitle('Inicio').id;
-  await v.saveMany([{ id, text: 'nuevo' }]);
-  assert.equal(root.text('Inicio.md'), 'nuevo');
+  const id = v.findByTitle('Home').id;
+  await v.saveMany([{ id, text: 'new' }]);
+  assert.equal(root.text('Home.md'), 'new');
 });
 
-test('adjuntos en local: ficheros normales, a la papelera al borrar y dentro del .zip', async () => {
+test('local attachments: plain files, to the trash on delete and inside the .zip', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
-  assert.deepEqual(v.files().map((f) => f.path), ['Proyectos/Casa/plano.png']);
-  const pdf = new TextEncoder().encode('%PDF-1.4 hola');
-  const { id, path } = await v.addFile('Proyectos/Casa', 'plano.png', new Uint8Array([1]));
-  assert.equal(path, 'Proyectos/Casa/plano 1.png');
-  const doc = await v.addFile('Adjuntos', 'factura.pdf', pdf);
-  assert.ok(root.list().includes('Adjuntos/factura.pdf'));
+  assert.deepEqual(v.files().map((f) => f.path), ['Projects/House/plan.png']);
+  const pdf = new TextEncoder().encode('%PDF-1.4 hello');
+  const { id, path } = await v.addFile('Projects/House', 'plan.png', new Uint8Array([1]));
+  assert.equal(path, 'Projects/House/plan 1.png');
+  const doc = await v.addFile('Attachments', 'invoice.pdf', pdf);
+  assert.ok(root.list().includes('Attachments/invoice.pdf'));
   assert.deepEqual(await v.readFile(doc.id), pdf);
   await v.deleteFile(id);
-  assert.ok(root.list().includes('.trash/Proyectos/Casa/plano 1.png'));
-  await v.renameFolder('Adjuntos', 'Docs');
-  assert.equal(v.findFile('factura.pdf').path, 'Docs/factura.pdf');
+  assert.ok(root.list().includes('.trash/Projects/House/plan 1.png'));
+  await v.renameFolder('Attachments', 'Docs');
+  assert.equal(v.findFile('invoice.pdf').path, 'Docs/invoice.pdf');
   const all = await v.exportAll();
-  assert.ok(all.some((f) => f.path === 'Docs/factura.pdf' && f.data));
+  assert.ok(all.some((f) => f.path === 'Docs/invoice.pdf' && f.data));
   await v.deleteFolder('Docs');
-  assert.equal(v.findFile('factura.pdf'), null);
+  assert.equal(v.findFile('invoice.pdf'), null);
 });
 
-test('si el fichero cambió fuera (carpeta sincronizada), se guarda una copia', async () => {
+test('if the file changed outside (synced folder), a copy is kept', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
-  const id = v.findByTitle('Inicio').id;
+  const id = v.findByTitle('Home').id;
   await v.read(id);
-  root.put('Inicio.md', 'cambiado en el otro ordenador');
-  const res = await v.saveNote(id, 'cambiado aquí');
+  root.put('Home.md', 'changed on the other computer');
+  const res = await v.saveNote(id, 'changed here');
   assert.ok(res.conflict);
-  assert.equal(root.text('Inicio.md'), 'cambiado aquí');
-  assert.equal(root.text(`${res.conflict.path}.md`), 'cambiado en el otro ordenador');
-  assert.deepEqual(await v.saveNote(id, 'sin conflicto'), {});
+  assert.equal(root.text('Home.md'), 'changed here');
+  assert.equal(root.text(`${res.conflict.path}.md`), 'changed on the other computer');
+  assert.deepEqual(await v.saveNote(id, 'no conflict'), {});
 });
 
-test('historial en local: copias cada 10 minutos, las 50 últimas, y siguen a la nota al renombrar', async () => {
+test('local history: copies every 10 minutes, the last 50, and they follow the note on rename', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
   let t = Date.UTC(2026, 10, 13, 9, 0);
   v.now = () => t;
-  const id = v.findByTitle('Inicio').id;
+  const id = v.findByTitle('Home').id;
   await v.read(id);
-  await v.saveNote(id, 'v2'); // guarda copia de la versión anterior
+  await v.saveNote(id, 'v2'); // keeps a copy of the previous version
   t += 60 * 1000;
-  await v.saveNote(id, 'v3'); // menos de 10 minutos: sin copia nueva
+  await v.saveNote(id, 'v3'); // under 10 minutes: no new copy
   t += 11 * 60 * 1000;
   await v.saveNote(id, 'v4');
   const versions = await v.history(id);
-  assert.deepEqual(await Promise.all(versions.map((x) => v.readVersion(id, x.ref))), ['v4', 'v3', '# Inicio\n[[Reforma]]']);
-  assert.equal(v.notes().length, 3, 'el historial no aparece como notas');
-  await v.renameNote(id, 'Portada');
+  assert.deepEqual(await Promise.all(versions.map((x) => v.readVersion(id, x.ref))), ['v4', 'v3', '# Home\n[[Renovation]]']);
+  assert.equal(v.notes().length, 3, 'the history does not show up as notes');
+  await v.renameNote(id, 'Front page');
   assert.equal((await v.history(id)).length, 3);
-  await assert.rejects(v.readVersion(id, '../../Inicio.md'), /missing/);
+  await assert.rejects(v.readVersion(id, '../../Home.md'), /missing/);
   for (let i = 0; i < 55; i++) { t += 11 * 60 * 1000; await v.saveNote(id, `x${i}`); }
   assert.equal((await v.history(id)).length, 51);
   const again = await new LocalVault(root).load();
   assert.equal(again.notes().length, 3);
 });
 
-test('ajustes en local: un JSON en .snowlog que viaja con la carpeta', async () => {
+test('local settings: a JSON in .snowlog that travels with the folder', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
   assert.deepEqual(v.getSettings(), {});
-  await v.saveSettings({ dailyFolder: 'Bitácora' });
-  assert.match(root.text('.snowlog/ajustes.json'), /Bitácora/);
+  await v.saveSettings({ dailyFolder: 'Journal ñ' });
+  assert.match(root.text('.snowlog/settings.json'), /Journal ñ/);
   const again = await new LocalVault(root).load();
-  assert.deepEqual(again.getSettings(), { dailyFolder: 'Bitácora' });
+  assert.deepEqual(again.getSettings(), { dailyFolder: 'Journal ñ' });
   assert.ok(!again.index.folders.includes('.snowlog'));
 });
 
-test('detecta lo que cambia en la carpeta desde fuera, sin perder los ids', async () => {
+test('settings saved under the earlier name (.snowlog/ajustes.json) are still read', async () => {
+  const root = sampleFolder();
+  root.put('.snowlog/ajustes.json', '{ "dailyFolder": "Bitácora" }');
+  const v = await new LocalVault(root).load();
+  assert.deepEqual(v.getSettings(), { dailyFolder: 'Bitácora' });
+  // Saving writes the new name; from then on it is the one that counts.
+  await v.saveSettings({ dailyFolder: 'Journal' });
+  assert.match(root.text('.snowlog/settings.json'), /Journal/);
+  assert.deepEqual((await new LocalVault(root).load()).getSettings(), { dailyFolder: 'Journal' });
+  // If settings.json cannot be read, the legacy file is read instead.
+  root.put('.snowlog/settings.json', '{ broken');
+  assert.deepEqual((await new LocalVault(root).load()).getSettings(), { dailyFolder: 'Bitácora' });
+});
+
+test('detects what changes in the folder from outside, keeping the ids', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
-  const inicio = v.findByTitle('Inicio').id;
-  const reforma = v.findByTitle('Reforma').id;
-  await v.read(inicio);
-  const mine = await v.createNote('Mía', 'escrita aquí');
-  await v.saveNote(reforma, 'guardada aquí');
-  assert.deepEqual(await v.rescan(), { added: [], removed: [], changed: [] }, 'lo que escribimos nosotros no cuenta');
+  const home = v.findByTitle('Home').id;
+  const renovation = v.findByTitle('Renovation').id;
+  await v.read(home);
+  const mine = await v.createNote('Mine', 'written here');
+  await v.saveNote(renovation, 'saved here');
+  assert.deepEqual(await v.rescan(), { added: [], removed: [], changed: [] }, 'what we wrote ourselves does not count');
   await new Promise((r) => setTimeout(r, 5));
-  root.put('Inicio.md', 'cambiado con otro editor');
-  root.children.get('Inicio.md').mtime = Date.now();
-  root.put('Nueva de fuera.md', 'hola');
-  await root.removeEntry('Mía.md');
+  root.put('Home.md', 'changed with another editor');
+  root.children.get('Home.md').mtime = Date.now();
+  root.put('New from outside.md', 'hello');
+  await root.removeEntry('Mine.md');
   const res = await v.rescan();
-  assert.deepEqual(res.changed, [inicio]);
+  assert.deepEqual(res.changed, [home]);
   assert.deepEqual(res.removed, [mine]);
   assert.equal(res.added.length, 1);
-  assert.equal(v.index.notes[res.added[0]].path, 'Nueva de fuera');
-  assert.equal(await v.read(inicio), 'cambiado con otro editor');
-  assert.equal(v.findByTitle('Reforma').id, reforma, 'los ids se conservan');
+  assert.equal(v.index.notes[res.added[0]].path, 'New from outside');
+  assert.equal(await v.read(home), 'changed with another editor');
+  assert.equal(v.findByTitle('Renovation').id, renovation, 'the ids are kept');
 });
 
-test('cambios de fuera en otras líneas se juntan con los de aquí', async () => {
+test('outside changes on other lines are combined with the ones made here', async () => {
   const root = sampleFolder();
-  root.put('Lista.md', 'uno\ndos\ntres');
+  root.put('List.md', 'one\ntwo\nthree');
   const v = await new LocalVault(root).load();
-  const id = v.findByTitle('Lista').id;
+  const id = v.findByTitle('List').id;
   await v.read(id);
-  root.put('Lista.md', 'uno\ndos\ntres\ncuatro (de OneDrive)');
-  root.children.get('Lista.md').mtime = Date.now() + 5;
-  await v.rescan(); // la ve cambiada mientras aquí se sigue escribiendo
-  const res = await v.saveNote(id, 'UNO\ndos\ntres');
+  root.put('List.md', 'one\ntwo\nthree\nfour (from OneDrive)');
+  root.children.get('List.md').mtime = Date.now() + 5;
+  await v.rescan(); // sees it changed while typing goes on here
+  const res = await v.saveNote(id, 'ONE\ntwo\nthree');
   assert.equal(res.conflict, undefined);
-  assert.equal(res.merged, 'UNO\ndos\ntres\ncuatro (de OneDrive)');
-  assert.equal(root.text('Lista.md'), 'UNO\ndos\ntres\ncuatro (de OneDrive)');
+  assert.equal(res.merged, 'ONE\ntwo\nthree\nfour (from OneDrive)');
+  assert.equal(root.text('List.md'), 'ONE\ntwo\nthree\nfour (from OneDrive)');
 });
 
-test('dibujos en local: se reescriben y lo cambiado fuera se guarda como copia', async () => {
+test('local drawings: rewritten, and what changed outside is kept as a copy', async () => {
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
   const enc = (s) => new TextEncoder().encode(s);
-  const { id } = await v.addFile('Dibujos', 'esquema.sketch', enc('uno'));
-  await v.saveFile(id, enc('dos'));
-  assert.equal(root.text('Dibujos/esquema.sketch'), 'dos');
-  root.put('Dibujos/esquema.sketch', 'cambiado fuera');
-  const res = await v.saveFile(id, enc('tres'));
+  const { id } = await v.addFile('Drawings', 'sketch.sketch', enc('one'));
+  await v.saveFile(id, enc('two'));
+  assert.equal(root.text('Drawings/sketch.sketch'), 'two');
+  root.put('Drawings/sketch.sketch', 'changed outside');
+  const res = await v.saveFile(id, enc('three'));
   assert.ok(res.conflict);
-  assert.equal(root.text('Dibujos/esquema.sketch'), 'tres');
-  assert.equal(root.text(res.conflict.path), 'cambiado fuera');
+  assert.equal(root.text('Drawings/sketch.sketch'), 'three');
+  assert.equal(root.text(res.conflict.path), 'changed outside');
 });
 
-test('dibujos en local: lo cambiado fuera en otros elementos se junta', async () => {
-  const { mergeScenes, parseScene, serializeScene, emptyScene } = await import('../public/js/sketch-escena.js');
+test('local drawings: outside changes to other elements are combined', async () => {
+  const { mergeScenes, parseScene, serializeScene, emptyScene } = await import('../public/js/sketch-scene.js');
   const enc = (scene) => new TextEncoder().encode(serializeScene(scene));
   const dec = (b) => parseScene(new TextDecoder().decode(b));
   const merge = (b, m, t) => {
@@ -226,13 +240,13 @@ test('dibujos en local: lo cambiado fuera en otros elementos se junta', async ()
   const root = sampleFolder();
   const v = await new LocalVault(root).load();
   const base = { ...emptyScene(), elements: [box('a', 0)] };
-  const { id } = await v.addFile('Dibujos', 'esquema.sketch', enc(base));
-  root.put('Dibujos/esquema.sketch', serializeScene({ ...base, elements: [box('a', 0), box('fuera', 50)] }));
+  const { id } = await v.addFile('Drawings', 'sketch.sketch', enc(base));
+  root.put('Drawings/sketch.sketch', serializeScene({ ...base, elements: [box('a', 0), box('outside', 50)] }));
   const res = await v.saveFile(id, enc({ ...base, elements: [box('a', 9)] }), { merge });
   assert.equal(res.conflict, undefined);
-  assert.deepEqual(dec(new TextEncoder().encode(root.text('Dibujos/esquema.sketch'))).elements.map((e) => [e.id, e.x]), [['a', 9], ['fuera', 50]]);
-  // Si no se puede juntar (no es un dibujo), copia como antes.
-  root.put('Dibujos/esquema.sketch', 'esto no es json');
+  assert.deepEqual(dec(new TextEncoder().encode(root.text('Drawings/sketch.sketch'))).elements.map((e) => [e.id, e.x]), [['a', 9], ['outside', 50]]);
+  // If it cannot be combined (not a drawing), it copies as before.
+  root.put('Drawings/sketch.sketch', 'this is not json');
   const res2 = await v.saveFile(id, enc(base), { merge });
   assert.ok(res2.conflict);
 });

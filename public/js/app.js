@@ -1,4 +1,4 @@
-// Snowlog: interfaz principal.
+// Snowlog: main interface.
 import { CONFIG } from './config.js';
 import * as C from './crypto.js';
 import * as Auth from './auth.js';
@@ -16,17 +16,17 @@ import { makeBackup, openBackup, parseBackup } from './backup.js';
 import { openCache } from './cache.js';
 import * as K from './kanban.js';
 import { createEditor as createSketch } from './sketch-editor.js';
-import { emptyScene as emptySketch, parseScene as parseSketch, serializeScene as serializeSketch, mergeScenes as mergeSketch } from './sketch-escena.js';
-import { toSvgElement as sketchSvg } from './sketch-pintar.js';
+import { emptyScene as emptySketch, parseScene as parseSketch, serializeScene as serializeSketch, mergeScenes as mergeSketch } from './sketch-scene.js';
+import { toSvgElement as sketchSvg } from './sketch-render.js';
 import { merge3 } from './merge.js';
 import { openKvDir, browserBackend } from './kvdir.js';
 import { buildGraph, localGraph, initLayout, step as graphStep } from './graph.js';
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
-import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate } from './templates.js';
+import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate, workspaceSettings } from './templates.js';
 
 // ---------------------------------------------------------------------------
-// Iconos (trazos propios, estilo línea)
+// Icons (our own line strokes)
 const ICONS = {
   files: 'M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z',
   search: 'M17 11a6 6 0 1 1-12 0a6 6 0 1 1 12 0z M20 20l-4.5-4.5',
@@ -65,20 +65,20 @@ const ICONS = {
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
-// Trusted Types: la CSP solo deja meter HTML a través de esta política. Solo recibe HTML que ya
-// se ha escapado (markdown.js, editor.js, query.js) o iconos propios; nunca texto de una nota en crudo.
+// Trusted Types: the CSP only lets HTML in through this policy. It only receives HTML that has
+// already been escaped (markdown.js, editor.js, query.js) or our own icons; never raw note text.
 const TT = globalThis.trustedTypes?.createPolicy('snowlog', {
   createHTML: (s) => s,
-  // El único script que se carga a mano es el service worker.
+  // The only script loaded by hand is the service worker.
   createScriptURL: (u) => {
-    if (u !== 'sw.js') throw new Error('script_no_permitido');
+    if (u !== 'sw.js') throw new Error('script_not_allowed');
     return u;
   },
 });
 const trusted = (s) => (TT ? TT.createHTML(s) : s);
 
 const $ = (id) => document.getElementById(id);
-// Dibujo abierto (si hay uno) y su guardado pendiente.
+// The open drawing (if any) and its pending save.
 const D = { id: null, editor: null, timer: 0, dirty: false, saving: Promise.resolve() };
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -94,7 +94,7 @@ function h(tag, attrs = {}, ...children) {
 }
 
 // ---------------------------------------------------------------------------
-// Estado
+// State
 const S = {
   cred: null,
   dek: null,
@@ -108,21 +108,21 @@ const S = {
   saving: Promise.resolve(),
   expanded: new Set(),
   lastActivity: Date.now(),
-  local: false, // true = notas en una carpeta local o en el navegador (sin GitHub)
-  notesIdx: new Map(), // id -> nota analizada (solo en memoria)
-  drawText: new Map(), // id de dibujo -> { ver, note } con su texto, para buscar (solo en memoria)
+  local: false, // true = notes in a local folder or in the browser (no GitHub)
+  notesIdx: new Map(), // id -> parsed note (memory only)
+  drawText: new Map(), // drawing id -> { ver, note } with its text, for search (memory only)
   indexReady: null,
   calMonth: null,
 };
-// Ajustes vigentes: los de config.js como base y encima los de la bóveda («Ajustes» en la app).
+// Settings in force: config.js as the base, the vault's own ("Settings" in the app) on top.
 const DEFAULTS = { ...(CONFIG.workspace || {}), lockAfterMinutes: CONFIG.lockAfterMinutes, backupReminderDays: CONFIG.backupReminderDays };
 const WS = { ...DEFAULTS };
 function applySettings() {
   for (const k of Object.keys(WS)) delete WS[k];
-  Object.assign(WS, DEFAULTS, S.vault?.getSettings?.() || {});
+  Object.assign(WS, workspaceSettings(DEFAULTS, S.vault?.getSettings?.() || {}, S.vault?.index));
 }
 
-// Tema de este dispositivo: automático (el del sistema), claro u oscuro.
+// This device's theme: automatic (the system's), light or dark.
 function applyTheme(theme = (() => { try { return localStorage.getItem('snowlog.theme') || 'auto'; } catch { return 'auto'; } })()) {
   if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
   else delete document.documentElement.dataset.theme;
@@ -132,42 +132,42 @@ function applyTheme(theme = (() => { try { return localStorage.getItem('snowlog.
 const isMobile = () => matchMedia('(max-width: 760px)').matches;
 
 // ---------------------------------------------------------------------------
-// Mensajes de error legibles
+// Readable error messages
 function errText(e) {
   const m = e?.message || '';
   const map = {
-    exists: 'Ya existe una nota o carpeta con ese nombre.',
-    empty_name: 'El nombre no puede estar vacío.',
-    bad_chars: 'El nombre no puede contener \\ : * ? " < > | # ^ [ ]',
-    name_too_long: 'El nombre es demasiado largo.',
-    into_itself: 'No puedes mover una carpeta dentro de sí misma.',
-    bad_secret: 'No es correcto. Revísalo e inténtalo de nuevo.',
-    bad_state: 'El inicio de sesión no es válido. Vuelve a intentarlo.',
-    oauth_denied: 'Has cancelado el acceso en GitHub.',
-    no_worker: 'Falta configurar el servicio de login (authWorker).',
-    session_expired: 'La sesión de GitHub ha caducado. Vuelve a entrar.',
-    vault_exists: 'Ya hay una bóveda en el repo.',
-    key_changed: 'La clave de cifrado se ha cambiado en otro dispositivo. Vuelve a desbloquear con tu frase de paso.',
-    pending: 'Hay cambios sin subir. Espera a tener conexión y a que se suban antes de cambiar la clave.',
-    busy: 'Otro dispositivo ha guardado mientras tanto. No se ha cambiado nada: vuelve a intentarlo.',
-    offline: 'Sin conexión: esto se podrá hacer cuando vuelva la red. Lo que escribes en las notas sí se guarda.',
-    bad_backup: 'Ese fichero no es una copia de seguridad de Snowlog o está dañado.',
-    bad_zip: 'El contenido de la copia está dañado.',
-    bad_file: 'Ese fichero no es un dibujo de sketch ni de Excalidraw.',
-    zip_compressed: 'Este .zip está comprimido y no se puede leer aquí. Descomprímelo y usa «Importar carpeta».',
-    bad_type: 'Solo se pueden adjuntar imágenes (png, jpg, gif, webp, avif, bmp) y PDF.',
-    too_big: 'El adjunto es demasiado grande (máximo 20 MB).',
+    exists: 'A note or folder with that name already exists.',
+    empty_name: 'The name cannot be empty.',
+    bad_chars: 'The name cannot contain \\ : * ? " < > | # ^ [ ]',
+    name_too_long: 'The name is too long.',
+    into_itself: 'You cannot move a folder into itself.',
+    bad_secret: 'That is not right. Check it and try again.',
+    bad_state: 'The sign-in is not valid. Try again.',
+    oauth_denied: 'You cancelled the access on GitHub.',
+    no_worker: 'The sign-in service (authWorker) is not configured.',
+    session_expired: 'The GitHub session has expired. Sign in again.',
+    vault_exists: 'There is already a vault in the repository.',
+    key_changed: 'The encryption key was changed on another device. Unlock again with your passphrase.',
+    pending: 'There are changes not uploaded yet. Wait until you are online and they are uploaded before changing the key.',
+    busy: 'Another device saved in the meantime. Nothing was changed: try again.',
+    offline: 'Offline: this can be done when the network is back. What you write in your notes is still saved.',
+    bad_backup: 'That file is not a Snowlog backup, or it is damaged.',
+    bad_zip: 'The backup content is damaged.',
+    bad_file: 'That file is not a sketch or Excalidraw drawing.',
+    zip_compressed: 'This .zip is compressed and cannot be read here. Unzip it and use “Import folder”.',
+    bad_type: 'Only images (png, jpg, gif, webp, avif, bmp) and PDFs can be attached.',
+    too_big: 'The attachment is too large (20 MB at most).',
   };
   if (map[m]) return map[m];
-  if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') return 'El navegador no ha dado permiso para usar la carpeta.';
-  if (e?.name === 'NotFoundError') return 'No encuentro el fichero o la carpeta. ¿Se ha movido o borrado fuera de Snowlog?';
-  if (e?.name === 'QuotaExceededError') return 'No queda espacio en el almacenamiento del navegador.';
-  if (e?.status === 401) return 'GitHub ha rechazado el acceso: la sesión o el token han caducado.';
-  if (e?.status === 403) return 'GitHub deniega el permiso. Revisa que el acceso incluya el repo de notas con permiso de escritura.';
-  if (e?.status === 404) return `No encuentro ${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}. Comprueba que existe y que tienes acceso.`;
-  if (e?.status === 409) return 'Otro dispositivo ha guardado a la vez. Inténtalo de nuevo.';
-  if (e instanceof TypeError) return 'No hay conexión con GitHub.';
-  return m || 'Ha ocurrido un error.';
+  if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') return 'The browser did not give permission to use the folder.';
+  if (e?.name === 'NotFoundError') return 'The file or folder cannot be found. Was it moved or deleted outside Snowlog?';
+  if (e?.name === 'QuotaExceededError') return 'There is no space left in the browser storage.';
+  if (e?.status === 401) return 'GitHub refused access: the session or the token has expired.';
+  if (e?.status === 403) return 'GitHub denies permission. Check that the access includes the notes repository with write permission.';
+  if (e?.status === 404) return `${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo} cannot be found. Check that it exists and that you have access.`;
+  if (e?.status === 409) return 'Another device saved at the same time. Try again.';
+  if (e instanceof TypeError) return 'No connection to GitHub.';
+  return m || 'Something went wrong.';
 }
 
 function notice(text, kind = '') {
@@ -177,7 +177,7 @@ function notice(text, kind = '') {
 }
 
 // ---------------------------------------------------------------------------
-// Pantallas de acceso
+// Sign-in screens
 function lockScreen(...children) {
   $('app').hidden = true;
   $('lock').hidden = false;
@@ -212,8 +212,8 @@ function showLogin(message) {
   const err = errorLine();
   const tokenInput = h('input', { class: 'input', type: 'password', id: 'pat', autocomplete: 'off', placeholder: 'github_pat_…' });
   const tokenForm = h('form', { hidden: true },
-    h('div', { class: 'field' }, h('label', { for: 'pat' }, 'Token personal (fine-grained, solo el repo de notas)'), tokenInput),
-    h('button', { class: 'btn primary', type: 'submit' }, 'Continuar'));
+    h('div', { class: 'field' }, h('label', { for: 'pat' }, 'Personal token (fine-grained, only the notes repository)'), tokenInput),
+    h('button', { class: 'btn primary', type: 'submit' }, 'Continue'));
   tokenForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     if (!tokenInput.value.trim()) return;
@@ -222,28 +222,28 @@ function showLogin(message) {
     await afterAuth(err, tokenForm.querySelector('button'));
   });
 
-  const githubBtn = h('button', { class: 'btn primary', type: 'button', onclick: () => Auth.startOAuth() }, 'Entrar con GitHub');
+  const githubBtn = h('button', { class: 'btn primary', type: 'button', onclick: () => Auth.startOAuth() }, 'Sign in with GitHub');
   const oauthHint = Auth.oauthAvailable() ? null
-    : h('p', { class: 'hint' }, 'El login con GitHub aún no está configurado. De momento, entra con un token personal.');
+    : h('p', { class: 'hint' }, 'Sign-in with GitHub is not set up yet. For now, use a personal token.');
   if (oauthHint) githubBtn.disabled = true;
 
   lockScreen(
-    h('h1', {}, 'Tu cuaderno cifrado'),
-    h('p', {}, message || 'Entra con tu cuenta de GitHub para abrir tus notas.'),
+    h('h1', {}, 'Your encrypted notebook'),
+    h('p', {}, message || 'Sign in with your GitHub account to open your notes.'),
     githubBtn,
     oauthHint,
     h('div', { class: 'lock-links' },
-      h('button', { class: 'link-btn', type: 'button', onclick: () => { tokenForm.hidden = false; tokenInput.focus(); } }, 'Usar un token personal'),
-      h('button', { class: 'link-btn', type: 'button', onclick: () => showLocalStart() }, 'Usar notas de este ordenador, sin GitHub'),
-      h('a', { class: 'link-btn', href: 'snowlog-portable.html', download: 'snowlog-portable.html' }, 'Descargar la versión portátil')),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => { tokenForm.hidden = false; tokenInput.focus(); } }, 'Use a personal token'),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => showLocalStart() }, 'Use notes on this computer, without GitHub'),
+      h('a', { class: 'link-btn', href: 'snowlog-portable.html', download: 'snowlog-portable.html' }, 'Download the portable version')),
     tokenForm,
     err,
   );
 }
 
 // ---------------------------------------------------------------------------
-// Modo local: carpeta del ordenador o almacenamiento del navegador (sin red)
-// Caché cifrada de las notas del repo configurado (solo texto cifrado, como en GitHub).
+// Local mode: a folder on the computer or the browser's storage (no network)
+// Encrypted cache of the configured repository's notes (ciphertext only, as on GitHub).
 const noteCache = () => openCache(`${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}`);
 
 const IDB_NAME = 'snowlog';
@@ -265,7 +265,7 @@ const recallHandle = () => idb('readonly', (st) => st.get('localHandle')).catch(
 const forgetHandle = () => idb('readwrite', (st) => st.delete('localHandle')).catch(() => {});
 
 const canPickFolder = () => typeof window.showDirectoryPicker === 'function';
-// El almacenamiento del navegador no existe para ficheros abiertos desde disco (file://).
+// Browser storage does not exist for files opened from disk (file://).
 async function canUseBrowser() {
   if (!(navigator.storage && navigator.storage.getDirectory)) return false;
   try {
@@ -281,10 +281,10 @@ async function showLocalStart(message) {
   if (message) showError(err, message);
   const remembered = canPickFolder() ? await recallHandle() : null;
   const browserOk = await canUseBrowser();
-  // Firefox, Safari (y Chrome abriendo el fichero desde el disco): sin carpetas ni OPFS, las notas
-  // pueden guardarse igualmente dentro del navegador (IndexedDB o localStorage).
+  // Firefox, Safari (and Chrome opening the file from disk): without folders or OPFS, notes can
+  // still be stored inside the browser (IndexedDB or localStorage).
   const kv = browserOk ? null : await browserBackend();
-  const inside = kv && h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, 'Guardar dentro del navegador');
+  const inside = kv && h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, 'Store inside the browser');
   if (inside) {
     inside.addEventListener('click', async () => {
       try {
@@ -296,26 +296,26 @@ async function showLocalStart(message) {
   }
   if (!canPickFolder() && !browserOk && inside) {
     lockScreen(
-      h('h1', {}, 'Tus notas, en este navegador'),
-      h('p', {}, 'Este navegador no deja elegir carpetas del disco (eso solo lo hacen Chrome y Edge). Las notas se guardan dentro del navegador, en este ordenador, y siguen aquí la próxima vez que abras este fichero.'),
+      h('h1', {}, 'Your notes, in this browser'),
+      h('p', {}, 'This browser does not let you pick folders on disk (only Chrome and Edge do). Notes are stored inside the browser, on this computer, and are still here the next time you open this file.'),
       inside,
-      h('p', { class: 'hint' }, 'Para llevarlas a otro sitio o tener copia, usa «Copia de seguridad (.zip)» en el menú ⋯. Si borras los datos del navegador, se borran también las notas.'),
+      h('p', { class: 'hint' }, 'To take them elsewhere or keep a copy, use “Backup (.zip)” in the ⋯ menu. If you clear the browser data, the notes are cleared too.'),
       CONFIG.mode === 'portable' ? null
-        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Volver al acceso con GitHub')),
+        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Back to signing in with GitHub')),
       err,
     );
     return;
   }
   if (!canPickFolder() && !browserOk) {
     lockScreen(
-      h('h1', {}, 'Abre Snowlog con Chrome o Edge'),
-      h('p', {}, 'Este navegador no permite guardar notas desde un fichero abierto en el disco. Abre snowlog-portable.html con Google Chrome o Microsoft Edge (clic derecho → Abrir con).'),
+      h('h1', {}, 'Open Snowlog with Chrome or Edge'),
+      h('p', {}, 'This browser cannot store notes from a file opened from disk. Open snowlog-portable.html with Google Chrome or Microsoft Edge (right click → Open with).'),
       CONFIG.mode === 'portable' ? null
-        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Volver al acceso con GitHub')),
+        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Back to signing in with GitHub')),
     );
     return;
   }
-  const pick = h('button', { class: 'btn primary', type: 'button' }, remembered ? 'Elegir otra carpeta' : 'Abrir una carpeta');
+  const pick = h('button', { class: 'btn primary', type: 'button' }, remembered ? 'Choose another folder' : 'Open a folder');
   pick.addEventListener('click', async () => {
     try {
       const handle = await window.showDirectoryPicker({ id: 'snowlog', mode: 'readwrite' });
@@ -325,7 +325,7 @@ async function showLocalStart(message) {
       if (e?.name !== 'AbortError') showError(err, e);
     }
   });
-  const again = remembered && h('button', { class: 'btn primary', type: 'button' }, `Continuar con «${remembered.name}»`);
+  const again = remembered && h('button', { class: 'btn primary', type: 'button' }, `Continue with “${remembered.name}”`);
   if (again) {
     pick.classList.remove('primary');
     again.addEventListener('click', async () => {
@@ -338,7 +338,7 @@ async function showLocalStart(message) {
       }
     });
   }
-  const browser = h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, 'Guardar en este navegador');
+  const browser = h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, 'Store in this browser');
   browser.addEventListener('click', async () => {
     try {
       await openLocal(await navigator.storage.getDirectory(), 'browser', browser);
@@ -347,24 +347,24 @@ async function showLocalStart(message) {
     }
   });
   lockScreen(
-    h('h1', {}, 'Tus notas, en este ordenador'),
+    h('h1', {}, 'Your notes, on this computer'),
     h('p', {}, canPickFolder()
-      ? 'Elige una carpeta: cada nota es un fichero .md normal, como en Obsidian. Nada sale de tu ordenador.'
-      : 'Este navegador no deja elegir carpetas (usa Chrome o Edge para eso). Puedes guardar las notas dentro del navegador y exportarlas en .zip cuando quieras.'),
+      ? 'Choose a folder: each note is a plain .md file. Nothing leaves your computer.'
+      : 'This browser does not let you pick folders (use Chrome or Edge for that). You can store notes inside the browser and export them as a .zip whenever you want.'),
     again || null,
     canPickFolder() ? pick : null,
     browserOk ? browser : inside,
-    h('p', { class: 'hint' }, 'Sin internet y sin instalar nada. Las notas no se cifran: quedan protegidas por tu sesión del ordenador.'),
+    h('p', { class: 'hint' }, 'No internet and nothing to install. Notes are not encrypted: they are protected by your computer account.'),
     CONFIG.mode === 'portable' ? null
-      : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Volver al acceso con GitHub')),
+      : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Back to signing in with GitHub')),
     err,
   );
 }
 
 async function openLocal(handle, kind, button) {
-  const done = button ? busy(button, 'Abriendo…') : () => {};
+  const done = button ? busy(button, 'Opening…') : () => {};
   try {
-    const vault = await new LocalVault(handle, { kind, label: kind === 'folder' ? handle.name : 'este navegador' }).load();
+    const vault = await new LocalVault(handle, { kind, label: kind === 'folder' ? handle.name : 'this browser' }).load();
     S.local = true;
     S.vault = vault;
     S.dek = null;
@@ -383,10 +383,10 @@ async function reloadLocal() {
   S.vault = await new LocalVault(root, { kind, label }).load();
   S.current = null;
   enterApp();
-  notice('Carpeta recargada.');
+  notice('Folder reloaded.');
 }
 
-// Todas las notas y adjuntos, para exportar o copiar: [{ path, text }] y [{ path, data }].
+// Every note and attachment, to export or copy: [{ path, text }] and [{ path, data }].
 async function collectFiles() {
   const files = [];
   for (const n of S.vault.notes()) files.push({ path: `${n.path}.md`, text: await S.vault.read(n.id) });
@@ -402,8 +402,8 @@ function download(bytes, name, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 
-// --- Copias de seguridad ---
-// Solo se recuerda la fecha de la última copia (nada secreto) para avisar si pasa mucho tiempo.
+// --- Backups ---
+// Only the date of the last backup is remembered (nothing secret), to warn if too much time passes.
 const backupKey = () => `snowlog.backup.${S.local ? 'local' : `${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}`}`;
 function backupState() {
   try {
@@ -413,7 +413,7 @@ function backupState() {
   }
 }
 function saveBackupState(st) {
-  try { localStorage.setItem(backupKey(), JSON.stringify(st)); } catch { /* sin almacenamiento */ }
+  try { localStorage.setItem(backupKey(), JSON.stringify(st)); } catch { /* no storage */ }
 }
 
 function backupReminder() {
@@ -425,27 +425,27 @@ function backupReminder() {
   const from = st.last || st.since || now;
   if (now - from < days * 86400000 || (st.snoozed && now - st.snoozed < 86400000)) return;
   const n = h('div', { class: 'notice' },
-    st.last ? `Tu última copia de seguridad es de hace ${Math.floor((now - st.last) / 86400000)} días. ` : 'Aún no has hecho ninguna copia de seguridad. ',
-    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); backupNow(); } }, 'Hacer copia ahora'),
+    st.last ? `Your last backup was ${Math.floor((now - st.last) / 86400000)} days ago. ` : 'You have not made a backup yet. ',
+    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); backupNow(); } }, 'Back up now'),
     ' · ',
-    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); saveBackupState({ ...backupState(), snoozed: Date.now() }); } }, 'Mañana'));
+    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); saveBackupState({ ...backupState(), snoozed: Date.now() }); } }, 'Tomorrow'));
   $('notices').append(n);
   setTimeout(() => n.remove(), 30000);
 }
 
-// Online: fichero .snowlog cifrado (se abre con la frase o el código). Local: .zip con los .md.
+// Online: an encrypted .snowlog file (opens with the passphrase or the code). Local: a .zip with the .md files.
 async function backupNow() {
   if (!S.vault) return;
   if (S.local) return exportZip();
   await saveNow();
   setStatus('');
-  $('st-sync').textContent = 'Preparando la copia cifrada…';
+  $('st-sync').textContent = 'Preparing the encrypted backup…';
   try {
     const files = await collectFiles();
     const vaultFile = (await Vault.fetchVaultFile(S.repo).catch(() => null)) || S.vaultFile;
-    download(await makeBackup(vaultFile, S.dek, files), `snowlog-copia-${isoDate(new Date())}.snowlog`, 'application/octet-stream');
+    download(await makeBackup(vaultFile, S.dek, files), `snowlog-backup-${isoDate(new Date())}.snowlog`, 'application/octet-stream');
     saveBackupState({ ...backupState(), last: Date.now() });
-    notice(`Copia cifrada descargada: ${files.length} ficheros. Se abre con tu frase de paso o tu código de recuperación.`);
+    notice(`Encrypted backup downloaded: ${files.length} files. It opens with your passphrase or your recovery code.`);
   } catch (e) {
     notice(errText(e), 'error');
   } finally {
@@ -453,8 +453,8 @@ async function backupNow() {
   }
 }
 
-// Abre una copia para importarla: .snowlog (cifrada, de la versión online) o .zip (de la portátil o
-// de «Exportar sin cifrar»). Así se pasan las notas de una versión a la otra.
+// Opens a backup to import it: .snowlog (encrypted, from the online version) or .zip (from the portable
+// version or from "Export unencrypted"). This is how notes move from one version to the other.
 async function restoreBackup(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
@@ -476,21 +476,21 @@ async function restoreBackup(file) {
     }
     created = meta.created;
     const when = dateFmt.format(new Date(meta.created));
-    opened = await secretForm('Abrir copia de seguridad',
-      `Copia del ${when} con ${meta.notes} nota${meta.notes === 1 ? '' : 's'}. Se abre con la frase de paso que tenías entonces o con el código de recuperación.`,
-      [passField('bk0', 'Frase de paso o código de recuperación')],
-      'Abrir',
+    opened = await secretForm('Open backup',
+      `Backup from ${when} with ${meta.notes} note${meta.notes === 1 ? '' : 's'}. It opens with the passphrase you had then or with the recovery code.`,
+      [passField('bk0', 'Passphrase or recovery code')],
+      'Open',
       async ([secret]) => openBackup(bytes, secret));
     if (!opened) return;
   }
   const hiddenPath = (p) => p.split('/').some((part) => part.startsWith('.'));
   const count = opened.files.filter((f) => /\.md$/i.test(f.path) && !hiddenPath(f.path)).length;
-  if (!opened.files.length) return notice('La copia está vacía.', 'error');
-  const folder = `Copia ${isoDate(new Date(created))}`;
-  const action = await pickModal(`${count} nota${count === 1 ? '' : 's'} en la copia. ¿Qué hacemos?`, [
-    { label: `Importarlas en la carpeta «${folder}»`, sub: 'Tus notas actuales no se tocan', value: 'folder' },
-    { label: 'Importarlas tal cual, con sus carpetas', sub: 'Para pasar todo de una versión a otra. Si un nombre ya existe, se añade «(importada)»', value: 'root' },
-    !isZip && { label: 'Descargarla como .zip sin cifrar', sub: 'Para abrirla con cualquier editor', value: 'zip' },
+  if (!opened.files.length) return notice('The backup is empty.', 'error');
+  const folder = `Backup ${isoDate(new Date(created))}`;
+  const action = await pickModal(`${count} note${count === 1 ? '' : 's'} in the backup. What should we do?`, [
+    { label: `Import them into the “${folder}” folder`, sub: 'Your current notes are not touched', value: 'folder' },
+    { label: 'Import them as they are, with their folders', sub: 'To move everything from one version to the other. If a name already exists, “(imported)” is added', value: 'root' },
+    !isZip && { label: 'Download it as an unencrypted .zip', sub: 'To open it with any editor', value: 'zip' },
   ].filter(Boolean));
   if (action === 'zip') return download(opened.zip, `${folder}.zip`, 'application/zip');
   if (action !== 'folder' && action !== 'root') return;
@@ -504,8 +504,8 @@ async function restoreBackup(file) {
   const others = opened.files.filter((f) => !/\.md$/i.test(f.path) && isAttachmentName(f.path) && !hiddenPath(f.path));
   const st = $('st-sync');
   try {
-    st.textContent = `Importando 0/${notes.length}…`;
-    const result = await S.vault.importNotes(notes, { message: 'restaurar copia', onProgress: (d, t) => { S.lastActivity = Date.now(); st.textContent = `Importando ${d}/${t}…`; } });
+    st.textContent = `Importing 0/${notes.length}…`;
+    const result = await S.vault.importNotes(notes, { message: 'restore backup', onProgress: (d, t) => { S.lastActivity = Date.now(); st.textContent = `Importing ${d}/${t}…`; } });
     let skipped = 0;
     for (const f of others) {
       try {
@@ -515,10 +515,10 @@ async function restoreBackup(file) {
     if (target) S.expanded.add(target);
     renderTree();
     syncIndex();
-    notice(`Copia importada${target ? ` en «${target}»` : ''}: ${result.length} notas${others.length ? ` y ${others.length - skipped} adjuntos` : ''}.`);
+    notice(`Backup imported${target ? ` into “${target}”` : ''}: ${result.length} notes${others.length ? ` and ${others.length - skipped} attachments` : ''}.`);
   } catch (e) {
     renderTree();
-    notice(`La importación se ha detenido: ${errText(e)}. Lo ya importado se conserva.`, 'error');
+    notice(`The import stopped: ${errText(e)}. What was already imported is kept.`, 'error');
   } finally {
     st.textContent = '';
   }
@@ -527,18 +527,18 @@ async function restoreBackup(file) {
 async function exportZip() {
   if (!S.vault) return;
   if (!S.local) {
-    const ok = await confirmModal('Exportar copia sin cifrar',
-      'La copia .zip tendrá todas tus notas en claro. Guárdala en un sitio seguro.', 'Exportar', false);
+    const ok = await confirmModal('Export unencrypted copy',
+      'The .zip will hold all your notes in plaintext. Keep it somewhere safe.', 'Export', false);
     if (!ok) return;
   }
   await saveNow();
   setStatus('');
-  $('st-sync').textContent = 'Preparando la copia…';
+  $('st-sync').textContent = 'Preparing the copy…';
   try {
     const files = await collectFiles();
     download(makeZip(files), `snowlog-${isoDate(new Date())}.zip`, 'application/zip');
     if (S.local) saveBackupState({ ...backupState(), last: Date.now() });
-    notice(`Copia exportada: ${files.length} ficheros.`);
+    notice(`Copy exported: ${files.length} files.`);
   } catch (e) {
     notice(errText(e), 'error');
   } finally {
@@ -546,9 +546,9 @@ async function exportZip() {
   }
 }
 
-// Tras tener credenciales: comprobar el repo y abrir o crear la bóveda.
+// Once there are credentials: check the repository and open or create the vault.
 async function afterAuth(errEl, button) {
-  const done = button ? busy(button, 'Conectando…') : () => {};
+  const done = button ? busy(button, 'Connecting…') : () => {};
   try {
     S.repo = makeRepo();
     await S.repo.check();
@@ -595,15 +595,15 @@ function passField(id, label, autocomplete = 'current-password') {
 
 function showCreate() {
   const err = errorLine();
-  const [f1, p1] = passField('p1', 'Frase de paso (mínimo 12 caracteres)', 'new-password');
-  const [f2, p2] = passField('p2', 'Repite la frase de paso', 'new-password');
-  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Crear bóveda cifrada');
+  const [f1, p1] = passField('p1', 'Passphrase (at least 12 characters)', 'new-password');
+  const [f2, p2] = passField('p2', 'Repeat the passphrase', 'new-password');
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Create encrypted vault');
   const form = h('form', {}, f1, f2, btn, err);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    if (p1.value.length < 12) return showError(err, 'Usa al menos 12 caracteres. Una frase de varias palabras es lo mejor.');
-    if (p1.value !== p2.value) return showError(err, 'Las dos frases no coinciden.');
-    const done = busy(btn, 'Cifrando y creando…');
+    if (p1.value.length < 12) return showError(err, 'Use at least 12 characters. A phrase of several words is best.');
+    if (p1.value !== p2.value) return showError(err, 'The two passphrases do not match.');
+    const done = busy(btn, 'Encrypting and creating…');
     try {
       const { vault, vaultFile, recoveryCode } = await Vault.create(S.repo, p1.value, CONFIG.kdfIterations);
       p1.value = '';
@@ -621,21 +621,21 @@ function showCreate() {
     }
   });
   lockScreen(
-    h('h1', {}, 'Crea tu bóveda'),
-    h('p', {}, 'Tus notas se cifran en este dispositivo con esta frase antes de subir a GitHub. Nunca sale de aquí: si la pierdes, solo el código de recuperación podrá abrir tus notas.'),
+    h('h1', {}, 'Create your vault'),
+    h('p', {}, 'Your notes are encrypted on this device with this passphrase before they go up to GitHub. It never leaves this device: if you lose it, only the recovery code can open your notes.'),
     form,
   );
 }
 
 function showRecoveryCode(code) {
   const check = h('input', { type: 'checkbox', id: 'saved' });
-  const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => enterApp() }, 'Entrar en Snowlog');
+  const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => enterApp() }, 'Enter Snowlog');
   check.addEventListener('change', () => { btn.disabled = !check.checked; });
   lockScreen(
-    h('h1', {}, 'Guarda tu código de recuperación'),
-    h('p', {}, 'Es la única forma de recuperar tus notas si olvidas la frase de paso. Apúntalo en papel y guárdalo en un sitio seguro. No se volverá a mostrar.'),
+    h('h1', {}, 'Save your recovery code'),
+    h('p', {}, 'It is the only way to recover your notes if you forget the passphrase. Write it on paper and keep it somewhere safe. It will not be shown again.'),
     h('div', { class: 'recovery-code' }, code),
-    h('label', { class: 'check', for: 'saved' }, check, 'Lo he guardado en un sitio seguro'),
+    h('label', { class: 'check', for: 'saved' }, check, 'I have kept it somewhere safe'),
     btn,
   );
 }
@@ -643,12 +643,12 @@ function showRecoveryCode(code) {
 function showUnlock(vaultFile, { fresh = false, message = '' } = {}) {
   const err = errorLine();
   if (message) showError(err, message);
-  const [f1, p1] = passField('pp', 'Frase de paso');
-  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Desbloquear');
+  const [f1, p1] = passField('pp', 'Passphrase');
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Unlock');
   const form = h('form', {}, f1, btn, err);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const done = busy(btn, 'Descifrando…');
+    const done = busy(btn, 'Decrypting…');
     try {
       const pass = p1.value;
       S.dek = await C.unlockVault(vaultFile, pass);
@@ -662,29 +662,29 @@ function showUnlock(vaultFile, { fresh = false, message = '' } = {}) {
     }
   });
   lockScreen(
-    h('h1', {}, 'Desbloquea tus notas'),
-    h('p', {}, `Bóveda en ${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}.`),
+    h('h1', {}, 'Unlock your notes'),
+    h('p', {}, `Vault in ${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}.`),
     form,
     h('div', { class: 'lock-links' },
-      h('button', { class: 'link-btn', type: 'button', onclick: () => showRecover(vaultFile, fresh) }, 'He olvidado la frase de paso'),
-      h('button', { class: 'link-btn', type: 'button', onclick: () => forgetAndLogin() }, 'Usar otra cuenta u olvidar este dispositivo')),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => showRecover(vaultFile, fresh) }, 'I forgot the passphrase'),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => forgetAndLogin() }, 'Use another account or forget this device')),
   );
 }
 
-// Con la DEK ya descifrada: recuperar credenciales guardadas si hace falta y abrir.
+// With the DEK already decrypted: recover the stored credentials if needed, and open.
 async function afterUnlock(fresh, pass = null) {
   if (!fresh) {
     S.cred = await Auth.loadCred(S.dek);
     if (!S.cred) {
       S.dek = null;
-      return showLogin('La sesión de este dispositivo ha caducado. Vuelve a entrar.');
+      return showLogin('This device\'s session has expired. Sign in again.');
     }
     S.repo = makeRepo();
     if (Auth.needsRefresh(S.cred)) {
       try {
         await renewToken();
       } catch (e) {
-        // Sin red se entra igual con lo guardado en este dispositivo; el token se renueva al volver.
+        // Offline, it still opens with what is stored on this device; the token is refreshed when back online.
         if (!(e instanceof TypeError)) {
           S.dek = null;
           S.cred = null;
@@ -692,24 +692,24 @@ async function afterUnlock(fresh, pass = null) {
         }
       }
     }
-    // Actualiza la copia local de vault.json por si cambió en otro dispositivo.
+    // Updates the local copy of vault.json in case it changed on another device.
     try {
       const remote = await Vault.fetchVaultFile(S.repo);
       if (remote) {
-        // Si en otro dispositivo se cambió la frase o se rotó la clave, se abre con el vault.json nuevo.
+        // If the passphrase was changed or the key rotated on another device, it opens with the new vault.json.
         if (pass && JSON.stringify(remote.keys.passphrase) !== JSON.stringify(S.vaultFile.keys.passphrase)) {
           try {
             S.dek = await C.unlockVault(remote, pass);
           } catch {
             S.dek = null;
             Auth.cacheVault(remote);
-            return showUnlock(remote, { message: 'La frase de paso se cambió en otro dispositivo: usa la nueva.' });
+            return showUnlock(remote, { message: 'The passphrase was changed on another device: use the new one.' });
           }
         }
         Auth.cacheVault(remote);
         S.vaultFile = remote;
       }
-    } catch { /* se sigue con la copia local */ }
+    } catch { /* carry on with the local copy */ }
   } else {
     Auth.cacheVault(S.vaultFile);
   }
@@ -723,15 +723,15 @@ async function afterUnlock(fresh, pass = null) {
 function showRecover(vaultFile, fresh) {
   const err = errorLine();
   const code = h('input', { class: 'input', id: 'rc', autocomplete: 'off', spellcheck: 'false', placeholder: 'XXXXX-XXXXX-XXXXX-XXXXX-XXXXX' });
-  const [f1, p1] = passField('n1', 'Nueva frase de paso (mínimo 12 caracteres)', 'new-password');
-  const [f2, p2] = passField('n2', 'Repite la nueva frase', 'new-password');
-  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Cambiar la frase y entrar');
-  const form = h('form', {}, h('div', { class: 'field' }, h('label', { for: 'rc' }, 'Código de recuperación'), code), f1, f2, btn, err);
+  const [f1, p1] = passField('n1', 'New passphrase (at least 12 characters)', 'new-password');
+  const [f2, p2] = passField('n2', 'Repeat the new passphrase', 'new-password');
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Change the passphrase and enter');
+  const form = h('form', {}, h('div', { class: 'field' }, h('label', { for: 'rc' }, 'Recovery code'), code), f1, f2, btn, err);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    if (p1.value.length < 12) return showError(err, 'Usa al menos 12 caracteres.');
-    if (p1.value !== p2.value) return showError(err, 'Las dos frases no coinciden.');
-    const done = busy(btn, 'Recuperando…');
+    if (p1.value.length < 12) return showError(err, 'Use at least 12 characters.');
+    if (p1.value !== p2.value) return showError(err, 'The two passphrases do not match.');
+    const done = busy(btn, 'Recovering…');
     try {
       const { vault: updated, dek } = await C.recoverVault(vaultFile, code.value, p1.value);
       S.dek = dek;
@@ -746,7 +746,7 @@ function showRecover(vaultFile, fresh) {
       Auth.cacheVault(updated);
       await Auth.saveCred(dek, S.cred);
       await S.vault.loadIndex();
-      notice('Frase de paso cambiada.');
+      notice('Passphrase changed.');
       enterApp();
     } catch (e) {
       S.dek = null;
@@ -755,15 +755,15 @@ function showRecover(vaultFile, fresh) {
     }
   });
   lockScreen(
-    h('h1', {}, 'Recupera el acceso'),
-    h('p', {}, 'Introduce tu código de recuperación y elige una frase de paso nueva.'),
+    h('h1', {}, 'Recover access'),
+    h('p', {}, 'Enter your recovery code and choose a new passphrase.'),
     form,
-    h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showUnlock(vaultFile, { fresh }) }, 'Volver')),
+    h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showUnlock(vaultFile, { fresh }) }, 'Back')),
   );
 }
 
 async function forgetAndLogin() {
-  const ok = await confirmModal('¿Olvidar este dispositivo?', 'Se borran la sesión y la copia cifrada local. Tus notas en GitHub no se tocan.', 'Olvidar');
+  const ok = await confirmModal('Forget this device?', 'The session and the local encrypted copy are deleted. Your notes on GitHub are not touched.', 'Forget');
   if (!ok) return;
   Auth.forgetDevice();
   noteCache().clear();
@@ -772,7 +772,7 @@ async function forgetAndLogin() {
 }
 
 // ---------------------------------------------------------------------------
-// Bloqueo
+// Locking
 function wipe() {
   clearTimeout(S.saveTimer);
   S.cred = null;
@@ -835,15 +835,15 @@ async function lock(message = '') {
   else showLogin(message);
 }
 
-// La clave se rotó en otro dispositivo: lo pendiente queda guardado aquí (cifrado) y se sube tras
-// volver a desbloquear con la frase.
+// The key was rotated on another device: what is pending stays stored here (encrypted) and is uploaded
+// after unlocking again with the passphrase.
 function keyChanged() {
   lock(errText(new Error('key_changed')));
 }
 
 async function logout() {
   if (S.local) {
-    const ok = await confirmModal('¿Olvidar esta carpeta?', 'Snowlog dejará de recordarla en este navegador. Tus ficheros no se tocan.', 'Olvidar', false);
+    const ok = await confirmModal('Forget this folder?', 'Snowlog will stop remembering it in this browser. Your files are not touched.', 'Forget', false);
     if (!ok) return;
     await saveNow();
     await forgetHandle();
@@ -852,13 +852,13 @@ async function logout() {
     showLocalStart();
     return;
   }
-  const ok = await confirmModal('¿Cerrar sesión?', 'Se bloquea Snowlog y se olvida este dispositivo. Tus notas en GitHub no se tocan.', 'Cerrar sesión');
+  const ok = await confirmModal('Sign out?', 'Snowlog is locked and this device is forgotten. Your notes on GitHub are not touched.', 'Sign out');
   if (!ok) return;
   await saveNow();
   Auth.forgetDevice();
   await noteCache().clear();
   wipe();
-  showLogin('Sesión cerrada.');
+  showLogin('Signed out.');
 }
 
 function trackActivity() {
@@ -882,13 +882,13 @@ async function enterApp() {
   S.indexReady = null;
   S.calMonth = null;
   updatePlace();
-  for (const [action, label] of [['lock', S.local ? 'Cerrar carpeta' : 'Bloquear'], ['logout', S.local ? 'Olvidar esta carpeta' : 'Cerrar sesión']]) {
+  for (const [action, label] of [['lock', S.local ? 'Close folder' : 'Lock'], ['logout', S.local ? 'Forget this folder' : 'Sign out']]) {
     const b = document.querySelector(`.ribbon [data-action=${action}]`);
     if (b) { b.title = label; b.setAttribute('aria-label', label); }
   }
   renderTree();
   setTimeout(backupReminder, 4000);
-  // El índice completo (para consultas y enlaces entrantes) se carga en segundo plano.
+  // The full index (for queries and backlinks) loads in the background.
   ensureIndex().then(() => {
     refreshBacklinks();
     if (S.mode === 'read' && S.current) runQueries();
@@ -904,7 +904,7 @@ async function enterApp() {
   else showEmpty();
 }
 
-// --- Índice de notas (consultas, enlaces entrantes) ---
+// --- Note index (queries, backlinks) ---
 function ensureIndex() {
   if (!S.indexReady) {
     const vault = S.vault;
@@ -912,7 +912,7 @@ function ensureIndex() {
       const ids = vault.notes().map((n) => n.id);
       let i = 0;
       S.indexProgress = { done: 0, total: ids.length };
-      // Online: lo que falta se pide en bloques de 100 (GraphQL); lo que quede, uno a uno.
+      // Online: what is missing is fetched in blocks of 100 (GraphQL); whatever is left, one by one.
       if (vault.prefetch) await vault.prefetch(ids);
       const worker = async () => {
         while (i < ids.length && S.vault === vault) {
@@ -920,13 +920,13 @@ function ensureIndex() {
           try {
             await vault.read(id);
           } catch (e) {
-            // Sin conexión, las notas que no están en la caché se quedan fuera del índice por ahora.
+            // Offline, notes that are not in the cache stay out of the index for now.
             if (!vault.offline && !(e instanceof TypeError)) throw e;
           }
           S.indexProgress.done += 1;
         }
       };
-      // Lo que ya está en la caché local sale al momento; el resto se pide a GitHub, 10 a la vez.
+      // What is already in the local cache comes out at once; the rest is fetched from GitHub, 10 at a time.
       await Promise.all(Array.from({ length: 10 }, worker));
       if (S.vault === vault) syncIndex();
     })();
@@ -935,7 +935,7 @@ function ensureIndex() {
   return S.indexReady;
 }
 
-// Pone el índice al día con lo que hay en la bóveda y en la caché descifrada.
+// Brings the index up to date with what is in the vault and in the decrypted cache.
 function syncIndex() {
   if (!S.vault) return;
   const metas = S.vault.index.notes;
@@ -957,7 +957,7 @@ function showEmpty() {
   $('note').hidden = true;
   $('empty').hidden = false;
   $('breadcrumb').replaceChildren();
-  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'Sin nota abierta'));
+  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'No note open'));
   $('backlinks').replaceChildren();
   setStatus('');
   $('st-words').textContent = '';
@@ -965,7 +965,7 @@ function showEmpty() {
   renderTree();
 }
 
-// --- Árbol ---
+// --- Tree ---
 function buildTree() {
   const root = { folders: new Map(), notes: [] };
   const folderNode = (path) => {
@@ -984,7 +984,7 @@ function buildTree() {
   return root;
 }
 
-const collator = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
+const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 function renderTree() {
   const tree = $('tree');
@@ -1034,34 +1034,34 @@ function renderTree() {
     }
   };
   walk(buildTree(), 0, frag);
-  if (!frag.childNodes.length) frag.append(h('p', { class: 'tree-empty' }, 'Aún no hay notas.'));
+  if (!frag.childNodes.length) frag.append(h('p', { class: 'tree-empty' }, 'No notes yet.'));
   tree.replaceChildren(frag);
   syncIndex();
   renderCalendar();
 }
 
 function moreButton() {
-  return h('button', { class: 'icon-btn row-more', type: 'button', 'aria-label': 'Opciones', tabindex: '-1', html: icon('more') });
+  return h('button', { class: 'icon-btn row-more', type: 'button', 'aria-label': 'Options', tabindex: '-1', html: icon('more') });
 }
 
-// Carpetas abiertas en el explorador. En online sus nombres se guardan cifrados con la DEK
-// (no deben quedar en claro en el navegador); en local ya están en claro en el disco.
+// Folders open in the file tree. Online, their names are stored encrypted with the DEK
+// (they must not stay in plaintext in the browser); locally they are already in plaintext on disk.
 const EXPANDED_KEY = () => (S.local ? 'snowlog.expanded.local' : 'snowlog.expanded.enc');
 async function saveExpanded() {
   const list = JSON.stringify([...S.expanded]);
   try {
     if (S.local) localStorage.setItem(EXPANDED_KEY(), list);
     else if (S.dek) localStorage.setItem(EXPANDED_KEY(), await C.encryptText(S.dek, list, 'expanded'));
-  } catch { /* sin almacenamiento */ }
+  } catch { /* no storage */ }
 }
 async function loadExpanded() {
   S.expanded = new Set();
   try {
-    localStorage.removeItem('snowlog.expanded'); // formato antiguo, en claro
+    localStorage.removeItem('snowlog.expanded'); // old format, in plaintext
     const raw = localStorage.getItem(EXPANDED_KEY());
     if (!raw) return;
     S.expanded = new Set(JSON.parse(S.local ? raw : await C.decryptText(S.dek, raw, 'expanded')));
-  } catch { /* de otra clave o dañado: se empieza con todo plegado */ }
+  } catch { /* from another key, or damaged: start with everything collapsed */ }
 }
 
 function toggleFolder(path) {
@@ -1115,12 +1115,12 @@ function setupTree() {
     const row = ev.target.closest('.tree-row');
     if (row) rowMenu(row, ev.clientX, ev.clientY);
     else openMenu(ev.clientX, ev.clientY, [
-      ['filePlus', 'Nueva nota', () => newNote('')],
-      ['folderPlus', 'Nueva carpeta', () => newFolder('')],
+      ['filePlus', 'New note', () => newNote('')],
+      ['folderPlus', 'New folder', () => newFolder('')],
     ]);
   });
 
-  // Arrastrar notas a carpetas (o a la raíz)
+  // Drag notes into folders (or to the root)
   let dragId = null;
   tree.addEventListener('dragstart', (ev) => {
     const row = ev.target.closest('.tree-row.is-note');
@@ -1166,35 +1166,35 @@ function rowMenu(row, x, y) {
   if (row.dataset.file) {
     const id = row.dataset.file;
     openMenu(x, y, [
-      ['read', 'Abrir', () => (isSketch(id) ? openDrawing(id) : openAttachment(id))],
-      ['import', 'Insertar en la nota', () => insertEmbed(S.vault.index.files[id].path)],
+      ['read', 'Open', () => (isSketch(id) ? openDrawing(id) : openAttachment(id))],
+      ['import', 'Insert into the note', () => insertEmbed(S.vault.index.files[id].path)],
       null,
-      ['trash', 'Eliminar', () => deleteAttachment(id), 'danger'],
+      ['trash', 'Delete', () => deleteAttachment(id), 'danger'],
     ]);
     return;
   }
   if (row.dataset.note) {
     const id = row.dataset.note;
     openMenu(x, y, [
-      ['rename', 'Renombrar', () => renameNotePrompt(id)],
-      ['move', 'Mover a…', () => moveNotePrompt(id)],
-      ['bookmark', isBookmarked(id) ? 'Quitar de marcadores' : 'Añadir a marcadores', () => toggleBookmark(id)],
+      ['rename', 'Rename', () => renameNotePrompt(id)],
+      ['move', 'Move to…', () => moveNotePrompt(id)],
+      ['bookmark', isBookmarked(id) ? 'Remove from bookmarks' : 'Add to bookmarks', () => toggleBookmark(id)],
       null,
-      ['trash', 'Eliminar', () => deleteNote(id), 'danger'],
+      ['trash', 'Delete', () => deleteNote(id), 'danger'],
     ]);
   } else {
     const path = row.dataset.folder;
     openMenu(x, y, [
-      ['filePlus', 'Nueva nota', () => newNote(path)],
-      ['folderPlus', 'Nueva carpeta', () => newFolder(path)],
-      ['rename', 'Renombrar', () => renameFolderPrompt(path)],
+      ['filePlus', 'New note', () => newNote(path)],
+      ['folderPlus', 'New folder', () => newFolder(path)],
+      ['rename', 'Rename', () => renameFolderPrompt(path)],
       null,
-      ['trash', 'Eliminar', () => deleteFolder(path), 'danger'],
+      ['trash', 'Delete', () => deleteFolder(path), 'danger'],
     ]);
   }
 }
 
-// --- Menú contextual ---
+// --- Context menu ---
 function openMenu(x, y, items) {
   const menu = $('menu');
   menu.replaceChildren(...items.map((it) => {
@@ -1212,7 +1212,7 @@ function openMenu(x, y, items) {
   menu.hidden = false;
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
-  // Debajo de donde se abrió, sin tapar el botón: si no cabe entero, con su propio scroll.
+  // Below where it was opened, without covering the button: if it does not fit, with its own scroll.
   const below = innerHeight - y - 8;
   if (r.height <= below || below >= 240) {
     menu.style.top = `${y}px`;
@@ -1226,7 +1226,7 @@ function closeMenu() {
   $('menu').hidden = true;
 }
 
-// --- Modales ---
+// --- Modals ---
 function modal(build) {
   return new Promise((resolve) => {
     const root = $('modal-root');
@@ -1251,7 +1251,7 @@ function modal(build) {
   });
 }
 
-function promptModal(title, label, value = '', okText = 'Aceptar', hint = '') {
+function promptModal(title, label, value = '', okText = 'OK', hint = '') {
   return modal((close) => {
     const input = h('input', { class: 'input', id: 'mp', value, autocomplete: 'off', spellcheck: 'false' });
     const form = h('form', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
@@ -1259,7 +1259,7 @@ function promptModal(title, label, value = '', okText = 'Aceptar', hint = '') {
       hint ? h('p', {}, hint) : null,
       h('div', { class: 'field' }, h('label', { for: 'mp' }, label), input),
       h('div', { class: 'modal-actions' },
-        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cancelar'),
+        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cancel'),
         h('button', { class: 'btn primary', type: 'submit' }, okText)));
     form.addEventListener('submit', (ev) => {
       ev.preventDefault();
@@ -1270,12 +1270,12 @@ function promptModal(title, label, value = '', okText = 'Aceptar', hint = '') {
   });
 }
 
-function confirmModal(title, text, okText = 'Aceptar', danger = true) {
+function confirmModal(title, text, okText = 'OK', danger = true) {
   return modal((close) => h('div', { class: 'modal', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': title },
     h('h2', {}, title),
     h('p', {}, text),
     h('div', { class: 'modal-actions' },
-      h('button', { class: 'btn', type: 'button', onclick: () => close(false) }, 'Cancelar'),
+      h('button', { class: 'btn', type: 'button', onclick: () => close(false) }, 'Cancel'),
       h('button', { class: `btn ${danger ? 'danger' : 'primary'}`, type: 'button', onclick: () => close(true) }, okText))))
     .then((v) => v === true);
 }
@@ -1283,7 +1283,7 @@ function confirmModal(title, text, okText = 'Aceptar', danger = true) {
 function quickSwitcher() {
   if (!S.vault) return;
   modal((close) => {
-    const input = h('input', { class: 'input', placeholder: 'Busca una nota o escribe un título nuevo…', 'aria-label': 'Buscar nota', autocomplete: 'off', spellcheck: 'false' });
+    const input = h('input', { class: 'input', placeholder: 'Find a note or type a new title…', 'aria-label': 'Find note', autocomplete: 'off', spellcheck: 'false' });
     const list = h('div', { class: 'switcher-list', role: 'listbox' });
     let items = [];
     let sel = 0;
@@ -1294,7 +1294,7 @@ function quickSwitcher() {
         .sort((a, b) => (q ? baseName(a.path).toLowerCase().indexOf(q) - baseName(b.path).toLowerCase().indexOf(q) : 0) || b.updated.localeCompare(a.updated))
         .slice(0, 50);
       items = notes.map((n) => ({ id: n.id, title: baseName(n.path), sub: parentPath(n.path) }));
-      if (q && !S.vault.findByPath(input.value)) items.push({ create: input.value.trim(), title: `Crear «${input.value.trim()}»`, sub: 'Nota nueva' });
+      if (q && !S.vault.findByPath(input.value)) items.push({ create: input.value.trim(), title: `Create “${input.value.trim()}”`, sub: 'New note' });
       sel = Math.min(sel, Math.max(0, items.length - 1));
       list.replaceChildren(...items.map((it, i) => h('button', {
         class: `switcher-item${i === sel ? ' sel' : ''}`,
@@ -1319,12 +1319,12 @@ function quickSwitcher() {
       if (ev.key === 'Enter') { ev.preventDefault(); pick(sel); }
     });
     draw();
-    return h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Abrir nota' },
-      input, list, h('div', { class: 'switcher-hint' }, '↑↓ para moverte · Intro para abrir · Esc para cerrar'));
+    return h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Open note' },
+      input, list, h('div', { class: 'switcher-hint' }, '↑↓ to move · Enter to open · Esc to close'));
   });
 }
 
-// --- Operaciones ---
+// --- Operations ---
 async function run(fn, okText) {
   try {
     const r = await fn();
@@ -1359,7 +1359,7 @@ function currentFolder() {
 }
 
 async function newFolder(parent = '') {
-  const name = await promptModal('Nueva carpeta', 'Nombre', '', 'Crear');
+  const name = await promptModal('New folder', 'Name', '', 'Create');
   if (!name) return;
   const path = normalizePath(`${parent}/${name}`);
   const ok = await run(() => S.vault.createFolder(path).then(() => true));
@@ -1372,7 +1372,7 @@ async function newFolder(parent = '') {
 async function renameNotePrompt(id) {
   const note = S.vault.index.notes[id];
   if (!note) return;
-  const name = await promptModal('Renombrar nota', 'Nombre', baseName(note.path), 'Renombrar');
+  const name = await promptModal('Rename note', 'Name', baseName(note.path), 'Rename');
   if (name == null || name.trim() === baseName(note.path)) return;
   await renameNoteTo(id, normalizePath(`${parentPath(note.path)}/${name}`));
 }
@@ -1390,7 +1390,7 @@ async function renameNoteTo(id, path) {
   return ok;
 }
 
-// Tras renombrar o mover, reescribe los [[enlaces]] de todas las notas que apuntaban a lo movido.
+// After renaming or moving, rewrites the [[links]] of every note that pointed to what moved.
 async function updateLinks(moves, allPaths) {
   await moveBookmarks(moves);
   try {
@@ -1403,7 +1403,7 @@ async function updateLinks(moves, allPaths) {
       if (next != null) updates.push({ id: n.id, text: next });
     }
     if (!updates.length) return;
-    await S.vault.saveMany(updates, 'actualizar enlaces');
+    await S.vault.saveMany(updates, 'update links');
     const mine = updates.find((u) => u.id === S.current);
     if (mine && !S.dirty) {
       $('editor').value = mine.text;
@@ -1412,15 +1412,15 @@ async function updateLinks(moves, allPaths) {
     }
     syncIndex();
     refreshBacklinks();
-    notice(`Enlaces actualizados en ${updates.length} nota${updates.length === 1 ? '' : 's'}.`);
+    notice(`Links updated in ${updates.length} note${updates.length === 1 ? '' : 's'}.`);
   } catch (e) {
-    notice(`La nota se ha renombrado, pero no se pudieron actualizar los enlaces: ${errText(e)}`, 'error');
+    notice(`The note was renamed, but the links could not be updated: ${errText(e)}`, 'error');
   }
 }
 
 async function moveNotePrompt(id) {
   const note = S.vault.index.notes[id];
-  const folder = await promptModal('Mover nota', 'Carpeta de destino', parentPath(note.path), 'Mover', 'Escribe la ruta de la carpeta, por ejemplo «Trabajo/Ideas». Déjalo vacío para la raíz.');
+  const folder = await promptModal('Move note', 'Destination folder', parentPath(note.path), 'Move', 'Type the folder path, for example “Work/Ideas”. Leave it empty for the root.');
   if (folder == null) return;
   await moveNote(id, normalizePath(folder));
 }
@@ -1437,20 +1437,20 @@ async function moveNote(id, folder) {
 async function deleteNote(id) {
   const note = S.vault.index.notes[id];
   if (!note) return;
-  const ok = await confirmModal('Eliminar nota', `¿Eliminar «${baseName(note.path)}»? Podrás recuperarla desde el historial del repo.`, 'Eliminar');
+  const ok = await confirmModal('Delete note', `Delete “${baseName(note.path)}”? You can recover it from the repository history.`, 'Delete');
   if (!ok) return;
   if (id === S.current) {
     clearTimeout(S.saveTimer);
     S.dirty = false;
   }
-  const done = await run(() => S.vault.deleteNote(id).then(() => true), 'Nota eliminada');
+  const done = await run(() => S.vault.deleteNote(id).then(() => true), 'Note deleted');
   if (!done) return;
   if (id === S.current) showEmpty();
   else renderTree();
 }
 
 async function renameFolderPrompt(path) {
-  const name = await promptModal('Renombrar carpeta', 'Nombre', baseName(path), 'Renombrar');
+  const name = await promptModal('Rename folder', 'Name', baseName(path), 'Rename');
   if (name == null || name.trim() === baseName(path)) return;
   const to = normalizePath(`${parentPath(path)}/${name}`);
   await saveNow();
@@ -1467,29 +1467,29 @@ async function renameFolderPrompt(path) {
 
 async function deleteFolder(path) {
   const count = S.vault.notesUnder(path).length;
-  const ok = await confirmModal('Eliminar carpeta', count
-    ? `¿Eliminar «${baseName(path)}» y sus ${count} nota${count === 1 ? '' : 's'}? Podrás recuperarlas desde el historial del repo.`
-    : `¿Eliminar la carpeta vacía «${baseName(path)}»?`, 'Eliminar');
+  const ok = await confirmModal('Delete folder', count
+    ? `Delete “${baseName(path)}” and its ${count} note${count === 1 ? '' : 's'}? You can recover them from the repository history.`
+    : `Delete the empty folder “${baseName(path)}”?`, 'Delete');
   if (!ok) return;
   const inside = S.current && S.vault.index.notes[S.current]?.path.startsWith(`${path}/`);
   if (inside) {
     clearTimeout(S.saveTimer);
     S.dirty = false;
   }
-  const done = await run(() => S.vault.deleteFolder(path).then(() => true), 'Carpeta eliminada');
+  const done = await run(() => S.vault.deleteFolder(path).then(() => true), 'Folder deleted');
   if (!done) return;
   if (inside) showEmpty();
   else renderTree();
 }
 
-// --- Abrir y editar ---
+// --- Open and edit ---
 async function openNote(id, { focusTitle = false } = {}) {
   if (!S.vault.index.notes[id]) return;
   await saveNow();
   await closeDrawing();
   closeMobilePanels();
   S.current = id;
-  try { localStorage.setItem('snowlog.last', id); } catch { /* sin almacenamiento */ }
+  try { localStorage.setItem('snowlog.last', id); } catch { /* no storage */ }
   expandTo(S.vault.index.notes[id].path);
   renderTree();
   $('empty').hidden = true;
@@ -1560,8 +1560,8 @@ function setMode(mode) {
 function finishMode(reading) {
   const btn = $('mode-btn');
   btn.innerHTML = trusted(icon(reading ? 'edit' : 'read'));
-  btn.setAttribute('aria-label', reading ? 'Cambiar a edición (Ctrl+E)' : 'Cambiar a lectura (Ctrl+E)');
-  btn.title = reading ? 'Editar (Ctrl+E)' : 'Lectura (Ctrl+E)';
+  btn.setAttribute('aria-label', reading ? 'Switch to editing (Ctrl+E)' : 'Switch to reading (Ctrl+E)');
+  btn.title = reading ? 'Edit (Ctrl+E)' : 'Reading (Ctrl+E)';
   if (!reading) autosize();
 }
 
@@ -1572,8 +1572,8 @@ function autosize() {
   paintHighlight();
 }
 
-// Resaltado: un <pre> detrás del cuadro de texto con el mismo texto coloreado.
-// highlight() escapa todo el texto antes de añadir sus <span>.
+// Highlighting: a <pre> behind the text box with the same text, colored.
+// highlight() escapes all the text before adding its <span>s.
 let hlFrame = 0;
 function paintHighlight() {
   cancelAnimationFrame(hlFrame);
@@ -1582,7 +1582,7 @@ function paintHighlight() {
   });
 }
 
-// Aplica una edición de editor.js conservando el deshacer del navegador.
+// Applies an editor.js edit, keeping the browser's undo.
 function applyEdit(e) {
   const ed = $('editor');
   ed.focus();
@@ -1597,7 +1597,7 @@ function applyEdit(e) {
   ed.setSelectionRange(e.selStart, e.selEnd);
 }
 
-// --- Autocompletar [[enlaces ---
+// --- [[link autocomplete ---
 const SG = { q: null, items: [], sel: 0 };
 
 function closeSuggest() {
@@ -1632,7 +1632,7 @@ function updateSuggest() {
     'aria-selected': String(i === SG.sel),
     onpointerdown: (ev) => { ev.preventDefault(); pickSuggest(i); },
   }, it.create
-    ? [h('span', { class: 'suggest-name' }, `Crear «${it.name}»`)]
+    ? [h('span', { class: 'suggest-name' }, `Create “${it.name}”`)]
     : [h('span', { class: 'suggest-name' }, it.name), it.path !== it.name ? h('span', { class: 'suggest-path' }, parentPath(it.path)) : null].filter(Boolean))));
   const c = caretBox(q.start);
   box.style.left = `${Math.min(c.left, Math.max(0, ed.clientWidth - 280))}px`;
@@ -1649,7 +1649,7 @@ async function pickSuggest(i) {
   const ed = $('editor');
   const pos = ed.selectionStart;
   const exists = !it.create || S.vault.findByTitle(baseName(it.name)) || S.vault.findByPath(it.name);
-  // Si el nombre es único basta con él; si no, se enlaza con la ruta.
+  // If the name is unique it is enough; otherwise the link uses the path.
   const target = it.create ? it.name : (S.vault.notes().filter((n) => baseName(n.path).toLowerCase() === it.name.toLowerCase()).length > 1 ? it.path : it.name);
   applyEdit(Ed.completeLink(ed.value, pos, q, target));
   if (exists) return;
@@ -1657,9 +1657,9 @@ async function pickSuggest(i) {
     await S.vault.createNote(normalizePath(it.name), '');
     renderTree();
     syncIndex();
-    notice(`Nota «${baseName(it.name)}» creada.`);
+    notice(`Note “${baseName(it.name)}” created.`);
   } catch (e) {
-    notice(`No se pudo crear la nota: ${errText(e)}`, 'error');
+    notice(`The note could not be created: ${errText(e)}`, 'error');
   }
 }
 
@@ -1709,8 +1709,8 @@ function editorKeydown(ev) {
 let sideTimer = null;
 function refreshSide() {
   const text = $('editor').value;
-  $('st-words').textContent = `${wordCount(text).toLocaleString('es')} palabras`;
-  $('st-chars').textContent = `${text.length.toLocaleString('es')} caracteres`;
+  $('st-words').textContent = `${wordCount(text).toLocaleString('en')} words`;
+  $('st-chars').textContent = `${text.length.toLocaleString('en')} characters`;
   const heads = outline(text);
   $('outline').replaceChildren(...(heads.length
     ? heads.map((hd, i) => {
@@ -1718,7 +1718,7 @@ function refreshSide() {
       b.style.setProperty('--level', hd.level - 1);
       return b;
     })
-    : [h('p', { class: 'outline-empty' }, 'Sin encabezados')]));
+    : [h('p', { class: 'outline-empty' }, 'No headings')]));
   refreshBacklinks();
 }
 
@@ -1737,24 +1737,23 @@ function jumpTo(head, index) {
   $('view').scrollTop = ed.offsetTop + head.line * lineHeight - 40;
 }
 
-// La nota cambió también en otro sitio: se guardó esta versión y la otra quedó en una copia.
-// Dónde están las notas, y si falta conexión, cuántos cambios esperan a subirse.
+// Where the notes are, and when offline, how many changes are waiting to be uploaded.
 function updatePlace() {
   const el = $('st-place');
   if (!S.vault) return;
   if (S.local) {
-    el.textContent = S.vault.kind === 'folder' ? `Carpeta «${S.vault.label}»` : 'En este navegador';
+    el.textContent = S.vault.kind === 'folder' ? `Folder “${S.vault.label}”` : 'In this browser';
     el.className = '';
     return;
   }
   const n = S.vault.outbox.size;
   el.textContent = S.vault.offline
-    ? `Sin conexión${n ? ` · ${n} cambio${n === 1 ? '' : 's'} por subir` : ''}`
-    : (n ? `Subiendo ${n} cambio${n === 1 ? '' : 's'}…` : 'GitHub · cifrado');
+    ? `Offline${n ? ` · ${n} change${n === 1 ? '' : 's'} to upload` : ''}`
+    : (n ? `Uploading ${n} change${n === 1 ? '' : 's'}…` : 'GitHub · encrypted');
   el.className = S.vault.offline ? 'offline' : '';
 }
 
-// Carpeta del ordenador: mirar si algo cambió desde fuera (otro editor, OneDrive, Dropbox…).
+// A folder on the computer: check whether something changed outside (another editor, OneDrive, Dropbox…).
 let rescanning = false;
 async function rescanLocal() {
   if (!S.local || S.vault?.kind !== 'folder' || rescanning || document.hidden) return;
@@ -1768,14 +1767,14 @@ async function rescanLocal() {
       const text = $('editor').value;
       S.current = null;
       if (S.dirty) {
-        // La borraron o movieron fuera mientras se escribía: no se pierde lo escrito.
-        const path = vault.freePath('', 'Recuperada');
+        // It was deleted or moved outside while typing: what was written is not lost.
+        const path = vault.freePath('', 'Recovered');
         const id = await vault.createNote(path, text);
         S.dirty = false;
-        notice(`La nota se borró o se movió fuera de Snowlog. Lo que estabas escribiendo está en «${path}».`, 'error');
+        notice(`The note was deleted or moved outside Snowlog. What you were writing is in “${path}”.`, 'error');
         await openNote(id);
       } else {
-        notice('La nota que tenías abierta se ha borrado o movido fuera de Snowlog.');
+        notice('The note you had open was deleted or moved outside Snowlog.');
         showEmpty();
       }
     } else if (cur && res.changed.includes(cur) && !S.dirty) {
@@ -1785,19 +1784,19 @@ async function rescanLocal() {
         autosize();
         if (S.mode === 'read') setMode('read');
         refreshSide();
-        notice('La nota ha cambiado fuera de Snowlog y se ha actualizado.');
+        notice('The note changed outside Snowlog and was updated.');
       }
     }
     renderTree();
     syncIndex();
     S.indexReady = null;
     ensureIndex().catch(() => {});
-  } catch { /* la carpeta puede no estar accesible un momento */ } finally {
+  } catch { /* the folder may be unreachable for a moment */ } finally {
     rescanning = false;
   }
 }
 
-// Cuando vuelve la red: recarga el índice y sube lo que se escribió sin conexión.
+// When the network is back: reloads the index and uploads what was written offline.
 let syncing = null;
 function trySync() {
   if (!S.vault || S.local || syncing) return syncing;
@@ -1808,7 +1807,7 @@ function trySync() {
       const res = await vault.sync();
       if (S.vault !== vault) return;
       for (const c of res.conflicts) reportConflict(c);
-      if (res.synced) notice(`Conexión recuperada: ${res.synced} cambio${res.synced === 1 ? '' : 's'} subido${res.synced === 1 ? '' : 's'}.`);
+      if (res.synced) notice(`Back online: ${res.synced} change${res.synced === 1 ? '' : 's'} uploaded.`);
       if (S.current && !S.dirty && vault.index.notes[S.current]) {
         const text = await vault.read(S.current);
         if (!S.dirty && S.vault === vault && $('editor').value !== text) {
@@ -1823,7 +1822,7 @@ function trySync() {
       ensureIndex().catch(() => {});
     } catch (e) {
       if (e.message === 'key_changed') keyChanged();
-      else if (e.message !== 'offline') notice(`No se pudo sincronizar: ${errText(e)}`, 'error');
+      else if (e.message !== 'offline') notice(`Could not sync: ${errText(e)}`, 'error');
     } finally {
       syncing = null;
       updatePlace();
@@ -1832,8 +1831,8 @@ function trySync() {
   return syncing;
 }
 
-// Al guardar se han juntado los cambios de aquí con los de otro dispositivo: el editor pasa a mostrar
-// el resultado (y si mientras tanto se ha seguido escribiendo, también se junta con eso).
+// On save, the changes here were combined with another device's: the editor now shows the result
+// (and if typing went on in the meantime, that is combined too).
 function applyMerged(id, sent, merged) {
   if (S.current !== id) return;
   const ed = $('editor');
@@ -1841,7 +1840,7 @@ function applyMerged(id, sent, merged) {
   let next = merged;
   if (now !== sent) {
     const m = merge3(sent, now, merged);
-    if (m.conflict) return; // lo que se está escribiendo choca: se resolverá al guardar
+    if (m.conflict) return; // what is being typed clashes: it will be resolved on save
     next = m.text;
     S.dirty = true;
     scheduleSave();
@@ -1853,15 +1852,15 @@ function applyMerged(id, sent, merged) {
   if (S.mode === 'read') setMode('read');
   clearTimeout(sideTimer);
   sideTimer = setTimeout(refreshSide, 300);
-  notice('Se han juntado tus cambios con los que se hicieron en otro sitio.');
+  notice('Your changes were combined with the ones made elsewhere.');
 }
 
 function reportConflict(conflict) {
   if (S.vault?.index.notes[conflict.id]) expandTo(conflict.path);
   renderTree();
   const n = h('div', { class: 'notice' },
-    'Esta nota también se cambió en otro dispositivo. Se ha guardado tu versión y la otra está en ',
-    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); openNote(conflict.id); } }, `«${baseName(conflict.path)}»`),
+    'This note was also changed on another device. Your version was saved and the other one is in ',
+    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); openNote(conflict.id); } }, `“${baseName(conflict.path)}”`),
     '.');
   $('notices').append(n);
   setTimeout(() => n.remove(), 20000);
@@ -1870,7 +1869,7 @@ function reportConflict(conflict) {
 function setStatus(kind) {
   const el = $('st-sync');
   const text = {
-    loading: 'Descifrando…', queued: 'Guardado aquí (sin conexión)', pending: 'Sin guardar', saving: 'Cifrando y guardando…', saved: 'Guardado', error: 'Error al guardar', '': '',
+    loading: 'Decrypting…', queued: 'Saved here (offline)', pending: 'Not saved', saving: 'Encrypting and saving…', saved: 'Saved', error: 'Save failed', '': '',
   }[kind];
   el.textContent = text;
   el.className = kind === 'error' ? 'error' : '';
@@ -1916,7 +1915,7 @@ function saveNow() {
         keyChanged();
         return;
       }
-      notice(`No se pudo guardar: ${errText(e)}`, 'error');
+      notice(`Could not save: ${errText(e)}`, 'error');
     });
   return S.saving;
 }
@@ -1940,7 +1939,7 @@ async function openByTitle(title) {
   return newNoteAt(title);
 }
 
-// --- Lectura enriquecida: cssclasses, tareas que se pueden marcar y consultas ---
+// --- Rich reading: cssclasses, tickable tasks and queries ---
 function applyCssClasses(view, text) {
   view.className = 'reading markdown';
   const fm = (text.match(/^---\n[\s\S]*?\n---/) && parseNote({ id: '', path: 'x', text }).fm) || {};
@@ -1951,7 +1950,7 @@ function applyCssClasses(view, text) {
   }
 }
 
-// Las casillas de la propia nota se corresponden, en orden, con las líneas de tarea del texto.
+// The note's own checkboxes match, in order, the task lines of the text.
 function enableOwnTasks(view, text) {
   const boxes = [...view.querySelectorAll('li.task > input[type=checkbox]')];
   const lines = contentLines(text).filter((l) => TASK_LINE_RE.test(l.value));
@@ -1960,7 +1959,7 @@ function enableOwnTasks(view, text) {
     box.disabled = false;
     box.classList.add('task-checkbox');
     box.dataset.line = String(lines[i].line);
-    box.setAttribute('aria-label', 'Marcar tarea');
+    box.setAttribute('aria-label', 'Toggle task');
   });
 }
 
@@ -1970,7 +1969,7 @@ async function runQueries() {
   if (!blocks.length) return;
   const id = S.current;
   const placeholders = blocks.map((code) => {
-    const box = h('div', { class: 'query', 'data-source': code.textContent }, h('p', { class: 'query-empty' }, 'Cargando…'));
+    const box = h('div', { class: 'query', 'data-source': code.textContent }, h('p', { class: 'query-empty' }, 'Loading…'));
     code.parentElement.replaceWith(box);
     return box;
   });
@@ -1991,7 +1990,7 @@ function renderQueryBoxes(view) {
       const res = runQuery(parseQuery(box.dataset.source), indexedNotes(), { exclude });
       box.innerHTML = trusted(renderResult(res));
     } catch (e) {
-      box.replaceChildren(h('p', { class: 'query-error' }, `Consulta: ${e.message}`));
+      box.replaceChildren(h('p', { class: 'query-error' }, `Query: ${e.message}`));
     }
   }
 }
@@ -2004,7 +2003,7 @@ async function toggleTask(box) {
   try {
     if (target === S.current) {
       const text = toggleTaskLine($('editor').value, line, done);
-      if (text == null) throw new Error('La tarea ha cambiado; recarga la nota.');
+      if (text == null) throw new Error('The task has changed; reload the note.');
       $('editor').value = text;
       autosize();
       S.dirty = true;
@@ -2013,7 +2012,7 @@ async function toggleTask(box) {
       if (box.dataset.note) setMode('read');
     } else {
       const text = toggleTaskLine(await S.vault.read(target), line, done);
-      if (text == null) throw new Error('La tarea ha cambiado; recarga la nota.');
+      if (text == null) throw new Error('The task has changed; reload the note.');
       const res = await S.vault.saveNote(target, text);
       if (res?.conflict) reportConflict(res.conflict);
       syncIndex();
@@ -2028,10 +2027,10 @@ async function toggleTask(box) {
   }
 }
 
-// --- Enlaces entrantes ---
+// --- Backlinks ---
 function refreshBacklinks() {
   const el = $('backlinks');
-  // Con un dibujo abierto: las notas que lo incrustan o enlazan.
+  // With a drawing open: the notes that embed or link it.
   const file = !S.current && D.id ? S.vault?.index.files?.[D.id] : null;
   const me = S.current ? S.notesIdx.get(S.current) : file && { id: D.id, name: baseName(file.path), path: file.path };
   if (!S.current && !file) {
@@ -2039,18 +2038,18 @@ function refreshBacklinks() {
     return;
   }
   if (!S.indexReady || !me) {
-    el.replaceChildren(h('p', { class: 'outline-empty' }, 'Buscando…'));
+    el.replaceChildren(h('p', { class: 'outline-empty' }, 'Searching…'));
     return;
   }
   const from = indexedNotes().filter((n) => n.id !== me.id && linksTo(n, me));
   el.replaceChildren(...(from.length
-    ? from.sort((a, b) => a.name.localeCompare(b.name, 'es')).map((n) => h('button', {
+    ? from.sort((a, b) => a.name.localeCompare(b.name, 'en')).map((n) => h('button', {
       class: 'outline-item', type: 'button', title: n.path, onclick: () => openNote(n.id),
     }, n.name))
-    : [h('p', { class: 'outline-empty' }, 'Ninguna nota enlaza aquí')]));
+    : [h('p', { class: 'outline-empty' }, 'No notes link here')]));
 }
 
-// --- Calendario ---
+// --- Calendar ---
 function renderCalendar() {
   const el = $('calendar');
   if (!S.vault || !el) return;
@@ -2063,7 +2062,7 @@ function renderCalendar() {
     .filter((n) => n.path.startsWith(prefix) && /^\d{4}-\d{2}-\d{2}$/.test(n.path.slice(prefix.length)))
     .map((n) => n.path.slice(prefix.length)));
   const first = new Date(y, m, 1);
-  const offset = (first.getDay() + 6) % 7; // semana de lunes a domingo
+  const offset = (first.getDay() + 6) % 7; // week from Monday to Sunday
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const cells = [];
   for (let i = 0; i < offset; i++) cells.push(h('span', { class: 'cal-day blank', 'aria-hidden': 'true' }));
@@ -2078,8 +2077,8 @@ function renderCalendar() {
     cells.push(h('button', {
       class: cls.join(' '),
       type: 'button',
-      title: `${formatDate(date, 'dddd D [de] MMMM')}${days.has(iso) ? ' · tiene nota' : ''}`,
-      'aria-label': `${formatDate(date, 'dddd D [de] MMMM [de] YYYY')}${days.has(iso) ? ', tiene nota' : ''}`,
+      title: `${formatDate(date, 'dddd, MMMM D')}${days.has(iso) ? ' · has a note' : ''}`,
+      'aria-label': `${formatDate(date, 'dddd, MMMM D, YYYY')}${days.has(iso) ? ', has a note' : ''}`,
       onclick: () => openDaily(date),
     }, String(d)));
   }
@@ -2089,17 +2088,17 @@ function renderCalendar() {
   };
   el.replaceChildren(
     h('div', { class: 'cal-head' },
-      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Mes anterior', html: icon('chevronLeft'), onclick: () => move(-1) }),
-      h('button', { class: 'cal-title', type: 'button', title: 'Ir a hoy', onclick: () => { S.calMonth = null; renderCalendar(); } },
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Previous month', html: icon('chevronLeft'), onclick: () => move(-1) }),
+      h('button', { class: 'cal-title', type: 'button', title: 'Go to today', onclick: () => { S.calMonth = null; renderCalendar(); } },
         formatDate(first, 'MMMM YYYY')),
-      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Mes siguiente', html: icon('chevron'), onclick: () => move(1) })),
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Next month', html: icon('chevron'), onclick: () => move(1) })),
     h('div', { class: 'cal-grid', role: 'grid' },
-      ...['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => h('span', { class: 'cal-dow', 'aria-hidden': 'true' }, d)),
+      ...['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => h('span', { class: 'cal-dow', 'aria-hidden': 'true' }, d)),
       ...cells),
   );
 }
 
-// --- Nota diaria y plantillas ---
+// --- Daily note and templates ---
 async function templateText(path, fallback) {
   const t = S.vault.findByPath(path);
   if (!t) return fallback;
@@ -2130,13 +2129,13 @@ function openHome() {
     S.mode = 'read';
     return openNote(home.id);
   }
-  notice('Aún no tienes panel principal. Usa «Configurar mi espacio» en el menú ⋯.');
+  notice('You have no dashboard yet. Use “Set up my space” in the ⋯ menu.');
   return undefined;
 }
 
 function templateNotes() {
   const f = WS.templatesFolder;
-  return S.vault.notes().filter((n) => f && n.path.startsWith(`${f}/`)).sort((a, b) => a.path.localeCompare(b.path, 'es'));
+  return S.vault.notes().filter((n) => f && n.path.startsWith(`${f}/`)).sort((a, b) => a.path.localeCompare(b.path, 'en'));
 }
 
 function pickModal(title, items) {
@@ -2150,7 +2149,7 @@ function pickModal(title, items) {
 async function chooseTemplate(title) {
   const list = templateNotes();
   if (!list.length) {
-    notice(`No hay plantillas en «${WS.templatesFolder}». Usa «Configurar mi espacio» en el menú ⋯.`);
+    notice(`There are no templates in “${WS.templatesFolder}”. Use “Set up my space” in the ⋯ menu.`);
     return null;
   }
   const prefix = `${WS.templatesFolder}/`;
@@ -2159,7 +2158,7 @@ async function chooseTemplate(title) {
 
 async function insertTemplate() {
   if (!S.current) return;
-  const t = await chooseTemplate('Insertar plantilla');
+  const t = await chooseTemplate('Insert template');
   if (!t) return;
   const note = S.vault.index.notes[S.current];
   const text = applyTemplate(await S.vault.read(t.id), { title: baseName(note.path), date: new Date() });
@@ -2174,9 +2173,9 @@ async function insertTemplate() {
 }
 
 async function newFromTemplate() {
-  const t = await chooseTemplate('Nueva nota desde plantilla');
+  const t = await chooseTemplate('New note from template');
   if (!t) return;
-  const name = await promptModal('Nueva nota', 'Título (puedes poner Carpeta/Título)', '', 'Crear');
+  const name = await promptModal('New note', 'Title (you can write Folder/Title)', '', 'Create');
   if (!name || !name.trim()) return;
   const path = name.includes('/') ? name : `${currentFolder()}/${name}`;
   const text = applyTemplate(await S.vault.read(t.id), { title: baseName(normalizePath(path)), date: new Date() });
@@ -2192,19 +2191,19 @@ async function setupSpace() {
   const missing = space.notes.filter((n) => !S.vault.findByPath(n.path));
   const folders = space.folders.filter((f) => !S.vault.index.folders.includes(f));
   if (!missing.length && !folders.length) {
-    notice('Tu espacio ya está configurado.');
+    notice('Your space is already set up.');
     return;
   }
-  const ok = await confirmModal('Configurar mi espacio',
-    `Se crean el panel «${WS.home}», las carpetas ${space.folders.map((f) => `«${f}»`).join(', ')} y ${missing.length} plantillas y notas. No se toca nada de lo que ya tienes.`,
-    'Configurar', false);
+  const ok = await confirmModal('Set up my space',
+    `This creates the “${WS.home}” dashboard, the folders ${space.folders.map((f) => `“${f}”`).join(', ')} and ${missing.length} templates and notes. Nothing you already have is touched.`,
+    'Set up', false);
   if (!ok) return;
   await saveNow();
-  const done = await run(() => S.vault.importNotes(missing, { message: 'configurar mi espacio', folders }));
+  const done = await run(() => S.vault.importNotes(missing, { message: 'set up my space', folders }));
   if (!done) return;
   for (const f of [WS.templatesFolder, WS.dailyFolder]) if (f) S.expanded.add(f);
   renderTree();
-  notice('Espacio listo: panel, diario, proyectos, plantillas y archivo.');
+  notice('Space ready: dashboard, daily notes, projects, templates and archive.');
   await openDaily();
 }
 
@@ -2212,47 +2211,47 @@ async function loadExamples() {
   const space = exampleSpace({ dailyFolder: WS.dailyFolder || '' });
   const missing = space.notes.filter((n) => !S.vault.findByPath(n.path));
   if (!missing.length) {
-    notice('El proyecto de ejemplo ya está cargado.');
+    notice('The example project is already loaded.');
     return;
   }
   const skipped = space.notes.length - missing.length;
-  const ok = await confirmModal('Cargar ejemplos',
-    `Se crea «${space.root}» con un proyecto, 4 historias, un tablero, una reunión, una píldora y notas diarias de ayer, anteayer y hoy enlazadas entre sí.${skipped ? ` Se respetan ${skipped} notas que ya tienes (por ejemplo, la de hoy).` : ''} Puedes borrarlo cuando quieras.`,
-    'Cargar', false);
+  const ok = await confirmModal('Load examples',
+    `This creates “${space.root}” with a project, 4 stories, a board, a meeting, a knowledge pill and daily notes for today and the two days before, all linked together.${skipped ? ` ${skipped} notes you already have are kept (for example, today's).` : ''} You can delete it whenever you want.`,
+    'Load', false);
   if (!ok) return;
   await saveNow();
-  const done = await run(() => S.vault.importNotes(missing, { message: 'cargar ejemplos', folders: space.folders }));
+  const done = await run(() => S.vault.importNotes(missing, { message: 'load examples', folders: space.folders }));
   if (!done) return;
   for (const f of space.folders) S.expanded.add(f);
   expandTo(`${space.root}/x`);
   renderTree();
-  notice('Ejemplos cargados. Empieza por «Cómo usar este ejemplo».');
-  const guide = S.vault.findByPath(`${space.root}/Cómo usar este ejemplo`);
+  notice('Examples loaded. Start with “How to use this example”.');
+  const guide = S.vault.findByPath(`${space.root}/How to use this example`);
   if (guide) {
     S.mode = 'read';
     await openNote(guide.id);
   }
 }
 
-// --- Importar carpeta ---
+// --- Import folder ---
 async function importFolder(files) {
   const plan = planImport(files);
   const skippedTotal = plan.skipped.config + plan.skipped.other + plan.skipped.tooBig;
   if (!plan.notes.length) {
-    notice('No hay notas Markdown (.md) en esa carpeta.', 'error');
+    notice('There are no Markdown notes (.md) in that folder.', 'error');
     return;
   }
   const bytes = plan.notes.reduce((acc, n) => acc + n.file.size, 0);
   const parts = [];
-  if (plan.skipped.other) parts.push(`${plan.skipped.other} imágenes u otros ficheros`);
-  if (plan.skipped.config) parts.push(`${plan.skipped.config} de configuración (.obsidian, .git…)`);
-  if (plan.skipped.tooBig) parts.push(`${plan.skipped.tooBig} notas de más de 2 MB`);
+  if (plan.skipped.other) parts.push(`${plan.skipped.other} images or other files`);
+  if (plan.skipped.config) parts.push(`${plan.skipped.config} settings files (.obsidian, .git…)`);
+  if (plan.skipped.tooBig) parts.push(`${plan.skipped.tooBig} notes over 2 MB`);
   const folder = await promptModal(
-    `Importar ${plan.notes.length} nota${plan.notes.length === 1 ? '' : 's'} (${formatBytes(bytes)})`,
-    'Carpeta de destino en Snowlog (vacío = raíz)',
+    `Import ${plan.notes.length} note${plan.notes.length === 1 ? '' : 's'} (${formatBytes(bytes)})`,
+    'Destination folder in Snowlog (empty = root)',
     plan.root,
-    'Importar',
-    `Se cifran en este dispositivo antes de subir.${skippedTotal ? ` Se omiten ${parts.join(', ')}.` : ''} Si un nombre ya existe, se añade «(importada)».`,
+    'Import',
+    `They are encrypted on this device before upload.${skippedTotal ? ` Skipped: ${parts.join(', ')}.` : ''} If a name already exists, “(imported)” is added.`,
   );
   if (folder == null) return;
   await saveNow();
@@ -2260,33 +2259,33 @@ async function importFolder(files) {
   setStatus('');
   const st = $('st-sync');
   try {
-    st.textContent = 'Leyendo ficheros…';
+    st.textContent = 'Reading files…';
     const items = await Promise.all(plan.notes.map(async (n) => ({
       path: target ? `${target}/${n.path}` : n.path,
       text: await n.file.text(),
     })));
-    st.textContent = `Cifrando e importando 0/${items.length}…`;
+    st.textContent = `Encrypting and importing 0/${items.length}…`;
     const result = await S.vault.importNotes(items, {
       onProgress: (done, total) => {
         S.lastActivity = Date.now();
-        st.textContent = `Cifrando e importando ${done}/${total}…`;
+        st.textContent = `Encrypting and importing ${done}/${total}…`;
       },
     });
     if (target) S.expanded.add(target);
     renderTree();
     st.textContent = '';
-    notice(`Importadas ${result.length} notas${target ? ` en «${target}»` : ''}.`);
+    notice(`Imported ${result.length} notes${target ? ` into “${target}”` : ''}.`);
     if (!S.current && result[0]) openNote(result[0].id);
   } catch (e) {
     renderTree();
     st.textContent = '';
-    notice(`La importación se ha detenido: ${errText(e)}. Lo ya importado se conserva.`, 'error');
+    notice(`The import stopped: ${errText(e)}. What was already imported is kept.`, 'error');
   }
 }
 
-// --- Paneles ---
-// --- Tableros Kanban (Markdown con columnas ## y tarjetas - [ ]) ---
-// Cada cambio en el tablero reescribe el texto de la nota y se guarda como cualquier edición.
+// --- Panels ---
+// --- Kanban boards (Markdown with ## columns and - [ ] cards) ---
+// Every change on the board rewrites the note text and is saved like any edit.
 function setBoard(board) {
   const text = K.serializeBoard(board);
   $('editor').value = text;
@@ -2308,19 +2307,19 @@ function renderBoard(view, text) {
   };
   const lanes = board.lanes.map((lane, li) => {
     const cardsEl = h('div', { class: 'kanban-cards', role: 'list' }, ...lane.cards.map((c, ci) => {
-      const box = h('input', { type: 'checkbox', class: 'kanban-check', 'aria-label': 'Hecha', checked: c.done });
+      const box = h('input', { type: 'checkbox', class: 'kanban-check', 'aria-label': 'Done', checked: c.done });
       box.addEventListener('change', () => setBoard(K.toggleCard(board, li, ci)));
       const textEl = h('div', { class: 'kanban-text', html: inline(c.text) });
       const card = h('div', { class: `kanban-card${c.done ? ' done' : ''}`, role: 'listitem', draggable: 'true' },
         box, textEl,
         h('div', { class: 'kanban-card-actions' },
-          li > 0 ? h('button', { class: 'icon-btn', type: 'button', title: 'A la columna anterior', 'aria-label': 'A la columna anterior', onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li - 1, index: 1e9 })) }, '‹') : null,
-          li < board.lanes.length - 1 ? h('button', { class: 'icon-btn', type: 'button', title: 'A la columna siguiente', 'aria-label': 'A la columna siguiente', onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li + 1, index: 1e9 })) }, '›') : null,
-          h('button', { class: 'icon-btn', type: 'button', title: 'Editar', 'aria-label': 'Editar tarjeta', onclick: async () => {
-            const t = await promptModal('Editar tarjeta', 'Texto', c.text, 'Guardar');
+          li > 0 ? h('button', { class: 'icon-btn', type: 'button', title: 'To the previous column', 'aria-label': 'To the previous column', onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li - 1, index: 1e9 })) }, '‹') : null,
+          li < board.lanes.length - 1 ? h('button', { class: 'icon-btn', type: 'button', title: 'To the next column', 'aria-label': 'To the next column', onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li + 1, index: 1e9 })) }, '›') : null,
+          h('button', { class: 'icon-btn', type: 'button', title: 'Edit', 'aria-label': 'Edit card', onclick: async () => {
+            const t = await promptModal('Edit card', 'Text', c.text, 'Save');
             if (t != null && t.trim()) setBoard(K.editCard(board, li, ci, t));
           } }, '✎'),
-          h('button', { class: 'icon-btn', type: 'button', title: 'Eliminar', 'aria-label': 'Eliminar tarjeta', onclick: () => setBoard(K.deleteCard(board, li, ci)) }, '×')));
+          h('button', { class: 'icon-btn', type: 'button', title: 'Delete', 'aria-label': 'Delete card', onclick: () => setBoard(K.deleteCard(board, li, ci)) }, '×')));
       card.addEventListener('dragstart', (ev) => {
         drag = { lane: li, index: ci };
         ev.dataTransfer.effectAllowed = 'move';
@@ -2340,7 +2339,7 @@ function renderBoard(view, text) {
       drag = null;
       setBoard(K.moveCard(board, from, to));
     });
-    const add = h('input', { class: 'input kanban-add', placeholder: '+ Añadir tarjeta', 'aria-label': `Añadir tarjeta a ${lane.title}` });
+    const add = h('input', { class: 'input kanban-add', placeholder: '+ Add card', 'aria-label': `Add a card to ${lane.title}` });
     add.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter' && add.value.trim()) {
         ev.preventDefault();
@@ -2353,18 +2352,18 @@ function renderBoard(view, text) {
       h('header', { class: 'kanban-lane-head' },
         h('span', { class: 'kanban-lane-title', html: inline(lane.title) }),
         h('span', { class: 'kanban-count' }, done ? `${done}/${lane.cards.length}` : String(lane.cards.length)),
-        h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Opciones de ${lane.title}`, html: icon('more'), onclick: (ev) => {
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': `${lane.title} options`, html: icon('more'), onclick: (ev) => {
           const r = ev.currentTarget.getBoundingClientRect();
           openMenu(r.left, r.bottom, [
-            ['rename', 'Renombrar columna', async () => {
-              const t = await promptModal('Renombrar columna', 'Nombre', lane.title, 'Renombrar');
+            ['rename', 'Rename column', async () => {
+              const t = await promptModal('Rename column', 'Name', lane.title, 'Rename');
               if (t != null && t.trim()) setBoard(K.renameLane(board, li, t));
             }],
-            li > 0 && ['chevronLeft', 'Mover a la izquierda', () => setBoard(K.moveLane(board, li, li - 1))],
-            li < board.lanes.length - 1 && ['chevron', 'Mover a la derecha', () => setBoard(K.moveLane(board, li, li + 1))],
+            li > 0 && ['chevronLeft', 'Move left', () => setBoard(K.moveLane(board, li, li - 1))],
+            li < board.lanes.length - 1 && ['chevron', 'Move right', () => setBoard(K.moveLane(board, li, li + 1))],
             null,
-            ['trash', 'Eliminar columna', async () => {
-              if (lane.cards.length && !(await confirmModal('Eliminar columna', `Se borrarán también sus ${lane.cards.length} tarjetas.`, 'Eliminar'))) return;
+            ['trash', 'Delete column', async () => {
+              if (lane.cards.length && !(await confirmModal('Delete column', `Its ${lane.cards.length} cards will be deleted too.`, 'Delete'))) return;
               setBoard(K.deleteLane(board, li));
             }, 'danger'],
           ].filter((x) => x !== false));
@@ -2372,9 +2371,9 @@ function renderBoard(view, text) {
       cardsEl, add);
   });
   const newLane = h('button', { class: 'kanban-new-lane', type: 'button', onclick: async () => {
-    const t = await promptModal('Nueva columna', 'Nombre', '', 'Crear');
+    const t = await promptModal('New column', 'Name', '', 'Create');
     if (t != null && t.trim()) setBoard(K.addLane(board, t));
-  } }, '+ Columna');
+  } }, '+ Column');
   const parts = [];
   if (intro) {
     const introEl = h('div', { class: 'kanban-intro' });
@@ -2387,7 +2386,7 @@ function renderBoard(view, text) {
 
 async function newBoard() {
   await saveNow();
-  const path = S.vault.freePath(currentFolder(), 'Tablero');
+  const path = S.vault.freePath(currentFolder(), 'Board');
   const id = await run(() => S.vault.createNote(path, K.NEW_BOARD));
   if (!id) return;
   expandTo(path);
@@ -2395,7 +2394,7 @@ async function newBoard() {
   await openNote(id);
 }
 
-// --- Vista de grafo ---
+// --- Graph view ---
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
@@ -2404,19 +2403,19 @@ async function graphView(focusId = null) {
   if (!S.vault) return;
   await saveNow();
   modal((close) => {
-    const canvas = h('canvas', { class: 'graph-canvas', 'aria-label': 'Grafo de notas' });
-    const info = h('span', { class: 'graph-info' }, 'Preparando…');
+    const canvas = h('canvas', { class: 'graph-canvas', 'aria-label': 'Note graph' });
+    const info = h('span', { class: 'graph-info' }, 'Preparing…');
     const localBox = h('input', { type: 'checkbox', id: 'graph-local', checked: !!focusId });
-    const depthSel = h('select', { class: 'input graph-depth', 'aria-label': 'Saltos' }, ...[1, 2, 3].map((d) => h('option', { value: String(d) }, `${d} salto${d > 1 ? 's' : ''}`)));
+    const depthSel = h('select', { class: 'input graph-depth', 'aria-label': 'Hops' }, ...[1, 2, 3].map((d) => h('option', { value: String(d) }, `${d} hop${d > 1 ? 's' : ''}`)));
     const orphans = h('input', { type: 'checkbox', id: 'graph-orphans', checked: true });
-    const box = h('div', { class: 'modal graph', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Vista de grafo' },
+    const box = h('div', { class: 'modal graph', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Graph view' },
       h('div', { class: 'graph-bar' },
-        h('h2', {}, 'Grafo'),
-        S.current ? h('label', { class: 'check', for: 'graph-local' }, localBox, 'Solo esta nota') : null,
+        h('h2', {}, 'Graph'),
+        S.current ? h('label', { class: 'check', for: 'graph-local' }, localBox, 'Only this note') : null,
         S.current ? depthSel : null,
-        h('label', { class: 'check', for: 'graph-orphans' }, orphans, 'Notas sin enlaces'),
+        h('label', { class: 'check', for: 'graph-orphans' }, orphans, 'Notes without links'),
         info,
-        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cerrar')),
+        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Close')),
       canvas);
     let g = { nodes: [], links: [] };
     let full = null;
@@ -2501,7 +2500,7 @@ async function graphView(focusId = null) {
     };
     let fitted = false;
     let touched = false;
-    // Encaja el grafo en la pantalla cuando se ha quedado quieto (si no lo ha movido la persona).
+    // Fits the graph on screen once it settles (unless the person has moved it).
     const fit = () => {
       if (!g.nodes.length) return;
       const r = canvas.getBoundingClientRect();
@@ -2536,7 +2535,7 @@ async function graphView(focusId = null) {
       fitted = false;
       touched = false;
       view = { x: 0, y: 0, k: g.nodes.length > 200 ? 0.5 : 1 };
-      info.textContent = `${g.nodes.length} nota${g.nodes.length === 1 ? '' : 's'} · ${g.links.length} enlace${g.links.length === 1 ? '' : 's'}`;
+      info.textContent = `${g.nodes.length} note${g.nodes.length === 1 ? '' : 's'} · ${g.links.length} link${g.links.length === 1 ? '' : 's'}`;
     };
     for (const el of [localBox, depthSel, orphans]) el.addEventListener('change', rebuild);
     canvas.addEventListener('pointerdown', (ev) => {
@@ -2585,7 +2584,7 @@ async function graphView(focusId = null) {
     }, { passive: false });
     const ro = new ResizeObserver(() => size());
     ro.observe(canvas);
-    // Se para todo al cerrar el diálogo (o al bloquear, que vacía los diálogos).
+    // Everything stops when the dialog closes (or on lock, which empties the dialogs).
     const stop = new MutationObserver(() => {
       if (!box.isConnected) {
         alive = false;
@@ -2608,7 +2607,7 @@ async function graphView(focusId = null) {
   });
 }
 
-// --- Marcadores (rutas de notas, en los ajustes de la bóveda: se comparten entre dispositivos) ---
+// --- Bookmarks (note paths, in the vault settings: shared between devices) ---
 const bookmarks = () => (Array.isArray(WS.bookmarks) ? WS.bookmarks : []);
 const isBookmarked = (id) => !!S.vault?.index.notes[id] && bookmarks().includes(S.vault.index.notes[id].path);
 
@@ -2616,7 +2615,7 @@ async function setBookmarks(list) {
   try {
     await S.vault.saveSettings({ ...S.vault.getSettings(), bookmarks: list });
   } catch (e) {
-    notice(`No se pudieron guardar los marcadores: ${errText(e)}`, 'error');
+    notice(`The bookmarks could not be saved: ${errText(e)}`, 'error');
     return false;
   }
   applySettings();
@@ -2630,11 +2629,11 @@ async function toggleBookmark(id) {
   const list = bookmarks();
   const on = !list.includes(path);
   if (await setBookmarks(on ? [...list, path] : list.filter((p) => p !== path))) {
-    notice(on ? `«${baseName(path)}» añadida a marcadores.` : `«${baseName(path)}» quitada de marcadores.`);
+    notice(on ? `“${baseName(path)}” added to bookmarks.` : `“${baseName(path)}” removed from bookmarks.`);
   }
 }
 
-// Al renombrar o mover, los marcadores siguen a sus notas.
+// On rename or move, bookmarks follow their notes.
 async function moveBookmarks(moves) {
   const list = bookmarks();
   const next = list.map((p) => moves.find((m) => m.from === p)?.to || p);
@@ -2649,52 +2648,52 @@ function renderBookmarks() {
     ? items.map(({ path, note }) => h('div', { class: 'bookmark-row', role: 'listitem' },
       h('button', { class: `bookmark-open${note ? '' : ' missing'}`, type: 'button', title: path, disabled: !note, onclick: () => { closeMobilePanels(); openNote(note.id); } },
         h('span', { class: 'search-name' }, baseName(path)), parentPath(path) ? h('span', { class: 'search-folder' }, parentPath(path)) : null),
-      h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Quitar «${baseName(path)}» de marcadores`, title: 'Quitar', onclick: () => setBookmarks(bookmarks().filter((x) => x !== path)) }, '×')))
-    : [h('p', { class: 'search-empty' }, 'Sin marcadores. Usa «Añadir a marcadores» en el menú ⋯ de una nota.')]));
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Remove “${baseName(path)}” from bookmarks`, title: 'Remove', onclick: () => setBookmarks(bookmarks().filter((x) => x !== path)) }, '×')))
+    : [h('p', { class: 'search-empty' }, 'No bookmarks. Use “Add to bookmarks” in a note\'s ⋯ menu.')]));
 }
 
-// --- Paleta de comandos (Ctrl+P) ---
+// --- Command palette (Ctrl+P) ---
 function commands() {
   const cur = S.current && S.vault?.index.notes[S.current] ? S.current : null;
   const list = [
-    ['open', 'Abrir nota', 'Ctrl+O', () => quickSwitcher()],
-    ['search', 'Buscar en todas las notas', 'Ctrl+Mayús+F', () => openSearch()],
-    ['new', 'Nueva nota', 'Ctrl+N', () => newNote()],
-    ['new-tpl', 'Nueva nota desde plantilla', '', () => newFromTemplate()],
-    ['today', 'Nota de hoy', 'Ctrl+D', () => openDaily()],
-    ['home', 'Panel principal', '', () => openHome()],
-    ['mode', 'Cambiar entre edición y lectura', 'Ctrl+E', () => ACTIONS['toggle-mode']()],
-    ['save', 'Guardar ahora', 'Ctrl+S', () => saveNow()],
-    cur && ['tpl', 'Insertar plantilla', '', () => insertTemplate()],
-    cur && ['attach', 'Adjuntar imagen o PDF', '', () => $('attach-input').click()],
-    cur && ['bookmark', isBookmarked(cur) ? 'Quitar de marcadores' : 'Añadir a marcadores', '', () => toggleBookmark(cur)],
-    cur && ['rename', 'Renombrar nota', '', () => renameNotePrompt(cur)],
-    cur && ['move', 'Mover nota', '', () => moveNotePrompt(cur)],
-    cur && ['history', 'Historial de versiones', '', () => historyModal(cur)],
-    cur && ['delete', 'Eliminar nota', '', () => deleteNote(cur)],
-    ['graph', 'Vista de grafo', 'Ctrl+G', () => graphView()],
-    cur && ['graph-local', 'Grafo de esta nota', '', () => graphView(cur)],
-    ['board', 'Nuevo tablero Kanban', '', () => newBoard()],
-    ['drawing', 'Nuevo dibujo', '', () => newDrawing()],
-    cur && ['drawing-in', 'Insertar un dibujo nuevo en la nota', '', () => newDrawing({ insert: true })],
-    ['files', 'Ver archivos', '', () => showLeftPane('files')],
-    ['tags', 'Ver etiquetas', '', () => showLeftPane('tags')],
-    ['bookmarks', 'Ver marcadores', '', () => showLeftPane('bookmarks')],
-    ['left', 'Mostrar u ocultar el panel izquierdo', '', () => togglePanel('left')],
-    ['right', 'Mostrar u ocultar el panel derecho', '', () => togglePanel('right')],
-    ['collapse', 'Plegar todas las carpetas', '', () => ACTIONS['collapse-all']()],
-    ['settings', 'Ajustes', '', () => settingsModal()],
-    ['theme-light', 'Tema claro', '', () => { try { localStorage.setItem('snowlog.theme', 'light'); } catch { /* */ } applyTheme('light'); }],
-    ['theme-dark', 'Tema oscuro', '', () => { try { localStorage.setItem('snowlog.theme', 'dark'); } catch { /* */ } applyTheme('dark'); }],
-    ['theme-auto', 'Tema automático', '', () => { try { localStorage.setItem('snowlog.theme', 'auto'); } catch { /* */ } applyTheme('auto'); }],
-    ['setup', 'Configurar mi espacio', '', () => setupSpace()],
-    ['examples', 'Cargar ejemplos', '', () => loadExamples()],
-    ['import', 'Importar carpeta de Markdown', '', () => ACTIONS.import()],
-    ['backup', S.local ? 'Copia de seguridad (.zip)' : 'Copia de seguridad cifrada', '', () => backupNow()],
-    ['restore', 'Importar copia (.snowlog o .zip)', '', () => $('backup-input').click()],
-    !S.local && ['export', 'Exportar sin cifrar (.zip)', '', () => exportZip()],
-    !S.local && ['security', 'Frase de paso y recuperación', '', () => securityModal()],
-    ['lock', S.local ? 'Cerrar carpeta' : 'Bloquear', '', () => lock()],
+    ['open', 'Open note', 'Ctrl+O', () => quickSwitcher()],
+    ['search', 'Search all notes', 'Ctrl+Shift+F', () => openSearch()],
+    ['new', 'New note', 'Ctrl+N', () => newNote()],
+    ['new-tpl', 'New note from template', '', () => newFromTemplate()],
+    ['today', 'Today\'s note', 'Ctrl+D', () => openDaily()],
+    ['home', 'Dashboard', '', () => openHome()],
+    ['mode', 'Switch between editing and reading', 'Ctrl+E', () => ACTIONS['toggle-mode']()],
+    ['save', 'Save now', 'Ctrl+S', () => saveNow()],
+    cur && ['tpl', 'Insert template', '', () => insertTemplate()],
+    cur && ['attach', 'Attach an image or PDF', '', () => $('attach-input').click()],
+    cur && ['bookmark', isBookmarked(cur) ? 'Remove from bookmarks' : 'Add to bookmarks', '', () => toggleBookmark(cur)],
+    cur && ['rename', 'Rename note', '', () => renameNotePrompt(cur)],
+    cur && ['move', 'Move note', '', () => moveNotePrompt(cur)],
+    cur && ['history', 'Version history', '', () => historyModal(cur)],
+    cur && ['delete', 'Delete note', '', () => deleteNote(cur)],
+    ['graph', 'Graph view', 'Ctrl+G', () => graphView()],
+    cur && ['graph-local', 'Graph of this note', '', () => graphView(cur)],
+    ['board', 'New Kanban board', '', () => newBoard()],
+    ['drawing', 'New drawing', '', () => newDrawing()],
+    cur && ['drawing-in', 'Insert a new drawing into the note', '', () => newDrawing({ insert: true })],
+    ['files', 'Show files', '', () => showLeftPane('files')],
+    ['tags', 'Show tags', '', () => showLeftPane('tags')],
+    ['bookmarks', 'Show bookmarks', '', () => showLeftPane('bookmarks')],
+    ['left', 'Show or hide the left panel', '', () => togglePanel('left')],
+    ['right', 'Show or hide the right panel', '', () => togglePanel('right')],
+    ['collapse', 'Collapse all folders', '', () => ACTIONS['collapse-all']()],
+    ['settings', 'Settings', '', () => settingsModal()],
+    ['theme-light', 'Light theme', '', () => { try { localStorage.setItem('snowlog.theme', 'light'); } catch { /* */ } applyTheme('light'); }],
+    ['theme-dark', 'Dark theme', '', () => { try { localStorage.setItem('snowlog.theme', 'dark'); } catch { /* */ } applyTheme('dark'); }],
+    ['theme-auto', 'Automatic theme', '', () => { try { localStorage.setItem('snowlog.theme', 'auto'); } catch { /* */ } applyTheme('auto'); }],
+    ['setup', 'Set up my space', '', () => setupSpace()],
+    ['examples', 'Load examples', '', () => loadExamples()],
+    ['import', 'Import a Markdown folder', '', () => ACTIONS.import()],
+    ['backup', S.local ? 'Backup (.zip)' : 'Encrypted backup', '', () => backupNow()],
+    ['restore', 'Import a backup (.snowlog or .zip)', '', () => $('backup-input').click()],
+    !S.local && ['export', 'Export unencrypted (.zip)', '', () => exportZip()],
+    !S.local && ['security', 'Passphrase and recovery', '', () => securityModal()],
+    ['lock', S.local ? 'Close folder' : 'Lock', '', () => lock()],
   ];
   return list.filter(Boolean).map(([id, label, keys, run]) => ({ id, label, keys, run }));
 }
@@ -2708,7 +2707,7 @@ function commandPalette() {
   const all = commands();
   const recent = recentCommands();
   modal((close) => {
-    const input = h('input', { class: 'input', placeholder: 'Escribe un comando…', 'aria-label': 'Buscar comando', autocomplete: 'off', spellcheck: 'false' });
+    const input = h('input', { class: 'input', placeholder: 'Type a command…', 'aria-label': 'Find command', autocomplete: 'off', spellcheck: 'false' });
     const list = h('div', { class: 'switcher-list', role: 'listbox' });
     let items = [];
     let sel = 0;
@@ -2719,7 +2718,7 @@ function commandPalette() {
       sel = Math.min(sel, Math.max(0, items.length - 1));
       list.replaceChildren(...(items.length ? items.map((c, i) => h('button', {
         class: `switcher-item command-item${i === sel ? ' sel' : ''}`, type: 'button', role: 'option', 'aria-selected': String(i === sel), onclick: () => pick(i),
-      }, h('span', {}, c.label), c.keys ? h('kbd', {}, c.keys) : null)) : [h('p', { class: 'search-empty' }, 'Ningún comando coincide.')]));
+      }, h('span', {}, c.label), c.keys ? h('kbd', {}, c.keys) : null)) : [h('p', { class: 'search-empty' }, 'No command matches.')]));
       list.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
     };
     const pick = (i) => {
@@ -2736,12 +2735,12 @@ function commandPalette() {
       if (ev.key === 'Enter') { ev.preventDefault(); pick(sel); }
     });
     draw();
-    return h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Paleta de comandos' },
-      input, list, h('div', { class: 'switcher-hint' }, '↑↓ para moverte · Intro para ejecutar · Esc para cerrar'));
+    return h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Command palette' },
+      input, list, h('div', { class: 'switcher-hint' }, '↑↓ to move · Enter to run · Esc to close'));
   });
 }
 
-// --- Vista previa al pasar sobre un [[enlace]] ---
+// --- Preview when hovering over a [[link]] ---
 let previewTimer = null;
 function hidePreview() {
   clearTimeout(previewTimer);
@@ -2751,7 +2750,7 @@ function hidePreview() {
 
 function setupHoverPreview() {
   const box = $('hover-preview');
-  if (!matchMedia('(hover: hover)').matches) return; // en pantallas táctiles, no
+  if (!matchMedia('(hover: hover)').matches) return; // not on touch screens
   document.addEventListener('mouseover', (ev) => {
     const link = ev.target.closest?.('a.internal-link');
     if (!link || !S.vault || link.closest('#hover-preview')) return;
@@ -2784,7 +2783,7 @@ function setupHoverPreview() {
   addEventListener('scroll', hidePreview, true);
 }
 
-// --- Ajustes ---
+// --- Settings ---
 async function settingsModal() {
   if (!S.vault) return;
   const cur = { ...WS };
@@ -2800,42 +2799,42 @@ async function settingsModal() {
     return [h('div', { class: 'field' }, h('label', { for: id }, label), input, hint ? h('small', { class: 'field-hint' }, hint) : null), input];
   };
   let theme = 'auto';
-  try { theme = localStorage.getItem('snowlog.theme') || 'auto'; } catch { /* sin almacenamiento */ }
+  try { theme = localStorage.getItem('snowlog.theme') || 'auto'; } catch { /* no storage */ }
   const result = await modal((close) => {
-    const [fHome, iHome] = text('st-home', 'Panel principal (nota)', cur.home, 'dl-notes');
-    const [fDaily, iDaily] = text('st-daily', 'Carpeta del diario', cur.dailyFolder, 'dl-folders', 'Las notas diarias se llaman AAAA-MM-DD.');
-    const [fTpl, iTpl] = text('st-tpl', 'Plantilla de la nota diaria', cur.dailyTemplate, 'dl-notes');
-    const [fTpls, iTpls] = text('st-tpls', 'Carpeta de plantillas', cur.templatesFolder, 'dl-folders', 'Lo que hay aquí no sale en las consultas.');
-    const [fAtt, iAtt] = text('st-att', 'Carpeta de adjuntos', cur.attachmentsFolder, 'dl-folders');
+    const [fHome, iHome] = text('st-home', 'Dashboard (note)', cur.home, 'dl-notes');
+    const [fDaily, iDaily] = text('st-daily', 'Daily notes folder', cur.dailyFolder, 'dl-folders', 'Daily notes are named YYYY-MM-DD.');
+    const [fTpl, iTpl] = text('st-tpl', 'Daily note template', cur.dailyTemplate, 'dl-notes');
+    const [fTpls, iTpls] = text('st-tpls', 'Templates folder', cur.templatesFolder, 'dl-folders', 'What is here does not show up in queries.');
+    const [fAtt, iAtt] = text('st-att', 'Attachments folder', cur.attachmentsFolder, 'dl-folders');
     const openDaily = h('input', { type: 'checkbox', id: 'st-open', checked: !!cur.openDailyOnStart });
-    const [fLock, iLock] = num('st-lock', 'Bloquear tras estos minutos sin usarlo', cur.lockAfterMinutes, 1, 240);
-    const [fBk, iBk] = num('st-bk', 'Recordar la copia de seguridad cada (días)', cur.backupReminderDays, 0, 365, '0 = no recordar.');
+    const [fLock, iLock] = num('st-lock', 'Lock after this many minutes unused', cur.lockAfterMinutes, 1, 240);
+    const [fBk, iBk] = num('st-bk', 'Backup reminder every (days)', cur.backupReminderDays, 0, 365, '0 = no reminder.');
     const themeSel = h('select', { class: 'input', id: 'st-theme' },
-      ...[['auto', 'Automático (el del sistema)'], ['light', 'Claro'], ['dark', 'Oscuro']]
+      ...[['auto', 'Automatic (the system\'s)'], ['light', 'Light'], ['dark', 'Dark']]
         .map(([v, l]) => h('option', { value: v, selected: v === theme }, l)));
     themeSel.addEventListener('change', () => applyTheme(themeSel.value));
     const err = errorLine();
-    const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Guardar');
-    const form = h('form', { class: 'modal settings', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Ajustes' },
-      h('h2', {}, 'Ajustes'),
+    const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
+    const form = h('form', { class: 'modal settings', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
+      h('h2', {}, 'Settings'),
       dl('dl-folders', folders), dl('dl-notes', notes),
-      h('h3', {}, 'Día a día'), fHome, fDaily, fTpl,
-      h('label', { class: 'check', for: 'st-open' }, openDaily, 'Abrir la nota de hoy al entrar'),
-      h('h3', {}, 'Carpetas'), fTpls, fAtt,
-      h('h3', {}, 'Seguridad y copias'), S.local ? null : fLock, fBk,
-      h('h3', {}, 'Este dispositivo'), h('div', { class: 'field' }, h('label', { for: 'st-theme' }, 'Tema'), themeSel),
-      h('p', { class: 'field-hint' }, S.local ? 'Los ajustes se guardan en la carpeta (.snowlog/ajustes.json).' : 'Los ajustes se guardan cifrados en tu bóveda y valen en todos tus dispositivos. El tema es solo de este dispositivo.'),
+      h('h3', {}, 'Day to day'), fHome, fDaily, fTpl,
+      h('label', { class: 'check', for: 'st-open' }, openDaily, 'Open today\'s note on start'),
+      h('h3', {}, 'Folders'), fTpls, fAtt,
+      h('h3', {}, 'Security and backups'), S.local ? null : fLock, fBk,
+      h('h3', {}, 'This device'), h('div', { class: 'field' }, h('label', { for: 'st-theme' }, 'Theme'), themeSel),
+      h('p', { class: 'field-hint' }, S.local ? 'Settings are stored in the folder (.snowlog/settings.json).' : 'Settings are stored encrypted in your vault and apply on all your devices. The theme is for this device only.'),
       err,
       h('div', { class: 'modal-actions' },
-        h('button', { class: 'btn', type: 'button', onclick: () => { applyTheme(theme); close(null); } }, 'Cancelar'),
+        h('button', { class: 'btn', type: 'button', onclick: () => { applyTheme(theme); close(null); } }, 'Cancel'),
         btn));
     form.addEventListener('submit', (ev) => {
       ev.preventDefault();
       const clean = (v) => normalizePath(v || '');
       const lockMin = Math.round(Number(iLock.value));
       const bkDays = Math.round(Number(iBk.value));
-      if (!S.local && !(lockMin >= 1 && lockMin <= 240)) return showError(err, 'El bloqueo tiene que estar entre 1 y 240 minutos.');
-      if (!(bkDays >= 0 && bkDays <= 365)) return showError(err, 'El recordatorio tiene que estar entre 0 y 365 días.');
+      if (!S.local && !(lockMin >= 1 && lockMin <= 240)) return showError(err, 'The lock must be between 1 and 240 minutes.');
+      if (!(bkDays >= 0 && bkDays <= 365)) return showError(err, 'The reminder must be between 0 and 365 days.');
       close({
         theme: themeSel.value,
         settings: {
@@ -2853,61 +2852,61 @@ async function settingsModal() {
     return form;
   });
   if (!result) return;
-  try { localStorage.setItem('snowlog.theme', result.theme); } catch { /* sin almacenamiento */ }
+  try { localStorage.setItem('snowlog.theme', result.theme); } catch { /* no storage */ }
   applyTheme(result.theme);
-  // Solo se guarda lo que difiere de los valores por defecto.
+  // Only what differs from the defaults is stored.
   const changed = Object.fromEntries(Object.entries(result.settings).filter(([k, v]) => v !== DEFAULTS[k]));
   const before = JSON.stringify(S.vault.getSettings());
   if (JSON.stringify(changed) !== before) {
     try {
       await S.vault.saveSettings(changed);
     } catch (e) {
-      notice(`No se pudieron guardar los ajustes: ${errText(e)}`, 'error');
+      notice(`The settings could not be saved: ${errText(e)}`, 'error');
       return;
     }
   }
   applySettings();
   renderCalendar();
-  notice('Ajustes guardados.');
+  notice('Settings saved.');
 }
 
-// --- Frase de paso y código de recuperación ---
+// --- Passphrase and recovery code ---
 async function securityModal() {
   if (S.local || !S.vaultFile) return;
-  const choice = await modal((close) => h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Frase de paso y recuperación' },
-    h('h2', {}, 'Frase de paso y recuperación'),
-    h('p', {}, 'La clave que cifra tus notas no cambia: solo cambia cómo se abre. No hace falta recifrar nada.'),
+  const choice = await modal((close) => h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Passphrase and recovery' },
+    h('h2', {}, 'Passphrase and recovery'),
+    h('p', {}, 'The key that encrypts your notes does not change: only how it is opened. Nothing needs re-encrypting.'),
     h('div', { class: 'security-options' },
-      h('button', { class: 'btn', type: 'button', onclick: () => close('pass') }, 'Cambiar la frase de paso'),
-      h('button', { class: 'btn', type: 'button', onclick: () => close('recovery') }, 'Generar un código de recuperación nuevo'),
-      h('button', { class: 'btn', type: 'button', onclick: () => close('rotate') }, 'Cambiar la clave de cifrado (recifrar todo)')),
-    h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cerrar'))));
+      h('button', { class: 'btn', type: 'button', onclick: () => close('pass') }, 'Change the passphrase'),
+      h('button', { class: 'btn', type: 'button', onclick: () => close('recovery') }, 'Generate a new recovery code'),
+      h('button', { class: 'btn', type: 'button', onclick: () => close('rotate') }, 'Change the encryption key (re-encrypt everything)')),
+    h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Close'))));
   if (choice === 'pass') changePassphraseModal();
   else if (choice === 'recovery') renewRecoveryModal();
   else if (choice === 'rotate') rotateKeyModal();
 }
 
-function showNewRecoveryCode(code, title = 'Tu código de recuperación nuevo') {
+function showNewRecoveryCode(code, title = 'Your new recovery code') {
   return modal((close) => {
     const check = h('input', { type: 'checkbox', id: 'saved2' });
-    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => close(true) }, 'Hecho');
+    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => close(true) }, 'Done');
     check.addEventListener('change', () => { btn.disabled = !check.checked; });
     return h('div', { class: 'modal', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': title },
       h('h2', {}, title),
-      h('p', {}, 'Apúntalo en papel y guárdalo en un sitio seguro. El anterior ya no sirve. No se volverá a mostrar.'),
+      h('p', {}, 'Write it on paper and keep it somewhere safe. The previous one no longer works. It will not be shown again.'),
       h('div', { class: 'recovery-code' }, code),
-      h('label', { class: 'check', for: 'saved2' }, check, 'Lo he guardado en un sitio seguro'),
+      h('label', { class: 'check', for: 'saved2' }, check, 'I have kept it somewhere safe'),
       h('div', { class: 'modal-actions' }, btn));
   });
 }
 
-// Rotar la clave: todo se vuelve a cifrar con una clave nueva. Para cuando alguien pudo conocer la
-// frase antigua: desde ahora, ni esa frase ni la clave antigua abren lo que se escriba.
+// Rotate the key: everything is encrypted again with a new key. For when someone may have learned the
+// old passphrase: from now on, neither that passphrase nor the old key open what is written.
 async function rotateKeyModal() {
-  const result = await secretForm('Cambiar la clave de cifrado',
-    'Se vuelven a cifrar todas tus notas y adjuntos con una clave nueva, en un solo paso, y se genera un código de recuperación nuevo. Tu frase de paso sigue siendo la misma (cámbiala después si quieres). Los demás dispositivos pedirán la frase la próxima vez. No uses Snowlog en otro dispositivo mientras tanto.',
-    [passField('rk0', 'Frase de paso actual')],
-    'Recifrar todo',
+  const result = await secretForm('Change the encryption key',
+    'All your notes and attachments are encrypted again with a new key, in a single step, and a new recovery code is generated. Your passphrase stays the same (change it afterwards if you want). Your other devices will ask for the passphrase next time. Do not use Snowlog on another device meanwhile.',
+    [passField('rk0', 'Current passphrase')],
+    'Re-encrypt everything',
     async ([pass]) => {
       await saveNow();
       const st = $('st-sync');
@@ -2915,9 +2914,9 @@ async function rotateKeyModal() {
         const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
         const res = await S.vault.rotate(current, pass, CONFIG.kdfIterations, (d, t) => {
           S.lastActivity = Date.now();
-          st.textContent = `Recifrando ${d}/${t}…`;
+          st.textContent = `Re-encrypting ${d}/${t}…`;
         });
-        st.textContent = 'Subiendo…';
+        st.textContent = 'Uploading…';
         return res;
       } finally {
         st.textContent = '';
@@ -2930,7 +2929,7 @@ async function rotateKeyModal() {
   await Auth.saveCred(S.dek, S.cred);
   await saveExpanded();
   await showNewRecoveryCode(result.recoveryCode);
-  notice('Clave cambiada: todo está cifrado con la clave nueva.');
+  notice('Key changed: everything is encrypted with the new key.');
 }
 
 function secretForm(title, text, fields, okText, onSubmit) {
@@ -2939,10 +2938,10 @@ function secretForm(title, text, fields, okText, onSubmit) {
     const btn = h('button', { class: 'btn primary', type: 'submit' }, okText);
     const form = h('form', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('h2', {}, title), h('p', {}, text), ...fields.map((f) => f[0]), err,
-      h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cancelar'), btn));
+      h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cancel'), btn));
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const done = busy(btn, 'Cifrando…');
+      const done = busy(btn, 'Encrypting…');
       try {
         const result = await onSubmit(fields.map((f) => f[1].value));
         for (const f of fields) f[1].value = '';
@@ -2957,33 +2956,33 @@ function secretForm(title, text, fields, okText, onSubmit) {
 }
 
 async function changePassphraseModal() {
-  const ok = await secretForm('Cambiar la frase de paso',
-    'En los demás dispositivos se pedirá la frase nueva la próxima vez que se desbloqueen.',
-    [passField('sp0', 'Frase de paso actual'), passField('sp1', 'Nueva frase de paso (mínimo 12 caracteres)', 'new-password'), passField('sp2', 'Repite la nueva frase', 'new-password')],
-    'Cambiar la frase',
+  const ok = await secretForm('Change the passphrase',
+    'Your other devices will ask for the new passphrase the next time they are unlocked.',
+    [passField('sp0', 'Current passphrase'), passField('sp1', 'New passphrase (at least 12 characters)', 'new-password'), passField('sp2', 'Repeat the new passphrase', 'new-password')],
+    'Change the passphrase',
     async ([old, p1, p2]) => {
-      if (p1.length < 12) throw new Error('Usa al menos 12 caracteres.');
-      if (p1 !== p2) throw new Error('Las dos frases no coinciden.');
-      if (p1 === old) throw new Error('La frase nueva es igual que la actual.');
+      if (p1.length < 12) throw new Error('Use at least 12 characters.');
+      if (p1 !== p2) throw new Error('The two passphrases do not match.');
+      if (p1 === old) throw new Error('The new passphrase is the same as the current one.');
       const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
       const updated = await C.changePassphrase(current, old, p1, CONFIG.kdfIterations);
-      await S.vault.writeVaultFile(updated, 'cambiar frase de paso');
+      await S.vault.writeVaultFile(updated, 'change passphrase');
       S.vaultFile = updated;
       Auth.cacheVault(updated);
       return true;
     });
-  if (ok) notice('Frase de paso cambiada.');
+  if (ok) notice('Passphrase changed.');
 }
 
 async function renewRecoveryModal() {
-  const code = await secretForm('Código de recuperación nuevo',
-    'El código anterior dejará de servir. Después tendrás que apuntar el nuevo.',
-    [passField('sr0', 'Frase de paso actual')],
-    'Generar código',
+  const code = await secretForm('New recovery code',
+    'The previous code will stop working. Afterwards you will need to write down the new one.',
+    [passField('sr0', 'Current passphrase')],
+    'Generate code',
     async ([pass]) => {
       const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
       const { vault: updated, recoveryCode } = await C.renewRecoveryCode(current, pass, CONFIG.kdfIterations);
-      await S.vault.writeVaultFile(updated, 'nuevo código de recuperación');
+      await S.vault.writeVaultFile(updated, 'new recovery code');
       S.vaultFile = updated;
       Auth.cacheVault(updated);
       return recoveryCode;
@@ -2992,18 +2991,18 @@ async function renewRecoveryModal() {
   await showNewRecoveryCode(code);
 }
 
-// --- Historial de versiones ---
-const dateFmt = new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+// --- Version history ---
+const dateFmt = new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 function whenText(iso) {
   const ms = Date.now() - Date.parse(iso);
   if (!Number.isFinite(ms)) return '';
-  if (ms < 60000) return 'hace un momento';
-  if (ms < 3600000) return `hace ${Math.round(ms / 60000)} min`;
-  if (ms < 86400000) return `hace ${Math.round(ms / 3600000)} h`;
+  if (ms < 60000) return 'a moment ago';
+  if (ms < 3600000) return `${Math.round(ms / 60000)} min ago`;
+  if (ms < 86400000) return `${Math.round(ms / 3600000)} h ago`;
   return dateFmt.format(new Date(iso));
 }
 
-// Resumen de cambios entre dos textos por líneas: { added, removed }.
+// Summary of line changes between two texts: { added, removed }.
 function lineDiff(a, b) {
   const count = (t) => t.split('\n').reduce((m, l) => m.set(l, (m.get(l) || 0) + 1), new Map());
   const ca = count(a);
@@ -3026,16 +3025,16 @@ async function historyModal(id) {
   const texts = new Map();
   const current = await vault.read(id);
   const restored = await modal((close) => {
-    const list = h('div', { class: 'history-list', role: 'listbox', 'aria-label': 'Versiones' }, h('p', { class: 'search-empty' }, 'Cargando versiones…'));
+    const list = h('div', { class: 'history-list', role: 'listbox', 'aria-label': 'Versions' }, h('p', { class: 'search-empty' }, 'Loading versions…'));
     const preview = h('article', { class: 'history-preview markdown' });
     const info = h('p', { class: 'history-info' });
-    const restore = h('button', { class: 'btn primary', type: 'button', disabled: true }, 'Restaurar esta versión');
+    const restore = h('button', { class: 'btn primary', type: 'button', disabled: true }, 'Restore this version');
     const show = async (i) => {
       sel = i;
       [...list.children].forEach((b, j) => { b.classList.toggle('sel', j === i); b.setAttribute('aria-selected', String(j === i)); });
       const v = versions[i];
       restore.disabled = true;
-      preview.replaceChildren(h('p', { class: 'search-empty' }, 'Descifrando…'));
+      preview.replaceChildren(h('p', { class: 'search-empty' }, 'Decrypting…'));
       try {
         if (!texts.has(v.ref)) texts.set(v.ref, await vault.readVersion(id, v.ref));
         if (sel !== i) return;
@@ -3043,28 +3042,28 @@ async function historyModal(id) {
         preview.innerHTML = trusted(render(text, { frontmatter: true }));
         const d = lineDiff(current, text);
         info.textContent = i === 0 || text === current
-          ? 'Es la versión actual.'
-          : `Esta versión tiene ${d.added} línea${d.added === 1 ? '' : 's'} que la actual no tiene y le falta${d.removed === 1 ? '' : 'n'} ${d.removed}.`;
+          ? 'This is the current version.'
+          : `This version has ${d.added} line${d.added === 1 ? '' : 's'} the current one does not, and lacks ${d.removed}.`;
         restore.disabled = i === 0 || text === current;
       } catch (e) {
-        preview.replaceChildren(h('p', { class: 'embed-missing' }, `No se pudo abrir esta versión: ${errText(e)}`));
+        preview.replaceChildren(h('p', { class: 'embed-missing' }, `This version could not be opened: ${errText(e)}`));
       }
     };
     restore.addEventListener('click', () => close(texts.get(versions[sel].ref)));
-    const box = h('div', { class: 'modal history', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Historial de versiones' },
-      h('h2', {}, `Historial de «${baseName(note.path)}»`),
+    const box = h('div', { class: 'modal history', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Version history' },
+      h('h2', {}, `History of “${baseName(note.path)}”`),
       h('div', { class: 'history-body' }, list, h('div', { class: 'history-right' }, info, preview)),
       h('div', { class: 'modal-actions' },
-        h('span', { class: 'history-hint' }, S.local ? 'Se guarda una copia como mucho cada 10 minutos.' : 'Cada versión sigue cifrada en el repo.'),
-        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cerrar'),
+        h('span', { class: 'history-hint' }, S.local ? 'A copy is kept at most every 10 minutes.' : 'Each version stays encrypted in the repository.'),
+        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Close'),
         restore));
     vault.history(id).then((vs) => {
       versions = vs;
       list.replaceChildren(...vs.map((v, i) => h('button', {
         class: 'switcher-item', type: 'button', role: 'option', onclick: () => show(i),
-      }, h('span', {}, i === 0 ? 'Actual' : whenText(v.date)), h('span', { class: 'sub' }, dateFmt.format(new Date(v.date))))));
+      }, h('span', {}, i === 0 ? 'Current' : whenText(v.date)), h('span', { class: 'sub' }, dateFmt.format(new Date(v.date))))));
       if (vs.length) show(0);
-      else list.replaceChildren(h('p', { class: 'search-empty' }, 'Sin versiones anteriores.'));
+      else list.replaceChildren(h('p', { class: 'search-empty' }, 'No earlier versions.'));
     }).catch((e) => list.replaceChildren(h('p', { class: 'embed-missing' }, errText(e))));
     return box;
   });
@@ -3080,12 +3079,12 @@ async function historyModal(id) {
   }
   syncIndex();
   refreshSide();
-  notice('Versión restaurada. La que había sigue en el historial.');
+  notice('Version restored. The one before is still in the history.');
 }
 
-// --- Dibujos (serbenda/sketch) ---
-// Son adjuntos .sketch (JSON, cifrados en online). Se editan aquí mismo y se ven en las notas con
-// ![[dibujo.sketch]]. El editor viene de sketch y no usa innerHTML.
+// --- Drawings (serbenda/sketch) ---
+// They are .sketch attachments (JSON, encrypted online). They are edited right here and shown in notes
+// with ![[drawing.sketch]]. The editor comes from sketch and does not use innerHTML.
 const SKETCH_TYPE = 'application/vnd.sketch+json';
 const isSketch = (id) => S.vault?.index.files?.[id]?.type === SKETCH_TYPE;
 
@@ -3101,10 +3100,10 @@ function sketchFigure(f, bytes, width) {
   try {
     scene = parseSketch(new TextDecoder().decode(bytes));
   } catch {
-    return h('span', { class: 'embed embed-missing' }, `«${baseName(f.path)}» no es un dibujo válido`);
+    return h('span', { class: 'embed embed-missing' }, `“${baseName(f.path)}” is not a valid drawing`);
   }
-  const fig = h('button', { class: 'embed-sketch', type: 'button', title: 'Abrir el dibujo', 'aria-label': `Dibujo ${baseName(f.path)}. Pulsa para editarlo.`, onclick: () => openDrawing(f.id) });
-  if (!scene.elements.length) fig.append(h('span', { class: 'embed-sketch-empty' }, `Dibujo vacío: pulsa para dibujar en «${baseName(f.path)}»`));
+  const fig = h('button', { class: 'embed-sketch', type: 'button', title: 'Open the drawing', 'aria-label': `Drawing ${baseName(f.path)}. Click to edit it.`, onclick: () => openDrawing(f.id) });
+  if (!scene.elements.length) fig.append(h('span', { class: 'embed-sketch-empty' }, `Empty drawing: click to draw in “${baseName(f.path)}”`));
   else fig.append(sketchSvg(document, scene, { maxWidth: Number(width) || 720 }));
   return fig;
 }
@@ -3126,7 +3125,7 @@ async function openDrawing(id) {
   const parts = f.path.split('/');
   $('breadcrumb').replaceChildren(...parts.flatMap((p, i) => [i ? h('span', { class: 'crumb-sep' }, '/') : null, h('span', { class: i === parts.length - 1 ? 'crumb-last' : '' }, p)]).filter(Boolean));
   document.title = `${baseName(f.path)} · Snowlog`;
-  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'Dibujo'));
+  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'Drawing'));
   refreshBacklinks();
   ensureIndex().then(() => { if (D.id === id) refreshBacklinks(); }).catch(() => {});
   $('st-words').textContent = '';
@@ -3138,7 +3137,7 @@ async function openDrawing(id) {
     setStatus('saved');
   } catch (e) {
     setStatus('error');
-    notice(`No se pudo abrir el dibujo: ${errText(e)}`, 'error');
+    notice(`The drawing could not be opened: ${errText(e)}`, 'error');
   }
   if (D.id !== id) return;
   D.editor = createSketch(box, { scene, onChange: () => scheduleDrawingSave() });
@@ -3165,17 +3164,17 @@ function saveDrawing() {
     .then(() => vault.saveFile(id, bytes, { merge: mergeDrawing }))
     .then((res) => {
       if (D.id === id && !D.dirty) setStatus('saved');
-      // Se juntaron cambios de otro dispositivo: el editor pasa a mostrar el dibujo junto.
+      // Changes from another device were combined: the editor now shows the combined drawing.
       if (res?.merged && D.id === id && !D.dirty && D.editor) {
         try {
           D.editor.setScene(parseSketch(new TextDecoder().decode(res.merged)), { fit: false });
-        } catch { /* se verá al volver a abrirlo */ }
+        } catch { /* it will show when reopened */ }
       }
       if (res?.conflict) {
         renderTree();
-        notice(`Este dibujo también se cambió en otro sitio en las mismas partes: se han juntado y la otra versión está en «${baseName(res.conflict.path)}».`);
+        notice(`This drawing was also changed elsewhere in the same parts: they were combined and the other version is in “${baseName(res.conflict.path)}”.`);
       } else if (res?.merged) {
-        notice('Se han juntado los cambios de este dibujo hechos en otro sitio.');
+        notice('The changes made to this drawing elsewhere were combined.');
       }
     })
     .catch((e) => {
@@ -3184,19 +3183,19 @@ function saveDrawing() {
         setStatus('error');
       }
       if (e?.message === 'key_changed') keyChanged();
-      else notice(`No se pudo guardar el dibujo: ${errText(e)}`, 'error');
+      else notice(`The drawing could not be saved: ${errText(e)}`, 'error');
     });
   return D.saving;
 }
 
-// Junta dos versiones de un dibujo elemento a elemento (null si alguna no es un dibujo válido).
+// Combines two versions of a drawing element by element (null if either is not a valid drawing).
 function mergeDrawing(base, mine, theirs) {
   const dec = (b) => parseSketch(new TextDecoder().decode(b));
   const r = mergeSketch(dec(base), dec(mine), dec(theirs));
   return { bytes: new TextEncoder().encode(serializeSketch(r.scene)), conflict: r.conflict };
 }
 
-// Dibujos como "notas" para la búsqueda: nombre, carpeta y los textos que llevan dentro.
+// Drawings as "notes" for search: name, folder and the texts inside them.
 async function drawingNotes() {
   const out = [];
   for (const [id, f] of Object.entries(S.vault?.index.files || {})) {
@@ -3208,7 +3207,7 @@ async function drawingNotes() {
       try {
         text = parseSketch(new TextDecoder().decode(await S.vault.readFile(id))).elements
           .filter((e) => e.type === 'text').map((e) => e.text).join('\n');
-      } catch { /* sin conexión o dañado: se busca solo por el nombre */ }
+      } catch { /* offline or damaged: searched by name only */ }
       c = { ver, note: { id, path: f.path, name: baseName(f.path), folder: parentPath(f.path), text, tags: new Set(), links: new Set(), fm: {}, tasks: [], ctime: f.created || '', mtime: ver, drawing: true } };
       S.drawText.set(id, c);
     }
@@ -3231,7 +3230,7 @@ async function newDrawing({ insert = false } = {}) {
   const into = insert && S.current ? S.current : null;
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  const name = `Dibujo ${isoDate(d)} ${p(d.getHours())}${p(d.getMinutes())}.sketch`;
+  const name = `Drawing ${isoDate(d)} ${p(d.getHours())}${p(d.getMinutes())}.sketch`;
   try {
     const { id, path } = await S.vault.addFile(WS.drawingsFolder || '', name, new TextEncoder().encode(serializeSketch(emptySketch())));
     if (into) {
@@ -3240,11 +3239,11 @@ async function newDrawing({ insert = false } = {}) {
     }
     await openDrawing(id);
   } catch (e) {
-    notice(`No se pudo crear el dibujo: ${errText(e)}`, 'error');
+    notice(`The drawing could not be created: ${errText(e)}`, 'error');
   }
 }
 
-// --- Adjuntos (imágenes y PDF) ---
+// --- Attachments (images and PDFs) ---
 const fmtSize = (n) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 let blobUrls = [];
 
@@ -3259,7 +3258,7 @@ function revokeBlobs() {
   blobUrls = [];
 }
 
-// Rellena los huecos ![[adjunto]] del modo lectura con la imagen o el PDF descifrados.
+// Fills the ![[attachment]] placeholders in reading mode with the decrypted image or PDF.
 async function fillEmbeds(view) {
   const vault = S.vault;
   for (const slot of view.querySelectorAll('span.embed')) {
@@ -3267,7 +3266,7 @@ async function fillEmbeds(view) {
     const f = vault.findFile(name);
     if (!f) {
       slot.className = 'embed embed-missing';
-      slot.textContent = `No encuentro el adjunto «${name}»`;
+      slot.textContent = `Attachment “${name}” not found`;
       continue;
     }
     slot.className = 'embed embed-loading';
@@ -3282,7 +3281,7 @@ async function fillEmbeds(view) {
         slot.replaceWith(h('span', { class: 'embed-file' },
           h('span', { class: 'embed-file-ext' }, 'PDF'),
           h('span', { class: 'embed-file-name' }, baseName(f.path), h('small', {}, fmtSize(f.size))),
-          h('a', { class: 'embed-open', href: blobUrl(bytes, f.type), target: '_blank', rel: 'noopener' }, 'Abrir')));
+          h('a', { class: 'embed-open', href: blobUrl(bytes, f.type), target: '_blank', rel: 'noopener' }, 'Open')));
       } else {
         const img = h('img', { class: 'embed-img', alt: baseName(f.path), src: `data:${f.type};base64,${C.toB64(bytes)}` });
         if (slot.dataset.width) img.style.width = `${slot.dataset.width}px`;
@@ -3291,12 +3290,12 @@ async function fillEmbeds(view) {
       }
     } catch (e) {
       slot.className = 'embed embed-missing';
-      slot.textContent = `No se pudo abrir «${name}»: ${errText(e)}`;
+      slot.textContent = `“${name}” could not be opened: ${errText(e)}`;
     }
   }
 }
 
-// Abre el adjunto en una pestaña nueva del navegador.
+// Opens the attachment in a new browser tab.
 async function openAttachment(id) {
   const f = S.vault.index.files[id];
   if (!f) return;
@@ -3311,7 +3310,7 @@ async function openAttachment(id) {
   }
 }
 
-// Enlace corto si el nombre es único; si no, con la ruta.
+// A short link if the name is unique; otherwise with the path.
 function embedTarget(path) {
   const name = baseName(path);
   const same = S.vault.files().filter((f) => baseName(f.path).toLowerCase() === name.toLowerCase());
@@ -3330,11 +3329,11 @@ function insertEmbed(path) {
 
 function pastedName(file) {
   const ext = extOf(file.name) || ({ 'image/jpeg': 'jpg', 'application/pdf': 'pdf' }[file.type] || file.type.split('/')[1] || 'bin');
-  // Las capturas pegadas llegan como "image.png": se les da un nombre con fecha y hora.
+  // Pasted screenshots arrive as "image.png": they get a name with the date and time.
   if (!file.name || /^image\.\w+$/i.test(file.name)) {
     const d = new Date();
     const p = (n) => String(n).padStart(2, '0');
-    return `Pegado ${isoDate(d)} ${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
+    return `Pasted ${isoDate(d)} ${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
   }
   return file.name;
 }
@@ -3344,11 +3343,11 @@ async function attachFiles(files) {
   const vault = S.vault;
   const folder = WS.attachmentsFolder || '';
   for (const file of files) {
-    $('st-sync').textContent = S.local ? 'Guardando adjunto…' : 'Cifrando y subiendo adjunto…';
+    $('st-sync').textContent = S.local ? 'Saving attachment…' : 'Encrypting and uploading attachment…';
     try {
       let name = pastedName(file);
       let data = new Uint8Array(await file.arrayBuffer());
-      // Un .excalidraw se convierte en dibujo de sketch; un .sketch se comprueba antes de guardarlo.
+      // An .excalidraw file becomes a sketch drawing; a .sketch file is checked before saving it.
       if (/\.(excalidraw|sketch)$/i.test(name)) {
         data = new TextEncoder().encode(serializeSketch(parseSketch(new TextDecoder().decode(data))));
         name = name.replace(/\.excalidraw$/i, '.sketch');
@@ -3358,7 +3357,7 @@ async function attachFiles(files) {
       expandTo(path);
       insertEmbed(path);
     } catch (e) {
-      notice(`No se pudo adjuntar «${file.name || 'imagen'}»: ${errText(e)}`, 'error');
+      notice(`“${file.name || 'image'}” could not be attached: ${errText(e)}`, 'error');
     }
   }
   setStatus(S.dirty ? 'pending' : 'saved');
@@ -3368,13 +3367,13 @@ async function attachFiles(files) {
 async function deleteAttachment(id) {
   const f = S.vault.index.files[id];
   if (!f) return;
-  const ok = await confirmModal('Eliminar adjunto', `¿Eliminar «${baseName(f.path)}»? Las notas que lo muestran dejarán de verlo.`, 'Eliminar', true);
+  const ok = await confirmModal('Delete attachment', `Delete “${baseName(f.path)}”? Notes that show it will no longer see it.`, 'Delete', true);
   if (!ok) return;
   await run(() => S.vault.deleteFile(id));
   renderTree();
 }
 
-// --- Panel izquierdo: archivos, búsqueda y etiquetas ---
+// --- Left panel: files, search and tags ---
 let leftTab = 'files';
 function showLeftTab(tab) {
   leftTab = tab;
@@ -3420,7 +3419,7 @@ async function runSearch() {
   info.hidden = true;
   if (!S.indexReady || S.notesIdx.size < S.vault.notes().length) {
     const p = S.indexProgress;
-    box.replaceChildren(h('p', { class: 'search-empty' }, p && p.total ? `Descifrando notas (${p.done} de ${p.total})…` : 'Descifrando notas…'));
+    box.replaceChildren(h('p', { class: 'search-empty' }, p && p.total ? `Decrypting notes (${p.done} of ${p.total})…` : 'Decrypting notes…'));
   }
   await saveNow();
   await ensureIndex();
@@ -3433,18 +3432,18 @@ async function runSearch() {
   const ms = Math.round(performance.now() - t0);
   const total = results.reduce((a, r) => a + r.count, 0);
   const head = h('p', { class: 'search-count' }, results.length
-    ? `${results.total} nota${results.total === 1 ? '' : 's'}${results.total > results.length ? ` (se muestran ${results.length})` : ''}${total ? ` · ${total} coincidencia${total === 1 ? '' : 's'}` : ''} · ${ms} ms`
-    : 'Sin resultados');
+    ? `${results.total} note${results.total === 1 ? '' : 's'}${results.total > results.length ? ` (showing ${results.length})` : ''}${total ? ` · ${total} match${total === 1 ? '' : 'es'}` : ''} · ${ms} ms`
+    : 'No results');
   box.replaceChildren(head, ...results.map((r) => h('div', { class: 'search-result', role: 'listitem' },
     h('button', { class: 'search-note', type: 'button', title: r.note.path, onclick: () => openResult(r.note.id) },
       h('span', { class: 'search-name' }, r.note.name),
-      r.note.drawing ? h('span', { class: 'search-folder' }, `Dibujo${r.note.folder ? ` · ${r.note.folder}` : ''}`)
+      r.note.drawing ? h('span', { class: 'search-folder' }, `Drawing${r.note.folder ? ` · ${r.note.folder}` : ''}`)
         : r.note.folder ? h('span', { class: 'search-folder' }, r.note.folder) : null),
     ...r.matches.map((m) => h('button', { class: 'search-line', type: 'button', onclick: () => openResult(r.note.id, m) }, ...marked(m))),
   )));
 }
 
-// Texto del fragmento con <mark> en lo encontrado (siempre como texto, nunca HTML).
+// Snippet text with <mark> on the match (always as text, never HTML).
 function marked(m) {
   const out = [];
   let at = 0;
@@ -3478,7 +3477,7 @@ async function openResult(id, match) {
 async function renderTags() {
   const list = $('tag-list');
   if (!S.vault) return;
-  if (!S.indexReady) list.replaceChildren(h('p', { class: 'search-empty' }, 'Descifrando notas…'));
+  if (!S.indexReady) list.replaceChildren(h('p', { class: 'search-empty' }, 'Decrypting notes…'));
   await ensureIndex();
   if (!S.vault || leftTab !== 'tags') return;
   syncIndex();
@@ -3486,7 +3485,7 @@ async function renderTags() {
   list.replaceChildren(...(tags.length
     ? tags.map(({ tag, count }) => h('button', { class: 'tag-row', type: 'button', role: 'listitem', onclick: () => openSearch(`tag:#${tag}`) },
       h('span', { class: 'tag-name' }, `#${tag}`), h('span', { class: 'tag-count' }, String(count))))
-    : [h('p', { class: 'search-empty' }, 'Todavía no hay etiquetas. Escribe #algo en una nota.')]));
+    : [h('p', { class: 'search-empty' }, 'No tags yet. Write #something in a note.')]));
 }
 
 function closeMobilePanels() {
@@ -3507,45 +3506,45 @@ function togglePanel(side) {
   app.classList.toggle(`${side}-closed`);
   try {
     localStorage.setItem(`snowlog.${side}Closed`, app.classList.contains(`${side}-closed`) ? '1' : '');
-  } catch { /* sin almacenamiento */ }
+  } catch { /* no storage */ }
 }
 
 function noteMenu(x, y) {
   const items = [];
   if (S.current) {
     const id = S.current;
-    items.push(['rename', 'Renombrar', () => renameNotePrompt(id)], ['move', 'Mover a…', () => moveNotePrompt(id)], ['history', 'Historial de versiones…', () => historyModal(id)],
-      ['bookmark', isBookmarked(id) ? 'Quitar de marcadores' : 'Añadir a marcadores', () => toggleBookmark(id)]);
+    items.push(['rename', 'Rename', () => renameNotePrompt(id)], ['move', 'Move to…', () => moveNotePrompt(id)], ['history', 'Version history…', () => historyModal(id)],
+      ['bookmark', isBookmarked(id) ? 'Remove from bookmarks' : 'Add to bookmarks', () => toggleBookmark(id)]);
   }
-  if (S.current) items.push(['template', 'Insertar plantilla…', () => insertTemplate()], ['import', 'Adjuntar imagen, PDF o dibujo…', () => $('attach-input').click()], ['sketch', 'Insertar un dibujo nuevo', () => newDrawing({ insert: true })]);
+  if (S.current) items.push(['template', 'Insert template…', () => insertTemplate()], ['import', 'Attach an image, PDF or drawing…', () => $('attach-input').click()], ['sketch', 'Insert a new drawing', () => newDrawing({ insert: true })]);
   items.push(
-    ['command', 'Paleta de comandos (Ctrl+P)', () => commandPalette()],
-    ['filePlus', 'Nueva nota', () => newNote()],
-    ['template', 'Nueva nota desde plantilla…', () => newFromTemplate()],
-    ['kanban', 'Nuevo tablero Kanban', () => newBoard()],
-    ['sketch', 'Nuevo dibujo', () => newDrawing()],
-    ['graph', 'Vista de grafo (Ctrl+G)', () => graphView()],
+    ['command', 'Command palette (Ctrl+P)', () => commandPalette()],
+    ['filePlus', 'New note', () => newNote()],
+    ['template', 'New note from template…', () => newFromTemplate()],
+    ['kanban', 'New Kanban board', () => newBoard()],
+    ['sketch', 'New drawing', () => newDrawing()],
+    ['graph', 'Graph view (Ctrl+G)', () => graphView()],
     null,
-    ['today', 'Nota de hoy (Ctrl+D)', () => openDaily()],
-    ['home', 'Panel principal', () => openHome()],
-    ['setup', 'Configurar mi espacio…', () => setupSpace()],
-    ['example', 'Cargar ejemplos…', () => loadExamples()],
-    ['import', 'Importar carpeta…', () => ACTIONS.import()],
-    ['download', S.local ? 'Copia de seguridad (.zip)' : 'Copia de seguridad cifrada', () => backupNow()],
+    ['today', 'Today\'s note (Ctrl+D)', () => openDaily()],
+    ['home', 'Dashboard', () => openHome()],
+    ['setup', 'Set up my space…', () => setupSpace()],
+    ['example', 'Load examples…', () => loadExamples()],
+    ['import', 'Import folder…', () => ACTIONS.import()],
+    ['download', S.local ? 'Backup (.zip)' : 'Encrypted backup', () => backupNow()],
   );
-  if (!S.local) items.push(['download', 'Exportar sin cifrar (.zip)', () => exportZip()]);
-  items.push(['import', 'Importar copia (.snowlog o .zip)…', () => $('backup-input').click()]);
-  items.push(['settings', 'Ajustes…', () => settingsModal()]);
-  if (S.local) items.push(['collapse', 'Recargar la carpeta', () => reloadLocal()]);
-  else items.push(['key', 'Frase de paso y recuperación…', () => securityModal()]);
-  if (S.current) items.push(null, ['trash', 'Eliminar nota', () => deleteNote(S.current), 'danger']);
+  if (!S.local) items.push(['download', 'Export unencrypted (.zip)', () => exportZip()]);
+  items.push(['import', 'Import a backup (.snowlog or .zip)…', () => $('backup-input').click()]);
+  items.push(['settings', 'Settings…', () => settingsModal()]);
+  if (S.local) items.push(['collapse', 'Reload the folder', () => reloadLocal()]);
+  else items.push(['key', 'Passphrase and recovery…', () => securityModal()]);
+  if (S.current) items.push(null, ['trash', 'Delete note', () => deleteNote(S.current), 'danger']);
   items.push(null,
-    ['lock', S.local ? 'Cerrar carpeta' : 'Bloquear', () => lock()],
-    ['logout', S.local ? 'Olvidar esta carpeta' : 'Cerrar sesión', () => logout()]);
+    ['lock', S.local ? 'Close folder' : 'Lock', () => lock()],
+    ['logout', S.local ? 'Forget this folder' : 'Sign out', () => logout()]);
   openMenu(x, y, items);
 }
 
-// --- Acciones y atajos ---
+// --- Actions and shortcuts ---
 const ACTIONS = {
   graph: () => graphView(),
   palette: () => commandPalette(),
@@ -3622,7 +3621,7 @@ function setupUi() {
     ev.preventDefault();
     attachFiles(files);
   });
-  // Un fichero soltado fuera del editor no debe sacar al navegador de Snowlog.
+  // A file dropped outside the editor must not take the browser away from Snowlog.
   for (const type of ['dragover', 'drop']) {
     window.addEventListener(type, (ev) => {
       if (ev.dataTransfer?.types.includes('Files') && !ev.defaultPrevented) ev.preventDefault();
@@ -3690,7 +3689,7 @@ function setupUi() {
   setInterval(() => rescanLocal(), 10000);
   addEventListener('offline', () => { if (S.vault && !S.local) { S.vault.offline = true; updatePlace(); } });
   setInterval(() => { if (S.vault?.offline && navigator.onLine) trySync(); }, 30000);
-  // Al cambiar de pestaña o de app (móvil) se guarda enseguida.
+  // Switching tab or app (mobile) saves at once.
   document.addEventListener('visibilitychange', () => { if (document.hidden && S.dirty) saveNow(); });
   addEventListener('beforeunload', (ev) => {
     if (S.dirty) {
@@ -3708,7 +3707,7 @@ function setupUi() {
 }
 
 // ---------------------------------------------------------------------------
-// La web se guarda para abrirse sin conexión (solo en la versión online servida por https o localhost).
+// The web app is stored to open offline (only in the online version served over https or localhost).
 function registerServiceWorker() {
   if (CONFIG.mode !== 'online' || !('serviceWorker' in navigator)) return;
   if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
@@ -3717,10 +3716,10 @@ function registerServiceWorker() {
 
 async function boot() {
   applyTheme();
-  // GitHub Pages no permite la cabecera frame-ancestors: si alguien mete Snowlog en un iframe
-  // (para engañar con clics encima), no arranca.
+  // GitHub Pages does not allow the frame-ancestors header: if someone puts Snowlog in an iframe
+  // (to trick clicks on top of it), it does not start.
   if (window.top !== window.self) {
-    document.body.textContent = 'Snowlog no se puede abrir dentro de otra página.';
+    document.body.textContent = 'Snowlog cannot be opened inside another page.';
     return undefined;
   }
   registerServiceWorker();
