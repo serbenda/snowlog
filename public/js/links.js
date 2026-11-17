@@ -12,7 +12,7 @@ function rewriteLine(line, map) {
   }))).join('');
 }
 
-// changes: [{ from: 'Carpeta/Vieja', to: 'Otra/Nueva', byName: true }]
+// changes: [{ from: 'Folder/Old', to: 'Other/New', byName: true }]
 // byName says whether links by short name ([[Old]]) certainly pointed to this note.
 // Returns the new text, or null if nothing changes.
 export function rewriteLinks(text, changes) {

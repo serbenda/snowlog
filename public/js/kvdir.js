@@ -3,7 +3,7 @@
 // It mimics just enough of FileSystemDirectoryHandle for LocalVault to work as with a real folder.
 // Every change is saved at once to IndexedDB or, if there is none, to localStorage.
 
-const notFound = (name) => Object.assign(new Error(`No existe: ${name}`), { name: 'NotFoundError' });
+const notFound = (name) => Object.assign(new Error(`Not found: ${name}`), { name: 'NotFoundError' });
 
 function toB64(bytes) {
   let s = '';

@@ -47,13 +47,13 @@ test('Tab and Shift+Tab indent lists and blocks', () => {
 });
 
 test('Ctrl+B, Ctrl+I and Ctrl+K', () => {
-  const t = 'hola world';
-  assert.equal(run(t, Ed.toggleWrap(t, 5, 10, '**')), 'hola **[world]**');
-  const b = 'hola **world**';
-  assert.equal(run(b, Ed.toggleWrap(b, 7, 12, '**')), 'hola [world]');
-  assert.equal(run(b, Ed.toggleWrap(b, 5, 14, '**')), 'hola [world]');
+  const t = 'hello world';
+  assert.equal(run(t, Ed.toggleWrap(t, 6, 11, '**')), 'hello **[world]**');
+  const b = 'hello **world**';
+  assert.equal(run(b, Ed.toggleWrap(b, 8, 13, '**')), 'hello [world]');
+  assert.equal(run(b, Ed.toggleWrap(b, 6, 15, '**')), 'hello [world]');
   assert.equal(run('', Ed.toggleWrap('', 0, 0, '*')), '*|*');
-  assert.equal(run(t, Ed.insertLink(t, 5, 10)), 'hola [world]([https://])');
+  assert.equal(run(t, Ed.insertLink(t, 6, 11)), 'hello [world]([https://])');
   const u = 'https://bendi.dev';
   assert.equal(run(u, Ed.insertLink(u, 0, u.length)), '[|](https://bendi.dev)');
 });

@@ -41,7 +41,7 @@ export class Session {
     let dek = null;
     for (let i = 0; i < this.attempts && !dek; i++) {
       const secret = await this.askPassphrase(message);
-      if (secret == null) throw new SessionError('cancelled', 'Desbloqueo cancelado.');
+      if (secret == null) throw new SessionError('cancelled', 'Unlock cancelled.');
       try {
         dek = await C.unlockVault(vaultFile, secret);
       } catch {

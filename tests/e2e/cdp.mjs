@@ -19,7 +19,7 @@ export async function launch(chrome = findChrome()) {
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   const wsUrl = await new Promise((resolve, reject) => {
     let buf = '';
-    const t = setTimeout(() => reject(new Error(`Chrome no arranca: ${buf}`)), 20000);
+    const t = setTimeout(() => reject(new Error(`Chrome did not start: ${buf}`)), 20000);
     proc.stderr.on('data', (d) => {
       buf += d;
       const m = buf.match(/DevTools listening on (ws:\/\/\S+)/);

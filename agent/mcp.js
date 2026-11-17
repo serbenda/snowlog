@@ -117,7 +117,7 @@ export function createServer(session, write) {
 
   async function call(name, args) {
     const tool = byName.get(name);
-    if (!tool) return { content: [{ type: 'text', text: `Herramienta desconocida: ${name}` }], isError: true };
+    if (!tool) return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
     try {
       const result = await tool.fn(session, args || {});
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };

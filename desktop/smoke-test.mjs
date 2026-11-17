@@ -5,12 +5,17 @@
 const [app, cond] = process.argv.slice(2);
 const BASE = 'http://127.0.0.1:4444';
 
-async function call(method, path, body) {
-  const res = await fetch(BASE + path, {
+// Every request to tauri-driver goes through this one function.
+function driver(method, path, body) {
+  return fetch(BASE + path, {
     method,
     headers: { 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
+}
+
+async function call(method, path, body) {
+  const res = await driver(method, path, body);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`${method} ${path}: ${res.status} ${JSON.stringify(json).slice(0, 500)}`);
   return json.value;
@@ -19,7 +24,7 @@ async function call(method, path, body) {
 // tauri-driver takes a moment to start listening
 for (let i = 0; ; i++) {
   try {
-    await fetch(`${BASE}/status`);
+    await driver('GET', '/status');
     break;
   } catch (e) {
     if (i > 50) throw e;

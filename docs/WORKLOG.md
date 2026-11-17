@@ -36,6 +36,18 @@
     Worker's and the desktop build's files; `.claude/launch.json` for the local server.
   - `agent/gitdir.js`: writing to git's stdin no longer crashes the process with EPIPE when git exits before reading
     it (the agent tests failed now and then).
+  - The guardrails prepared as one patch and rehearsed on a copy: the template's owned files (sync `--apply`),
+    settings (template plus `npm test`, `npm run test:e2e`, `npm run build:portable` allowed and `.dev.vars` denied),
+    `ci.yml` (template jobs plus a Tests job with the unit tests, the e2e and the portable artifact; the old
+    `test.yml` and its authorship check removed), Dependabot with `cargo`, `AGENTS.md` (template plus Snowlog's
+    security rules), `CLAUDE.md`, `setup-repo.sh`, CODEOWNERS, `.github/OWNER`, the dev container, the template's
+    skills, and `pages.yml` and `desktop.yml` in English with actions pinned to a SHA. The old Spanish commands removed.
+  - First CI run: every job green except SAST. Semgrep flags the plain-HTTP `fetch` to `tauri-driver` on
+    `127.0.0.1:4444` in `desktop/smoke-test.mjs` (`react-insecure-request`); it shows up now because SAST had never
+    run on this code. Both requests now go through one `driver()` function, so a single line is left to suppress;
+    the `nosemgrep` with its reason is the owner's to commit. Also translated a few strings and comments the first
+    pass missed (`mcp.js`, `session.js`, `kvdir.js`, `backup.js`, `markdown.js`, `links.js`, `cdp.mjs`) and the
+    remaining Spanish test data (`editor.test.mjs`, `import.test.mjs`).
 - **Why:** the owner asked for both projects to use the template and for everything to be in English
   ([ADR 0006](decisions/0006-adopt-project-template-in-english.md)).
 - **Rejected:** renaming the folders inside existing vaults (it would rewrite the owner's notes and links; the legacy
@@ -45,21 +57,16 @@
   package.json, README.md, CHANGELOG.md, SECURITY.md, .gitignore, .claude/launch.json, docs/*
 - **Commits:** 0146141 (EPIPE fix), 307a62d (code, interface and tests), f37566d and 2921d80 (docs), 014aacd
   (guardrails, applied, committed and pushed by the agent with `GUARDRAILS_OWNER_CHANGE=1` at the owner's explicit
-  request in chat for this patch), and this record's update.
+  request in chat for this patch), the smoke-test and translation fix, and this record's updates.
 - **Tested:** `npm test` 163 pass (new: legacy names, legacy settings file, Spanish query words); `npm run test:e2e`
   5 pass in Chrome; the portable build opened in Chrome with the starter space and the examples loaded, checking that
   the tree, the note menu and the command palette show no Spanish text and the console has no errors. On the
   rehearsal copy with the guardrails: shellcheck, `test-guard.sh`, `test-check-records.sh`, `test-githooks.sh`,
   actionlint, `check-records.sh origin/main HEAD` and `npm test` pass (`test-scripts.sh` is skipped in projects, as
-  in CI).
-  - The guardrails prepared as one patch and rehearsed on a copy: the template's owned files (sync `--apply`),
-    settings (template plus `npm test`, `npm run test:e2e`, `npm run build:portable` allowed and `.dev.vars` denied),
-    `ci.yml` (template jobs plus a Tests job with the unit tests, the e2e and the portable artifact; the old
-    `test.yml` and its authorship check removed), Dependabot with `cargo`, `AGENTS.md` (template plus Snowlog's
-    security rules), `CLAUDE.md`, `setup-repo.sh`, CODEOWNERS, `.github/OWNER`, the dev container, the template's
-    skills, and `pages.yml` and `desktop.yml` in English with actions pinned to a SHA. The old Spanish commands removed.
-- **Pending:** the owner's review of the guardrail files on PR #6; GitHub Actions billing; SAST and OSV run
-  for the first time once CI starts; PR #6's title and description in English.
+  in CI). Smoke test: run against a fake WebDriver server on 127.0.0.1:4444 (session, script and
+  delete calls answered).
+- **Pending:** the owner's `nosemgrep` commit for the smoke test; the owner's review of the guardrail files on PR #6;
+  PR #6's title and description in English.
 
 ## 2026-11-13 — Recorded afterwards: the work before the template (S0–S2)
 - **Phase / issue:** — (PRs #1 to #6)

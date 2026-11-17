@@ -43,7 +43,7 @@ export function inline(raw) {
     `<a class="internal-link" href="#" data-target="${target.trim()}">${(alias || target).trim()}</a>`,
   ));
 
-  // [texto](url)
+  // [text](url)
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, url) => {
     const ok = safeUrl(url);
     return ok ? keep(`<a class="external-link" href="${ok}" target="_blank" rel="noopener noreferrer">${text}</a>`) : text;

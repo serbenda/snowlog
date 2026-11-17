@@ -37,7 +37,7 @@ export function parseBackup(bytes) {
   return b;
 }
 
-// Devuelve { created, zip, files: [{ path, data }] } o lanza bad_secret / bad_backup.
+// Returns { created, zip, files: [{ path, data }] } or throws bad_secret / bad_backup.
 export async function openBackup(bytes, secret) {
   const b = parseBackup(bytes);
   const dek = await C.unlockWithAny(b.vault, secret);
