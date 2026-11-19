@@ -1,4 +1,4 @@
-/* Copied from serbenda/sketch (css/sketch.css, commit d868eaa). Do not edit here. */
+/* Copied from serbenda/bsketch (css/sketch.css, commit 3ec8fd5). Do not edit here. */
 /* The sketch editor. Everything uses the sk- prefix so it can be embedded in other pages (Snowlog). */
 
 /* Handwriting font: Caveat (SIL Open Font License, see fonts/OFL.txt), subset to Latin characters. */
@@ -15,8 +15,8 @@
   --sk-text: #1b1b1f;
   --sk-muted: #6b6e76;
   --sk-border: #e3e4e8;
-  --sk-accent: #6965db;
-  --sk-active: rgba(105, 101, 219, 0.14);
+  --sk-accent: #3451b2;
+  --sk-active: rgba(52, 81, 178, 0.12);
   --sk-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   position: absolute;
   inset: 0;
@@ -28,16 +28,27 @@
   -webkit-user-select: none;
 }
 
+/* Dark: the system's (unless sk-light forces light) or forced with sk-dark. */
 @media (prefers-color-scheme: dark) {
   .sk-editor:not(.sk-light) {
     --sk-ui: #232329;
     --sk-text: #ececf1;
     --sk-muted: #a1a1aa;
     --sk-border: #34343c;
-    --sk-accent: #a8a5ff;
-    --sk-active: rgba(168, 165, 255, 0.18);
+    --sk-accent: #9db2ff;
+    --sk-active: rgba(157, 178, 255, 0.18);
     --sk-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
   }
+}
+
+.sk-editor.sk-dark {
+  --sk-ui: #232329;
+  --sk-text: #ececf1;
+  --sk-muted: #a1a1aa;
+  --sk-border: #34343c;
+  --sk-accent: #9db2ff;
+  --sk-active: rgba(157, 178, 255, 0.18);
+  --sk-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
 }
 
 .sk-stage {
@@ -108,6 +119,17 @@
   color: #ffffff;
 }
 
+/* On the dark theme's light accent, a dark icon reads better than a white one. */
+@media (prefers-color-scheme: dark) {
+  .sk-editor:not(.sk-light) .sk-btn[aria-pressed="true"] {
+    color: #18181b;
+  }
+}
+
+.sk-editor.sk-dark .sk-btn[aria-pressed="true"] {
+  color: #18181b;
+}
+
 .sk-icon {
   width: 20px;
   height: 20px;
@@ -135,7 +157,8 @@
   margin: 10px 0 5px;
 }
 
-.sk-label:first-child {
+/* Only the panel's very first label: the ones that open a block inside it (Arrowheads, Align) keep their gap. */
+.sk-panel > .sk-label:first-child {
   margin-top: 0;
 }
 
@@ -224,6 +247,7 @@
 
 .sk-zoomlabel {
   min-width: 58px;
+  min-height: 32px; /* big enough to tap (WCAG 2.5.8: at least 24 px) */
   border: 0;
   background: transparent;
   color: var(--sk-text);

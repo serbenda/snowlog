@@ -5,6 +5,11 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Drawings use the latest bsketch engine** (the project was renamed from sketch to
+  [bsketch](https://github.com/serbenda/bsketch)): elbow and curved arrows and lines, arrowheads at either end, three
+  fonts for text (hand, normal, code), and the grid when resizing and rotating.
+
 ### Added
 - **MCP server and script access** (`agent/`, see `docs/AGENT_ACCESS.md`): list, read, search, follow links and backlinks, create notes (also from a template), append at the end or to a section, and the daily note, encrypting and decrypting locally with the same modules as the site. It works on a clone of the notes repository: each change is a commit pushed with git, and if the app wrote first it is merged as between two devices. The passphrase is asked for in a system dialog and never reaches the client; the key only lives in memory and is forgotten after 10 minutes unused. `agent/test-vault.mjs` creates a test vault.
 - **Desktop version with Tauri** for Windows (an `.exe` that opens without installing), macOS (an `.app` for Intel and Apple Silicon) and Linux (AppImage): a window of its own with the site inside, no browser. The "Desktop" workflow builds it and leaves it as an artifact. Unsigned: on company computers the antivirus may block it; for those cases the portable HTML version remains.

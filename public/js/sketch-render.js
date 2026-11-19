@@ -1,8 +1,8 @@
-// Copied from serbenda/sketch (js/render.js, commit d868eaa) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/render.js, commit 3ec8fd5) by scripts/update-sketch.mjs. Do not edit here.
 // Paints a scene on a <canvas> or turns it into SVG (text to download, or DOM nodes to embed). The
 // drawing's texts never go in as HTML: they are escaped or set with textContent.
 
-import { drawOps, sceneBounds, textLayout, setTextMeasurer, aabb, FONT, FONT_NAME } from './sketch-scene.js';
+import { drawOps, sceneBounds, textLayout, setTextMeasurer, aabb, fontOf, FONT, FONT_NAME } from './sketch-scene.js';
 import { toSvgD, tracePath } from './sketch-stroke.js';
 
 // Measures texts with a canvas (the handwriting font is narrower than the no-DOM estimate).
@@ -12,8 +12,8 @@ export function measureWithCanvas(doc) {
   const ctx = doc.createElement('canvas').getContext('2d');
   if (!ctx) return;
   measuring = true;
-  setTextMeasurer((text, fontSize) => {
-    ctx.font = `${fontSize}px ${FONT}`;
+  setTextMeasurer((text, fontSize, family = FONT) => {
+    ctx.font = `${fontSize}px ${family}`;
     return ctx.measureText(text).width;
   });
 }
@@ -56,7 +56,7 @@ export function paintElement(ctx, el) {
     const L = textLayout(el);
     ctx.globalAlpha = el.opacity;
     ctx.fillStyle = el.stroke;
-    ctx.font = `${el.fontSize}px ${FONT}`;
+    ctx.font = `${el.fontSize}px ${fontOf(el)}`;
     ctx.textBaseline = 'top';
     ctx.textAlign = L.anchor === 'middle' ? 'center' : 'left';
     if (L.angle) {
@@ -124,10 +124,14 @@ export function paintScene(ctx, scene, { view = { x: 0, y: 0, zoom: 1 }, width, 
   ctx.restore();
 }
 
+// Every number written into SVG markup goes through n(): a scene that skipped parseScene (an embedder's own
+// object) can't slip markup in through a numeric field.
+const n = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // Scene → SVG as text (to download). `padding` around the drawing.
-export function toSvgString(scene, { padding = 20 } = {}) {
+// `background: false` leaves it out (a transparent SVG).
+export function toSvgString(scene, { padding = 20, background = true } = {}) {
   const b = sceneBounds(scene.elements);
   const W = Math.ceil(b.w + padding * 2);
   const H = Math.ceil(b.h + padding * 2);
@@ -136,8 +140,9 @@ export function toSvgString(scene, { padding = 20 } = {}) {
   for (const el of scene.elements) {
     if (el.type === 'text') {
       const L = textLayout(el);
-      const lines = L.lines.map((l) => `<text x="${l.x}" y="${l.y}" font-size="${el.fontSize}" font-family="${esc(FONT)}" fill="${esc(el.stroke)}" opacity="${el.opacity}" text-anchor="${L.anchor}" dominant-baseline="hanging">${esc(l.t)}</text>`).join('');
-      parts.push(L.angle ? `<g transform="rotate(${(L.angle * 180) / Math.PI} ${L.c.x} ${L.c.y})">${lines}</g>` : lines);
+      const anchor = L.anchor === 'middle' ? 'middle' : 'start';
+      const lines = L.lines.map((l) => `<text x="${n(l.x)}" y="${n(l.y)}" font-size="${n(el.fontSize, 24)}" font-family="${esc(fontOf(el))}" fill="${esc(el.stroke)}" opacity="${n(el.opacity, 1)}" text-anchor="${anchor}" dominant-baseline="hanging">${esc(l.t)}</text>`).join('');
+      parts.push(L.angle ? `<g transform="rotate(${(n(L.angle) * 180) / Math.PI} ${n(L.c.x)} ${n(L.c.y)})">${lines}</g>` : lines);
       continue;
     }
     for (const op of drawOps(el)) {
@@ -149,12 +154,12 @@ export function toSvgString(scene, { padding = 20 } = {}) {
       }
       const style = op.fill
         ? `fill="${esc(op.fill)}" stroke="none"`
-        : `fill="none" stroke="${esc(op.stroke)}" stroke-width="${op.width}" stroke-linecap="round" stroke-linejoin="round"${op.dashed ? ` stroke-dasharray="${op.width * 4} ${op.width * 3}"` : ''}`;
-      parts.push(`<path d="${toSvgD(op.path)}" ${style} opacity="${op.opacity ?? 1}"${clip}/>`);
+        : `fill="none" stroke="${esc(op.stroke)}" stroke-width="${n(op.width, 2)}" stroke-linecap="round" stroke-linejoin="round"${op.dashed ? ` stroke-dasharray="${n(op.width, 2) * 4} ${n(op.width, 2) * 3}"` : ''}`;
+      parts.push(`<path d="${toSvgD(op.path)}" ${style} opacity="${n(op.opacity, 1)}"${clip}/>`);
     }
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="${b.x - padding} ${b.y - padding} ${W} ${H}">`
-    + `<rect x="${b.x - padding}" y="${b.y - padding}" width="${W}" height="${H}" fill="${esc(scene.background || '#ffffff')}"/>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${n(W)}" height="${n(H)}" viewBox="${n(b.x - padding)} ${n(b.y - padding)} ${n(W)} ${n(H)}">`
+    + (background ? `<rect x="${n(b.x - padding)}" y="${n(b.y - padding)}" width="${n(W)}" height="${n(H)}" fill="${esc(scene.background || '#ffffff')}"/>` : '')
     + `${parts.join('')}</svg>\n`;
 }
 
@@ -179,7 +184,7 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null } = {})
       const L = textLayout(el);
       const g = L.angle ? mk('g', { transform: `rotate(${(L.angle * 180) / Math.PI} ${L.c.x} ${L.c.y})` }) : svg;
       for (const l of L.lines) {
-        const t = mk('text', { x: l.x, y: l.y, 'font-size': el.fontSize, 'font-family': FONT, fill: el.stroke, opacity: el.opacity, 'text-anchor': L.anchor, 'dominant-baseline': 'hanging' });
+        const t = mk('text', { x: l.x, y: l.y, 'font-size': el.fontSize, 'font-family': fontOf(el), fill: el.stroke, opacity: el.opacity, 'text-anchor': L.anchor, 'dominant-baseline': 'hanging' });
         t.textContent = l.t;
         g.append(t);
       }
@@ -204,15 +209,27 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null } = {})
   return svg;
 }
 
-// Scene → PNG (Blob) at `scale` times its size.
-export async function toPngBlob(doc, scene, { padding = 20, scale = 2 } = {}) {
+// Browsers refuse canvases that are too big (toBlob then gives null): Chrome stops at 32,767 px a
+// side, Safari on the iPhone at about 16.7 million pixels. A bigger drawing is exported smaller.
+export const PNG_MAX_SIDE = 16384;
+export const PNG_MAX_AREA = 16777216;
+export function pngScale(w, h, scale) {
+  const fit = Math.min(scale, PNG_MAX_SIDE / w, PNG_MAX_SIDE / h, Math.sqrt(PNG_MAX_AREA / (w * h)));
+  return Number.isFinite(fit) && fit > 0 ? fit : scale;
+}
+
+// Scene → PNG (Blob) at `scale` times its size, or less if it would not fit; null if it cannot be made.
+// `background: false` gives transparent pixels outside the shapes.
+export async function toPngBlob(doc, scene, { padding = 20, scale = 2, background = true } = {}) {
   measureWithCanvas(doc);
   await fontReady(doc);
   const b = sceneBounds(scene.elements);
+  scale = pngScale(b.w + padding * 2, b.h + padding * 2, scale);
   const canvas = doc.createElement('canvas');
   canvas.width = Math.max(1, Math.ceil((b.w + padding * 2) * scale));
   canvas.height = Math.max(1, Math.ceil((b.h + padding * 2) * scale));
   const ctx = canvas.getContext('2d');
-  paintScene(ctx, scene, { width: canvas.width, height: canvas.height, view: { x: (padding - b.x) * scale, y: (padding - b.y) * scale, zoom: scale } });
+  if (!ctx) return null;
+  paintScene(ctx, scene, { background, width: canvas.width, height: canvas.height, view: { x: (padding - b.x) * scale, y: (padding - b.y) * scale, zoom: scale } });
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }

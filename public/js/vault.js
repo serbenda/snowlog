@@ -20,7 +20,7 @@ const filePath = (id) => `a/${id}.enc`;
 export const ATTACHMENT_TYPES = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
   avif: 'image/avif', bmp: 'image/bmp', pdf: 'application/pdf',
-  sketch: 'application/vnd.sketch+json', // drawings from serbenda/sketch
+  sketch: 'application/vnd.sketch+json', // drawings from serbenda/bsketch
 };
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const extOf = (name) => (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';

@@ -10,7 +10,7 @@
   tasks; a reading mode and an editor with highlighting, list continuation and `[[` autocomplete.
 - **Day to day:** a daily note (Ctrl+D) from a template, a dashboard note, Dataview-style queries
   (`TASK`, `LIST`, `TABLE`), a calendar, Kanban boards, a graph view and hand-drawn drawings
-  (engine from [sketch](https://github.com/serbenda/sketch)).
+  (engine from [bsketch](https://github.com/serbenda/bsketch)).
 - **Encrypted in the browser** with AES-256-GCM. The key comes from your passphrase and never leaves the device; a
   recovery code can set a new passphrase. File names in the repository are random and reveal no titles.
 - Every save is a commit: full history with a restore button, and copies for free. Changes made on two devices are

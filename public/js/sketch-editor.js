@@ -1,4 +1,4 @@
-// Copied from serbenda/sketch (js/editor.js, commit d868eaa) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/editor.js, commit 3ec8fd5) by scripts/update-sketch.mjs. Do not edit here.
 // Drawing editor: toolbar, canvas and style panel. It mounts in any container (the sketch site or
 // Snowlog) and never uses innerHTML: everything is built with the DOM.
 //
@@ -75,7 +75,8 @@ function el(tag, attrs = {}, ...children) {
   return n;
 }
 
-export function createEditor(container, { scene: initial, onChange = () => {}, readOnly = false } = {}) {
+// t: translates the interface's English text (the site passes its own; by default English as written).
+export function createEditor(container, { scene: initial, onChange = () => {}, onGridChange = () => {}, readOnly = false, t: tr = (s) => s } = {}) {
   measureWithCanvas(document);
   let scene = initial ? structuredClone(initial) : E.emptyScene();
   scene.elements = E.syncBindings(scene.elements);
@@ -87,45 +88,50 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   const redo = [];
   let action = null; // what the pointer is doing
   let editingText = null;
+  let grid = false; // with the grid on, new shapes and moves land on it
   let raf = 0;
   let clipboard = null;
 
   // --- DOM ---
+  // el() with the interface's text translated: string children, aria-label and title.
+  const ui = (tag, attrs = {}, ...children) => el(tag,
+    Object.fromEntries(Object.entries(attrs).map(([k, v]) => [k, (k === 'aria-label' || k === 'title') && typeof v === 'string' ? tr(v) : v])),
+    ...children.flat().map((c) => (typeof c === 'string' ? tr(c) : c)));
   const helpId = `sk-help-${Math.random().toString(36).slice(2, 8)}`;
-  const root = el('div', { class: `sk-editor${readOnly ? ' sk-readonly' : ''}`, tabindex: '0', role: 'application', 'aria-label': readOnly ? 'Drawing' : 'Whiteboard', 'aria-describedby': readOnly ? null : helpId });
-  const help = el('p', { class: 'sk-sr', id: helpId },
-    'Tools: V select, R rectangle, D diamond, O ellipse, A arrow, L line, P pencil, T text, E eraser. '
+  const root = ui('div', { class: `sk-editor${readOnly ? ' sk-readonly' : ''}`, tabindex: '0', role: 'application', 'aria-label': readOnly ? 'Drawing' : 'Whiteboard', 'aria-describedby': readOnly ? null : helpId });
+  const help = ui('p', { class: 'sk-sr', id: helpId },
+    'Tools: V select, R rectangle, D diamond, O ellipse, A arrow, L line, P pencil, T text, E eraser; G shows the grid. '
     + 'Enter creates the chosen shape in the center, or writes inside the selected one. Tab and Shift+Tab go through the elements; '
     + 'arrow keys move them; Alt+arrow keys resize them; [ and ] rotate them; Delete removes them; Escape clears the selection.');
-  const canvas = el('canvas', { class: 'sk-canvas', 'aria-label': 'Drawing canvas' });
-  const textBox = el('textarea', { class: 'sk-textbox', 'aria-label': 'Text', spellcheck: 'false', hidden: true });
-  const status = el('div', { class: 'sk-sr', 'aria-live': 'polite' });
+  const canvas = ui('canvas', { class: 'sk-canvas', 'aria-label': 'Drawing canvas' });
+  const textBox = ui('textarea', { class: 'sk-textbox', 'aria-label': 'Text', spellcheck: 'false', hidden: true });
+  const status = ui('div', { class: 'sk-sr', 'aria-live': 'polite' });
   const toolButtons = new Map();
-  const toolbar = el('div', { class: 'sk-toolbar', role: 'toolbar', 'aria-label': 'Tools' },
+  const toolbar = ui('div', { class: 'sk-toolbar', role: 'toolbar', 'aria-label': 'Tools' },
     ...TOOLS.map(([id, label, key]) => {
-      const b = el('button', { class: 'sk-btn', type: 'button', title: `${label} (${key})`, 'aria-label': label, 'aria-pressed': 'false', onclick: () => setTool(id) }, icon(id));
+      const b = ui('button', { class: 'sk-btn', type: 'button', title: `${tr(label)} (${key})`, 'aria-label': label, 'aria-pressed': 'false', onclick: () => setTool(id) }, icon(id));
       toolButtons.set(id, b);
       return b;
     }));
   const swatch = (color, onPick, label) => {
-    const b = el('button', {
+    const b = ui('button', {
       class: `sk-swatch${color === 'transparent' ? ' sk-none' : ''}`, type: 'button', title: label, 'aria-label': label, 'data-color': color, onclick: () => onPick(color),
     });
     if (color !== 'transparent') b.style.backgroundColor = color;
     return b;
   };
-  const btn = (name, label, onclick) => el('button', { class: 'sk-btn', type: 'button', title: label, 'aria-label': label.replace(/ \(.*\)$/, ''), onclick }, icon(name));
-  const strokeColor = el('input', { type: 'color', class: 'sk-color', 'aria-label': 'Other stroke color', value: style.stroke });
-  const fillColor = el('input', { type: 'color', class: 'sk-color', 'aria-label': 'Other fill color', value: '#a5d8ff' });
-  const seg = (name, options, onPick) => el('div', { class: 'sk-seg', role: 'group', 'aria-label': name },
-    ...options.map(([value, label]) => el('button', { class: 'sk-segbtn', type: 'button', 'data-value': String(value), onclick: () => onPick(value) }, label)));
+  const btn = (name, label, onclick) => ui('button', { class: 'sk-btn', type: 'button', title: label, 'aria-label': label.replace(/ \(.*\)$/, ''), onclick }, icon(name));
+  const strokeColor = ui('input', { type: 'color', class: 'sk-color', 'aria-label': 'Other stroke color', value: style.stroke });
+  const fillColor = ui('input', { type: 'color', class: 'sk-color', 'aria-label': 'Other fill color', value: '#a5d8ff' });
+  const seg = (name, options, onPick) => ui('div', { class: 'sk-seg', role: 'group', 'aria-label': name },
+    ...options.map(([value, label]) => ui('button', { class: 'sk-segbtn', type: 'button', 'data-value': String(value), onclick: () => onPick(value) }, label)));
   const groupBtn = btn('group', 'Group (Ctrl+G)', () => groupSelected());
   const ungroupBtn = btn('ungroup', 'Ungroup (Ctrl+Shift+G)', () => ungroupSelected());
   const distH = btn('distH', 'Distribute horizontally', () => distribute('x'));
   const distV = btn('distV', 'Distribute vertically', () => distribute('y'));
-  const alignBlock = el('div', {},
-    el('div', { class: 'sk-label' }, 'Align'),
-    el('div', { class: 'sk-row' },
+  const alignBlock = ui('div', {},
+    ui('div', { class: 'sk-label' }, 'Align'),
+    ui('div', { class: 'sk-row' },
       btn('alignLeft', 'Align left', () => align('left')),
       btn('alignCenter', 'Center horizontally', () => align('center')),
       btn('alignRight', 'Align right', () => align('right')),
@@ -133,39 +139,46 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       btn('alignMiddle', 'Center vertically', () => align('middle')),
       btn('alignBottom', 'Align bottom', () => align('bottom')),
       distH, distV));
-  const panel = el('div', { class: 'sk-panel', 'aria-label': 'Style' },
-    el('div', { class: 'sk-label' }, 'Stroke'),
-    el('div', { class: 'sk-row', 'data-prop': 'stroke' }, ...STROKES.map((c) => swatch(c, (v) => setStyle({ stroke: v }), `Stroke ${c}`)), strokeColor),
-    el('div', { class: 'sk-label' }, 'Fill'),
-    el('div', { class: 'sk-row', 'data-prop': 'fill' }, ...FILLS.map((c) => swatch(c, (v) => setStyle({ fill: v }), c === 'transparent' ? 'No fill' : `Fill ${c}`)), fillColor),
+  const headsSeg = seg('Arrowheads', [['end', 'End'], ['start', 'Start'], ['both', 'Both'], ['none', 'None']], (v) => setStyle({ heads: v }));
+  const headsBlock = ui('div', {}, ui('div', { class: 'sk-label' }, 'Arrowheads'), headsSeg);
+  const routeSeg = seg('Route', [['straight', 'Straight'], ['elbow', 'Elbow'], ['curve', 'Curve']], (v) => setStyle({ route: v }));
+  const routeBlock = ui('div', {}, ui('div', { class: 'sk-label' }, 'Route'), routeSeg);
+  const panel = ui('div', { class: 'sk-panel', 'aria-label': 'Style' },
+    ui('div', { class: 'sk-label' }, 'Stroke'),
+    ui('div', { class: 'sk-row', 'data-prop': 'stroke' }, ...STROKES.map((c) => swatch(c, (v) => setStyle({ stroke: v }), `${tr('Stroke')} ${c}`)), strokeColor),
+    ui('div', { class: 'sk-label' }, 'Fill'),
+    ui('div', { class: 'sk-row', 'data-prop': 'fill' }, ...FILLS.map((c) => swatch(c, (v) => setStyle({ fill: v }), c === 'transparent' ? 'No fill' : `${tr('Fill')} ${c}`)), fillColor),
     seg('Fill style', [['hachure', 'Hachure'], ['solid', 'Solid']], (v) => setStyle({ fillStyle: v })),
-    el('div', { class: 'sk-label' }, 'Width'),
+    ui('div', { class: 'sk-label' }, 'Width'),
     seg('Stroke width', [[1, 'Thin'], [2, 'Medium'], [4, 'Bold']], (v) => setStyle({ width: v })),
-    el('div', { class: 'sk-label' }, 'Line'),
+    ui('div', { class: 'sk-label' }, 'Line'),
     seg('Line style', [[false, 'Solid'], [true, 'Dashed']], (v) => setStyle({ dashed: v })),
-    el('div', { class: 'sk-label' }, 'Sloppiness'),
+    headsBlock,
+    routeBlock,
+    ui('div', { class: 'sk-label' }, 'Sloppiness'),
     seg('Sloppiness', [[0, 'Straight'], [1, 'Hand-drawn'], [2, 'Sketchy']], (v) => setStyle({ roughness: v })),
-    el('div', { class: 'sk-label' }, 'Text'),
+    ui('div', { class: 'sk-label' }, 'Text'),
+    seg('Font', [['hand', 'Hand'], ['normal', 'Normal'], ['code', 'Code']], (v) => setStyle({ font: v })),
     seg('Text size', [[16, 'S'], [24, 'M'], [36, 'L'], [56, 'XL']], (v) => setStyle({ fontSize: v })),
     alignBlock,
-    el('div', { class: 'sk-label' }, 'Layers and actions'),
-    el('div', { class: 'sk-row' },
+    ui('div', { class: 'sk-label' }, 'Layers and actions'),
+    ui('div', { class: 'sk-row' },
       btn('front', 'Bring to front', () => reorder(1)),
       btn('back', 'Send to back', () => reorder(-1)),
       btn('copy', 'Duplicate (Ctrl+D)', () => duplicate()),
       groupBtn, ungroupBtn,
       btn('trash', 'Delete (Del)', () => removeSelected())));
-  const zoomLabel = el('button', { class: 'sk-zoomlabel', type: 'button', title: 'Reset to 100%', 'aria-label': 'Reset to 100%', onclick: () => zoomAt(1 / view.zoom) }, '100%');
-  const bottom = el('div', { class: 'sk-bottom' },
-    el('div', { class: 'sk-group' },
+  const zoomLabel = ui('button', { class: 'sk-zoomlabel', type: 'button', title: 'Reset to 100%', 'aria-label': 'Reset to 100%', onclick: () => zoomAt(1 / view.zoom) }, '100%');
+  const bottom = ui('div', { class: 'sk-bottom' },
+    ui('div', { class: 'sk-group' },
       btn('minus', 'Zoom out', () => zoomAt(1 / 1.2)),
       zoomLabel,
       btn('plus', 'Zoom in', () => zoomAt(1.2)),
       btn('fit', 'Fit the whole drawing', () => zoomToFit())),
-    el('div', { class: 'sk-group' },
+    ui('div', { class: 'sk-group' },
       btn('undo', 'Undo (Ctrl+Z)', () => doUndo()),
       btn('redo', 'Redo (Ctrl+Y)', () => doRedo())));
-  const stage = el('div', { class: 'sk-stage' }, canvas, textBox);
+  const stage = ui('div', { class: 'sk-stage' }, canvas, textBox);
   if (readOnly) root.append(stage);
   else root.append(stage, toolbar, panel, bottom, status, help);
   container.append(root);
@@ -198,7 +211,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   const NAMES = { rectangle: 'rectangle', ellipse: 'ellipse', diamond: 'diamond', line: 'line', arrow: 'arrow', draw: 'drawing', text: 'text' };
   function announce() {
     const p = primary();
-    status.textContent = !p.length ? '' : p.length === 1 ? `Selected: ${NAMES[p[0].type]}` : `Selected: ${p.length} elements`;
+    status.textContent = !p.length ? '' : p.length === 1 ? `${tr('Selected:')} ${tr(NAMES[p[0].type])}` : tr('Selected: {n} elements').replace('{n}', p.length);
   }
 
   // The selection's frame: one element (with its rotation), the ends of a line, or a box.
@@ -249,8 +262,43 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     ctx.stroke();
   }
 
+  // The grid, behind the drawing and only on screen (never exported). Hidden when its cells get too small.
+  function paintGrid(width, height) {
+    const step = E.GRID_SIZE * view.zoom;
+    if (step < 6) return;
+    const first = (offset) => offset - Math.floor(offset / step) * step;
+    const major = (pos, offset) => Math.round((pos - offset) / step) % 5 === 0;
+    ctx.save();
+    ctx.lineWidth = 1;
+    for (const strong of [false, true]) {
+      ctx.strokeStyle = strong ? 'rgba(0, 0, 0, 0.13)' : 'rgba(0, 0, 0, 0.06)';
+      ctx.beginPath();
+      for (let x = first(view.x); x <= width; x += step) {
+        if (major(x, view.x) !== strong) continue;
+        const px = Math.round(x) + 0.5;
+        ctx.moveTo(px, 0);
+        ctx.lineTo(px, height);
+      }
+      for (let y = first(view.y); y <= height; y += step) {
+        if (major(y, view.y) !== strong) continue;
+        const py = Math.round(y) + 0.5;
+        ctx.moveTo(0, py);
+        ctx.lineTo(width, py);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function render() {
     raf = 0;
+    // The text box being written follows zoom and pan.
+    const editing = editingText && byId(editingText);
+    if (editing) {
+      textBox.style.fontSize = `${editing.fontSize * view.zoom}px`;
+      textBox.style.fontFamily = E.fontOf(editing);
+      placeTextBox(editing);
+    }
     const r = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const W = Math.max(1, Math.round(r.width * dpr));
@@ -261,11 +309,14 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const hidden = editingText ? { ...scene, elements: scene.elements.filter((e) => e.id !== editingText) } : scene;
-    paintScene(ctx, hidden, { view, width: r.width, height: r.height });
+    ctx.fillStyle = scene.background || '#ffffff';
+    ctx.fillRect(0, 0, r.width, r.height);
+    if (grid) paintGrid(r.width, r.height);
+    paintScene(ctx, hidden, { view, width: r.width, height: r.height, background: false });
     ctx.save();
     ctx.translate(view.x, view.y);
     ctx.scale(view.zoom, view.zoom);
-    const accent = getComputedStyle(root).getPropertyValue('--sk-accent').trim() || '#6965db';
+    const accent = getComputedStyle(root).getPropertyValue('--sk-accent').trim() || '#3451b2';
     ctx.strokeStyle = accent;
     ctx.lineWidth = 1 / view.zoom;
     const f = !readOnly && selected.size ? frame() : null;
@@ -315,30 +366,50 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   const redraw = () => { if (!raf) raf = requestAnimationFrame(render); };
 
   // --- History ---
+  // commit() keeps the drawing as it is before a change; changed() closes that change. A change that
+  // ended up changing nothing leaves no undo step and keeps the redo stack. Several commits before one
+  // changed() (a double click that opens a text) are a single step.
+  let pending = false;
+  // A step keeps the elements and the canvas background.
+  const snapshot = () => JSON.stringify({ background: scene.background, elements: scene.elements });
   function commit() {
-    undo.push(JSON.stringify(scene.elements));
+    if (pending) return;
+    undo.push(snapshot());
     if (undo.length > 200) undo.shift();
-    redo.length = 0;
+    pending = true;
+  }
+  // Drops the step opened by commit() (the change was cancelled).
+  function discard() {
+    if (!pending) return;
+    undo.pop();
+    pending = false;
   }
   function changed() {
+    if (pending) {
+      pending = false;
+      if (undo[undo.length - 1] === snapshot()) undo.pop();
+      else redo.length = 0;
+    }
     redraw();
     syncPanel();
     onChange(getScene());
   }
   function restore(json) {
-    scene.elements = JSON.parse(json);
+    const s = JSON.parse(json);
+    scene.elements = s.elements;
+    scene.background = s.background;
     selected = new Set([...selected].filter((id) => byId(id)));
     announce();
     changed();
   }
   function doUndo() {
     if (!undo.length) return;
-    redo.push(JSON.stringify(scene.elements));
+    redo.push(snapshot());
     restore(undo.pop());
   }
   function doRedo() {
     if (!redo.length) return;
-    undo.push(JSON.stringify(scene.elements));
+    undo.push(snapshot());
     restore(redo.pop());
   }
 
@@ -353,11 +424,31 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     syncPanel();
   }
 
-  function setStyle(patch) {
+  // `step: false` adds to the last undo step instead of opening one (dragging in the colour picker).
+  function setStyle(patch, { step = true } = {}) {
     style = { ...style, ...patch };
     if (selected.size) {
-      commit();
-      update(scene.elements.map((e) => (selected.has(e.id) ? { ...e, ...patch } : e)));
+      if (step) commit();
+      // Arrowheads only make sense on arrows and fonts on texts; their defaults ('end', 'hand') are not stored.
+      update(scene.elements.map((e) => {
+        if (!selected.has(e.id)) return e;
+        if ('heads' in patch) {
+          if (e.type !== 'arrow') return e;
+          const { heads, ...rest } = { ...e, ...patch };
+          return heads === 'end' ? rest : { ...rest, heads };
+        }
+        if ('route' in patch) {
+          if ((e.type !== 'arrow' && e.type !== 'line') || e.points.length !== 2) return e;
+          const { route, ...rest } = { ...e, ...patch };
+          return route === 'straight' ? rest : { ...rest, route };
+        }
+        if ('font' in patch) {
+          if (e.type !== 'text') return e;
+          const { font, ...rest } = { ...e, ...patch };
+          return font === 'hand' ? rest : { ...rest, font };
+        }
+        return { ...e, ...patch };
+      }));
       changed();
     } else {
       syncPanel();
@@ -385,9 +476,17 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       b.setAttribute('aria-pressed', String(cur[prop] === b.dataset.color));
     }
     const segs = panel.querySelectorAll('.sk-seg');
-    const props = ['fillStyle', 'width', 'dashed', 'roughness', 'fontSize'];
+    const props = ['fillStyle', 'width', 'dashed', 'heads', 'route', 'roughness', 'font', 'fontSize'];
+    const arrow = s.length ? s.filter((e) => e.type === 'arrow').pop() : null;
+    headsBlock.hidden = !(arrow || (!s.length && tool === 'arrow'));
+    const heads = (arrow || style).heads || 'end';
+    const lineEl = s.length ? s.filter((e) => e.type === 'arrow' || e.type === 'line').pop() : null;
+    routeBlock.hidden = !(lineEl || (!s.length && (tool === 'arrow' || tool === 'line')));
+    const route = (lineEl || style).route || 'straight';
     segs.forEach((g, i) => {
-      for (const b of g.children) b.setAttribute('aria-pressed', String(String(cur[props[i]]) === b.dataset.value));
+      const textEl = s.filter((e) => e.type === 'text').pop();
+      const value = props[i] === 'heads' ? heads : props[i] === 'route' ? route : props[i] === 'font' ? (textEl || style).font || 'hand' : cur[props[i]];
+      for (const b of g.children) b.setAttribute('aria-pressed', String(String(value) === b.dataset.value));
     });
     const n = s.length ? units().length : 0;
     alignBlock.hidden = n < 2;
@@ -401,13 +500,14 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     scene.elements.push(e);
   }
 
-  // Moves some elements. An arrow moved without its shape is no longer attached to it.
-  function moved(list, ids, dx, dy) {
+  // Moves some elements. An arrow moved without its shape is no longer attached to it; `keep` is
+  // everything that moves in the same operation (aligning moves each unit on its own).
+  function moved(list, ids, dx, dy, keep = ids) {
     return list.map((e) => {
       if (!ids.has(e.id)) return e;
       const m = E.moveElement(e, dx, dy);
-      if (m.startId && !ids.has(m.startId)) delete m.startId;
-      if (m.endId && !ids.has(m.endId)) delete m.endId;
+      if (m.startId && !keep.has(m.startId)) delete m.startId;
+      if (m.endId && !keep.has(m.endId)) delete m.endId;
       return m;
     });
   }
@@ -473,12 +573,13 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     if (us.length < 2) return;
     const all = E.sceneBounds(primary());
     commit();
+    const moving = new Set(us.flatMap((u) => u.ids));
     let list = scene.elements;
     for (const u of us) {
       const b = u.box;
       const dx = where === 'left' ? all.x - b.x : where === 'right' ? all.x + all.w - (b.x + b.w) : where === 'center' ? all.x + all.w / 2 - (b.x + b.w / 2) : 0;
       const dy = where === 'top' ? all.y - b.y : where === 'bottom' ? all.y + all.h - (b.y + b.h) : where === 'middle' ? all.y + all.h / 2 - (b.y + b.h / 2) : 0;
-      list = moved(list, new Set(u.ids), dx, dy);
+      list = moved(list, new Set(u.ids), dx, dy, moving);
     }
     update(list);
     changed();
@@ -496,11 +597,12 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     const total = us.reduce((n, u) => n + u.box[len], 0);
     const gap = (last[pos] + last[len] - first[pos] - total) / (us.length - 1);
     commit();
+    const moving = new Set(us.flatMap((u) => u.ids));
     let list = scene.elements;
     let at = first[pos];
     for (const u of us) {
       const d = at - u.box[pos];
-      list = moved(list, new Set(u.ids), axis === 'x' ? d : 0, axis === 'x' ? 0 : d);
+      list = moved(list, new Set(u.ids), axis === 'x' ? d : 0, axis === 'x' ? 0 : d, moving);
       at += u.box[len] + gap;
     }
     update(list);
@@ -515,7 +617,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
 
   // Creating with the keyboard: the chosen shape, at a normal size, in the center of the view.
   function createAtCenter() {
-    const c = viewCenter();
+    const c = grid ? E.snapPoint(viewCenter()) : viewCenter();
     if (tool === 'text') {
       newText(c);
       return;
@@ -575,6 +677,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     textBox.classList.toggle('sk-bound', !!t.containerId);
     textBox.value = t.text || '';
     textBox.style.fontSize = `${t.fontSize * view.zoom}px`;
+    textBox.style.fontFamily = E.fontOf(t);
     textBox.style.color = t.stroke;
     textBox.style.lineHeight = String(E.LINE_HEIGHT);
     placeTextBox(t);
@@ -596,7 +699,10 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   }
   function newText(p) {
     commit();
-    const t = E.createElement('text', p.x, p.y - style.fontSize * 0.6, { ...style, fill: 'transparent' });
+    let x = p.x;
+    let y = p.y - style.fontSize * 0.6;
+    if (grid) ({ x, y } = E.snapPoint({ x, y }));
+    const t = E.createElement('text', x, y, { ...style, fill: 'transparent' });
     addElement(t);
     select([t.id]);
     editText(t.id);
@@ -669,6 +775,8 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   const CURSORS = { n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', rot: 'grab', p0: 'move', p1: 'move' };
 
   canvas.addEventListener('pointerdown', (ev) => {
+    if (ev.button === 2) return; // the context menu, not a tool
+    if (pointers.size >= 2) return; // a third finger changes nothing
     if (tool !== 'text') root.focus({ preventScroll: true });
     else ev.preventDefault(); // so the click does not take focus away from the text box about to open
     canvas.setPointerCapture(ev.pointerId);
@@ -676,7 +784,15 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     if (pointers.size === 2) {
       // Two fingers: pinch to zoom and drag to pan.
       const [a, b] = [...pointers.values()];
-      action = { kind: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, view: { ...view } };
+      // What the first finger had started is dropped (a shape just begun) or kept as it is.
+      if (action?.kind === 'create') {
+        update(scene.elements.filter((x) => x.id !== action.id));
+        discard();
+        selected.delete(action.id);
+      } else if (action && action.kind !== 'pan' && action.kind !== 'marquee') {
+        changed();
+      }
+      action = { kind: 'pinch', dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, view: { ...view } };
       return;
     }
     if (editingText) finishText();
@@ -739,13 +855,15 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       return;
     }
     commit();
-    const e = E.createElement(tool, p.x, p.y, tool === 'draw' ? { ...style, fill: 'transparent' } : style);
+    // On the grid, the shape starts on it (an arrow still attaches to the shape under the pointer).
+    const at = grid && tool !== 'draw' ? E.snapPoint(p) : p;
+    const e = E.createElement(tool, at.x, at.y, tool === 'draw' ? { ...style, fill: 'transparent' } : style);
     if (tool === 'arrow') {
       const s = bindTarget(p);
       if (s) e.startId = s;
     }
     addElement(e);
-    action = { kind: 'create', id: e.id, start: p, dist: 0, target: null };
+    action = { kind: 'create', id: e.id, start: at, dist: 0, target: null };
     redraw();
   });
 
@@ -793,9 +911,15 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     } else if (action.kind === 'erase') {
       eraseAt(p);
     } else if (action.kind === 'move') {
-      const dx = p.x - action.start.x;
-      const dy = p.y - action.start.y;
+      let dx = p.x - action.start.x;
+      let dy = p.y - action.start.y;
       action.moved = action.moved || Math.abs(dx) + Math.abs(dy) > 1 / view.zoom;
+      if (grid) {
+        // The selection's top-left corner lands on the grid; everything moves by the same amount.
+        action.box ??= E.sceneBounds(action.orig.filter((e) => action.ids.has(e.id) && !E.isBoundText(e)));
+        dx = E.snap(action.box.x + dx) - action.box.x;
+        dy = E.snap(action.box.y + dy) - action.box.y;
+      }
       update(moved(action.orig, action.ids, dx, dy));
     } else if (action.kind === 'marquee') {
       action.box = { x: Math.min(action.start.x, p.x), y: Math.min(action.start.y, p.y), w: Math.abs(p.x - action.start.x), h: Math.abs(p.y - action.start.y) };
@@ -806,10 +930,11 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       let { x, y } = b;
       let x2 = b.x + b.w;
       let y2 = b.y + b.h;
-      if (action.handle.includes('w')) x = p.x;
-      if (action.handle.includes('e')) x2 = p.x;
-      if (action.handle.includes('n')) y = p.y;
-      if (action.handle.includes('s')) y2 = p.y;
+      const q = grid ? E.snapPoint(p) : p;  // on the grid, the edges being dragged land on it
+      if (action.handle.includes('w')) x = q.x;
+      if (action.handle.includes('e')) x2 = q.x;
+      if (action.handle.includes('n')) y = q.y;
+      if (action.handle.includes('s')) y2 = q.y;
       if (ev.shiftKey && b.w && b.h) {
         // Keep the aspect ratio.
         const k = Math.max((x2 - x) / b.w, (y2 - y) / b.h);
@@ -822,12 +947,14 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       const orig = new Map(action.orig.map((o) => [o.id, o]));
       update(scene.elements.map((e) => (orig.has(e.id) ? E.resizeElement(orig.get(e.id), b, to) : e)));
     } else if (action.kind === 'resize1') {
-      const next = E.resizeByHandle(action.orig, action.handle, p, { keepRatio: ev.shiftKey });
+      // On the grid (and not rotated, where the grid's lines don't run along the edges) the edge lands on it.
+      const q = grid && !action.orig.angle ? E.snapPoint(p) : p;
+      const next = E.resizeByHandle(action.orig, action.handle, q, { keepRatio: ev.shiftKey });
       update(scene.elements.map((e) => (e.id === next.id ? next : e)));
     } else if (action.kind === 'rotate') {
       let delta = Math.atan2(p.y - action.c.y, p.x - action.c.x) - action.a0;
-      if (ev.shiftKey) {
-        // In 15-degree steps.
+      if (ev.shiftKey || grid) {
+        // In 15-degree steps (Shift, or with the grid on).
         const step = Math.PI / 12;
         const base = action.single ? action.single.angle || 0 : 0;
         delta = Math.round((base + delta) / step) * step - base;
@@ -837,7 +964,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     } else if (action.kind === 'endpoint') {
       const o = action.orig;
       const pts = o.points.map((q) => ({ x: o.x + q.x, y: o.y + q.y }));
-      pts[action.idx] = p;
+      pts[action.idx] = grid ? E.snapPoint(p) : p;  // an end that attaches to a shape goes to its outline anyway
       const key = action.idx === 0 ? 'startId' : 'endId';
       const other = action.idx === 0 ? o.endId : o.startId;
       action.target = o.type === 'arrow' ? bindTarget(p, other) : null;
@@ -846,9 +973,10 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       update(scene.elements.map((e) => (e.id === o.id ? next : e)));
     } else if (action.kind === 'create') {
       const start = action.start;
-      let dx = p.x - start.x;
-      let dy = p.y - start.y;
-      action.dist = Math.max(action.dist, Math.hypot(dx, dy) * view.zoom);
+      action.dist = Math.max(action.dist, Math.hypot(p.x - start.x, p.y - start.y) * view.zoom);
+      const q = grid && tool !== 'draw' ? E.snapPoint(p) : p;
+      let dx = q.x - start.x;
+      let dy = q.y - start.y;
       const list = scene.elements.map((e) => {
         if (e.id !== action.id) return e;
         if (e.type === 'draw') return { ...e, points: [...e.points, { x: dx, y: dy }] };
@@ -863,7 +991,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
           const next = { ...e, x: start.x, y: start.y, points: [{ x: 0, y: 0 }, { x: dx, y: dy }] };
           delete next.endId;
           if (e.type === 'arrow') {
-            action.target = bindTarget({ x: start.x + dx, y: start.y + dy }, e.startId);
+            action.target = bindTarget(ev.shiftKey ? { x: start.x + dx, y: start.y + dy } : p, e.startId);
             if (action.target) next.endId = action.target;
           }
           return next;
@@ -892,7 +1020,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       const tiny = e && (e.type === 'line' || e.type === 'arrow') && action.dist < 4;
       if (e && (tiny || E.isEmpty(e))) {
         update(scene.elements.filter((x) => x.id !== e.id));
-        undo.pop();
+        discard();
       } else if (e) {
         update(scene.elements.map((x) => (x.id === e.id ? E.normalize(x) : x)));
         selected = tool === 'draw' ? new Set() : expand([e.id]);
@@ -906,8 +1034,6 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       const key = action.idx === 0 ? 'startId' : 'endId';
       const target = action.target;
       update(scene.elements.map((e) => (e.id === action.orig.id && target ? { ...e, [key]: target } : e)));
-    } else if (action.kind === 'move' && !action.moved) {
-      undo.pop();
     } else if (action.kind === 'pan') {
       canvas.style.cursor = tool === 'hand' ? 'grab' : 'default';
     }
@@ -923,7 +1049,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   canvas.addEventListener('pointercancel', endPointer);
 
   canvas.addEventListener('dblclick', (ev) => {
-    if (readOnly) return;
+    if (readOnly || tool === 'hand' || tool === 'eraser' || spaceDown) return;
     const p = toWorld(ev.clientX, ev.clientY);
     const hit = E.elementAt(scene.elements, p.x, p.y, 6 / view.zoom);
     if (hit?.type === 'text') {
@@ -951,6 +1077,8 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   root.addEventListener('keydown', (ev) => {
     // Shortcuts work anywhere in the editor except while typing in a field.
     if (ev.target.closest('input, textarea, select')) return;
+    // Enter and Space on a toolbar or panel button press that button.
+    if ((ev.key === 'Enter' || ev.key === ' ') && ev.target !== root && ev.target.closest('button, a[href], [role="button"]')) return;
     const mod = ev.ctrlKey || ev.metaKey;
     const k = ev.key.toLowerCase();
     if (ev.key === ' ') { spaceDown = true; canvas.style.cursor = 'grab'; ev.preventDefault(); return; }
@@ -1030,7 +1158,8 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     }
     if (ev.key.startsWith('Arrow') && selected.size) {
       ev.preventDefault();
-      const d = ev.shiftKey ? 10 : 1;
+      // On the grid, one cell (Shift: 1 px to fine-tune); without it, 1 px (Shift: 10).
+      const d = grid ? (ev.shiftKey ? 1 : E.GRID_SIZE) : ev.shiftKey ? 10 : 1;
       const dx = ev.key === 'ArrowLeft' ? -d : ev.key === 'ArrowRight' ? d : 0;
       const dy = ev.key === 'ArrowUp' ? -d : ev.key === 'ArrowDown' ? d : 0;
       commit();
@@ -1038,7 +1167,20 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
       changed();
       return;
     }
+    if (k === 'g' && !ev.altKey) {
+      ev.preventDefault();
+      setGrid(!grid);
+      onGridChange(grid);
+      return;
+    }
     if (KEYS[k]) { ev.preventDefault(); setTool(KEYS[k]); }
+  });
+  // Space held while the focus leaves (another window, another field): its keyup never comes here.
+  root.addEventListener('focusout', (ev) => {
+    if (spaceDown && !root.contains(ev.relatedTarget)) {
+      spaceDown = false;
+      canvas.style.cursor = tool === 'hand' ? 'grab' : 'default';
+    }
   });
   root.addEventListener('keyup', (ev) => {
     if (ev.key === ' ') {
@@ -1047,8 +1189,15 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     }
   });
 
-  strokeColor.addEventListener('input', () => setStyle({ stroke: strokeColor.value }));
-  fillColor.addEventListener('input', () => setStyle({ fill: fillColor.value }));
+  // Dragging in the colour picker fires many input events: they are one undo step, closed on change.
+  let picking = null;
+  for (const [input, prop] of [[strokeColor, 'stroke'], [fillColor, 'fill']]) {
+    input.addEventListener('input', () => {
+      setStyle({ [prop]: input.value }, { step: picking !== input });
+      picking = input;
+    });
+    input.addEventListener('change', () => { picking = null; });
+  }
 
   const ro = new ResizeObserver(() => redraw());
   ro.observe(canvas);
@@ -1057,6 +1206,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
   let alive = true;
   fontReady(document).then(() => {
     if (!alive) return;
+    E.forgetTextBoxes();
     update(scene.elements);
     redraw();
   });
@@ -1072,14 +1222,41 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     selected.clear();
     undo.length = 0;
     redo.length = 0;
+    pending = false;
     if (fit) requestAnimationFrame(() => zoomToFit());
     redraw();
     syncPanel();
   }
 
+  // Canvas background, as an undoable step. Only colours the file format accepts.
+  function setBackground(color) {
+    if (readOnly || !E.isColor(color) || color === scene.background) return;
+    commit();
+    scene.background = color;
+    changed();
+  }
+  // Shows the grid and snaps to it (or not).
+  function setGrid(on) {
+    if (grid === !!on) return;
+    grid = !!on;
+    status.textContent = tr(grid ? 'Grid on' : 'Grid off');
+    redraw();
+  }
+  // 'light' or 'dark' forces the editor's appearance; anything else follows the system.
+  function setTheme(theme) {
+    root.classList.toggle('sk-light', theme === 'light');
+    root.classList.toggle('sk-dark', theme === 'dark');
+    redraw();
+  }
+
   setTool(readOnly ? 'hand' : 'select');
   requestAnimationFrame(() => zoomToFit());
   return {
+    // A copy of the selected elements (with the texts inside selected shapes), or [] if nothing is selected.
+    getSelection: () => structuredClone(selection()),
+    setBackground,
+    setGrid,
+    setTheme,
     root,
     getScene,
     setScene,
@@ -1087,6 +1264,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, r
     focus: () => root.focus(),
     setTool,
     destroy() {
+      finishText();
       alive = false;
       ro.disconnect();
       cancelAnimationFrame(raf);

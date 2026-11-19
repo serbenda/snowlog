@@ -1,4 +1,4 @@
-// Copied from serbenda/sketch (js/scene.js, commit d868eaa) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/scene.js, commit 3ec8fd5) by scripts/update-sketch.mjs. Do not edit here.
 // A drawing's scene: a list of elements with their style. Pure functions (no DOM) to create, measure,
 // hit-test, move, rotate, resize, bind, save, open (also .excalidraw) and turn into strokes.
 //
@@ -16,7 +16,20 @@ export const VERSION = 1;
 export const LINE_HEIGHT = 1.25;
 export const FONT_NAME = 'Sketch Hand';
 export const FONT = `"${FONT_NAME}", "Segoe Print", "Bradley Hand", "Comic Sans MS", "Chalkboard SE", cursive`;
+// Text fonts: the handwriting one (the default, not stored) and two from the system, so nothing more is
+// downloaded and the site still works offline.
+export const FONTS = {
+  hand: FONT,
+  normal: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  code: 'ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+};
+export const fontOf = (el) => FONTS[el.font] || FONT;
 const ARROW_GAP = 6;
+
+// The grid: lines every GRID_SIZE drawing units. snap() rounds a coordinate to the nearest line.
+export const GRID_SIZE = 20;
+export const snap = (v, size = GRID_SIZE) => Math.round(v / size) * size;
+export const snapPoint = (p, size = GRID_SIZE) => ({ x: snap(p.x, size), y: snap(p.y, size) });
 
 export const DEFAULT_STYLE = {
   stroke: '#1e1e1e',
@@ -37,8 +50,49 @@ export function emptyScene() {
   return { type: FORMAT, version: VERSION, elements: [], background: '#ffffff' };
 }
 
+// Arrowheads of an arrow: at its end (the default, not stored), its start, both or none.
+export const HEADS = ['end', 'start', 'both', 'none'];
+
+// How a line or an arrow goes from one end to the other: straight (the default, not stored), with right-angle
+// elbows, or along a gentle curve. Only for lines and arrows with two points (their ends).
+export const ROUTES = ['straight', 'elbow', 'curve'];
+
+// The points a line or arrow is drawn through, from its two ends and its route (absolute coordinates).
+export function routePoints(el) {
+  const pts = el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y }));
+  if (!el.route || el.route === 'straight' || pts.length !== 2) return pts;
+  const [a, z] = pts;
+  const dx = z.x - a.x;
+  const dy = z.y - a.y;
+  if (el.route === 'elbow') {
+    if (Math.abs(dx) < 1 || Math.abs(dy) < 1) return pts;
+    // Along the longer direction first, turning halfway.
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      const mx = a.x + dx / 2;
+      return [a, { x: mx, y: a.y }, { x: mx, y: z.y }, z];
+    }
+    const my = a.y + dy / 2;
+    return [a, { x: a.x, y: my }, { x: z.x, y: my }, z];
+  }
+  // curve: a quadratic arc whose control point sits off the middle, to the left of the way from a to z
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return pts;
+  const c = { x: a.x + dx / 2 - (dy / len) * len * 0.25, y: a.y + dy / 2 + (dx / len) * len * 0.25 };
+  const out = [];
+  const n = 16;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const u = 1 - t;
+    out.push({ x: u * u * a.x + 2 * u * t * c.x + t * t * z.x, y: u * u * a.y + 2 * u * t * c.y + t * t * z.y });
+  }
+  return out;
+}
+
 export function createElement(type, x, y, style = {}) {
   const el = { id: newId(), type, x, y, w: 0, h: 0, seed: newSeed(), ...DEFAULT_STYLE, ...style };
+  if (type !== 'arrow' || el.heads === 'end' || !HEADS.includes(el.heads)) delete el.heads;
+  if ((type !== 'arrow' && type !== 'line') || el.route === 'straight' || !ROUTES.includes(el.route)) delete el.route;
+  if (type !== 'text' || el.font === 'hand' || !Object.hasOwn(FONTS, String(el.font))) delete el.font;
   if (type === 'draw' || type === 'line' || type === 'arrow') el.points = [{ x: 0, y: 0 }];
   if (type === 'text') el.text = '';
   return el;
@@ -51,7 +105,8 @@ const isBindable = (el) => isContainer(el) || (el.type === 'text' && !el.contain
 
 // --- Text: measuring and lines ---
 // The real measure comes from the renderer (canvas.measureText); without a DOM it is estimated.
-let measure = (text, fontSize) => text.length * fontSize * 0.5;
+// measure(text, fontSize, family): `family` is one of FONTS.
+let measure = (text, fontSize, family = FONT) => text.length * fontSize * (family === FONTS.code ? 0.6 : family === FONTS.normal ? 0.55 : 0.5);
 // Elements are never changed in place (every change creates a new one), so their box can be cached per
 // object. A new text measurer starts the cache again.
 let boxes = new WeakMap();
@@ -59,27 +114,37 @@ export function setTextMeasurer(fn) {
   measure = fn;
   boxes = new WeakMap();
 }
-export const measureText = (text, fontSize) => measure(text, fontSize);
+export const measureText = (text, fontSize, family = FONT) => measure(text, fontSize, family);
+// Forgets the measured boxes (the font they were measured with has just changed, e.g. it loaded).
+export function forgetTextBoxes() {
+  boxes = new WeakMap();
+}
 
-function wrap(line, width, fontSize) {
-  if (measure(line, fontSize) <= width) return [line];
+function wrap(line, width, fontSize, family) {
+  if (measure(line, fontSize, family) <= width) return [line];
   const out = [];
   let cur = '';
   for (const word of line.split(/(\s+)/)) {
     if (!word) continue;
     const next = cur + word;
-    if (measure(next, fontSize) <= width || !cur.trim()) {
+    if (measure(next, fontSize, family) <= width || !cur.trim()) {
       cur = next;
     } else {
       out.push(cur.trimEnd());
       cur = word.trimStart();
     }
     // A word much wider than the box is split by letters (if it is only a little wider, it stays).
-    while (measure(cur, fontSize) > width * 1.6 && cur.length > 1) {
-      let n = cur.length - 1;
-      while (n > 1 && measure(cur.slice(0, n), fontSize) > width) n--;
-      out.push(cur.slice(0, n));
-      cur = cur.slice(n);
+    while (measure(cur, fontSize, family) > width * 1.6 && cur.length > 1) {
+      // The longest start that fits, found by halving (not letter by letter: a long word stays fast).
+      let lo = 1;
+      let hi = cur.length - 1;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (measure(cur.slice(0, mid), fontSize, family) <= width) lo = mid;
+        else hi = mid - 1;
+      }
+      out.push(cur.slice(0, lo));
+      cur = cur.slice(lo);
     }
   }
   out.push(cur.trimEnd());
@@ -90,7 +155,7 @@ function wrap(line, width, fontSize) {
 export function textLines(el) {
   const raw = String(el.text || '').split('\n');
   if (!el.containerId || !(el.w > 0)) return raw;
-  return raw.flatMap((l) => wrap(l, el.w, el.fontSize));
+  return raw.flatMap((l) => wrap(l, el.w, el.fontSize, fontOf(el)));
 }
 
 // --- Geometry ---
@@ -113,15 +178,16 @@ export function bounds(el) {
 
 function computeBounds(el) {
   if (isLinear(el) && el.points?.length) {
-    const xs = el.points.map((p) => el.x + p.x);
-    const ys = el.points.map((p) => el.y + p.y);
+    const rp = el.type === 'draw' ? el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y })) : routePoints(el);
+    const xs = rp.map((p) => p.x);
+    const ys = rp.map((p) => p.y);
     const x = Math.min(...xs);
     const y = Math.min(...ys);
     return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
   }
   if (el.type === 'text') {
     const lines = textLines(el);
-    const w = el.containerId && el.w > 0 ? el.w : Math.max(...lines.map((l) => measure(l, el.fontSize)), el.fontSize * 0.5);
+    const w = el.containerId && el.w > 0 ? el.w : Math.max(...lines.map((l) => measure(l, el.fontSize, fontOf(el))), el.fontSize * 0.5);
     return { x: el.x, y: el.y, w, h: lines.length * el.fontSize * LINE_HEIGHT };
   }
   return { x: Math.min(el.x, el.x + el.w), y: Math.min(el.y, el.y + el.h), w: Math.abs(el.w), h: Math.abs(el.h) };
@@ -179,7 +245,7 @@ export function hitTest(el, x, y, tol = 6) {
   const filled = el.fill && el.fill !== 'transparent';
   if (el.type === 'text') return true;
   if (isLinear(el)) {
-    const pts = el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y }));
+    const pts = el.type === 'draw' ? el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y })) : routePoints(el);
     if (pts.length === 1) return Math.hypot(x - pts[0].x, y - pts[0].y) <= tol + el.width;
     return pts.some((p, i) => i > 0 && distToSegment(x, y, pts[i - 1].x, pts[i - 1].y, p.x, p.y) <= tol + el.width / 2);
   }
@@ -413,7 +479,7 @@ export function syncBindings(elements) {
       const out = { ...t, x: inner.cx - inner.w / 2, y: inner.cy - h / 2 };
       if (c.angle) out.angle = c.angle;
       else delete out.angle;
-      return out;
+      return sameAs(el, out);
     }
     if ((el.type === 'arrow' || el.type === 'line') && (el.startId || el.endId)) {
       let s = el.startId ? byId.get(el.startId) : null;
@@ -434,10 +500,27 @@ export function syncBindings(elements) {
       out.x = pts[0].x;
       out.y = pts[0].y;
       out.points = pts.map((p) => ({ x: p.x - pts[0].x, y: p.y - pts[0].y }));
-      return out;
+      return sameAs(el, out);
     }
     return el;
   });
+}
+
+// The element as it was if nothing changed, so the caches kept per object (boxes, prepared strokes)
+// still hold: moving one box does not recompute every attached arrow and text in the drawing.
+function sameAs(el, out) {
+  const keys = Object.keys(out);
+  if (keys.length !== Object.keys(el).length) return out;
+  for (const k of keys) {
+    if (k === 'points') {
+      const a = el.points;
+      const b = out.points;
+      if (!a || a.length !== b.length || a.some((p, i) => p.x !== b[i].x || p.y !== b[i].y)) return out;
+    } else if (out[k] !== el[k]) {
+      return out;
+    }
+  }
+  return el;
 }
 
 // Three-way merge of two versions of a drawing (mine and another device's) from the one both started
@@ -510,7 +593,12 @@ export function cloneElements(list, dx = 0, dy = 0) {
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const COLOR_RE = /^(#[0-9a-f]{3,8}|transparent|rgba?\([\d\s.,%]+\)|[a-z]{3,20})$/i;
 const color = (v, d) => (typeof v === 'string' && COLOR_RE.test(v.trim()) ? v.trim() : d);
+export const isColor = (v) => typeof v === 'string' && COLOR_RE.test(v) && v === v.trim();
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// Coordinates and sizes from a file stay within ±1e6: far bigger than any real drawing, small enough that
+// nothing built from them (strokes, fills, exports) can grow without bound.
+export const MAX_COORD = 1e6;
+const coord = (v) => clamp(num(v), -MAX_COORD, MAX_COORD);
 const ref = (v) => (typeof v === 'string' && v.length > 0 && v.length <= 64 ? v : null);
 
 export function cleanElement(raw) {
@@ -518,10 +606,10 @@ export function cleanElement(raw) {
   const el = {
     id: ref(raw.id) || newId(),
     type: raw.type,
-    x: num(raw.x),
-    y: num(raw.y),
-    w: num(raw.w),
-    h: num(raw.h),
+    x: coord(raw.x),
+    y: coord(raw.y),
+    w: coord(raw.w),
+    h: coord(raw.h),
     seed: Math.floor(num(raw.seed, newSeed())) >>> 0,
     stroke: color(raw.stroke, DEFAULT_STYLE.stroke),
     fill: color(raw.fill, DEFAULT_STYLE.fill),
@@ -533,7 +621,7 @@ export function cleanElement(raw) {
     fontSize: clamp(num(raw.fontSize, 24), 6, 400),
   };
   if (isLinear(el)) {
-    const pts = Array.isArray(raw.points) ? raw.points.slice(0, 5000).map((p) => ({ x: num(p?.x), y: num(p?.y) })) : [];
+    const pts = Array.isArray(raw.points) ? raw.points.slice(0, 5000).map((p) => ({ x: coord(p?.x), y: coord(p?.y) })) : [];
     if (!pts.length) return null;
     el.points = pts;
   } else {
@@ -542,6 +630,7 @@ export function cleanElement(raw) {
   }
   if (el.type === 'text') {
     el.text = String(raw.text ?? '').slice(0, 10000);
+    if (raw.font !== 'hand' && typeof raw.font === 'string' && Object.hasOwn(FONTS, raw.font)) el.font = raw.font;
     if (ref(raw.containerId)) {
       el.containerId = ref(raw.containerId);
       el.align = 'center';
@@ -551,6 +640,8 @@ export function cleanElement(raw) {
     if (ref(raw.startId)) el.startId = ref(raw.startId);
     if (ref(raw.endId)) el.endId = ref(raw.endId);
   }
+  if (el.type === 'arrow' && HEADS.includes(raw.heads) && raw.heads !== 'end') el.heads = raw.heads;
+  if ((el.type === 'arrow' || el.type === 'line') && ROUTES.includes(raw.route) && raw.route !== 'straight' && el.points.length === 2) el.route = raw.route;
   if (ref(raw.group)) el.group = ref(raw.group);
   return el;
 }
@@ -576,6 +667,17 @@ export function serializeScene(scene) {
   return `${JSON.stringify({ type: FORMAT, version: VERSION, background: scene.background, elements: scene.elements })}\n`;
 }
 
+// Excalidraw's font numbers: handwriting (Virgil, Excalifont), normal (Helvetica, Nunito), code (Cascadia,
+// Comic Shanns). Anything else stays in the handwriting font.
+const EXCALIDRAW_FONTS = { 1: 'hand', 5: 'hand', 2: 'normal', 6: 'normal', 3: 'code', 8: 'code' };
+
+// Excalidraw keeps one arrowhead setting per end (null means none; a missing end one means the default arrow).
+function excalidrawHeads(e) {
+  const start = !!e.startArrowhead;
+  const end = e.endArrowhead === undefined ? true : !!e.endArrowhead;
+  return start && end ? 'both' : start ? 'start' : end ? 'end' : 'none';
+}
+
 // The .excalidraw format (public JSON): the types and styles with an equivalent are translated.
 export function fromExcalidraw(data) {
   const map = { rectangle: 'rectangle', ellipse: 'ellipse', diamond: 'diamond', line: 'line', arrow: 'arrow', freedraw: 'draw', text: 'text' };
@@ -599,8 +701,11 @@ export function fromExcalidraw(data) {
       roughness: e.roughness,
       opacity: e.opacity != null ? num(e.opacity, 100) / 100 : 1,
       fontSize: e.fontSize,
+      font: EXCALIDRAW_FONTS[e.fontFamily],
       text: e.originalText ?? e.text,
       containerId: e.containerId,
+      heads: excalidrawHeads(e),
+      route: e.elbowed ? 'elbow' : undefined,
       startId: e.startBinding?.elementId,
       endId: e.endBinding?.elementId,
       group: Array.isArray(e.groupIds) ? e.groupIds[e.groupIds.length - 1] : undefined,
@@ -643,12 +748,20 @@ export function drawOps(el) {
     ops.push({ ...base, path: freehandPath(el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y }))) });
     return ops;
   } else if (el.type === 'line' || el.type === 'arrow') {
-    const pts = el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y }));
-    ops.push({ ...base, path: polylinePath(pts, opts) });
+    const pts = routePoints(el);
+    // A curve is drawn smooth (the hand-drawn wobble is for straight strokes); straight and elbow lines wobble.
+    ops.push({ ...base, path: el.route === 'curve' ? freehandPath(pts) : polylinePath(pts, opts) });
     if (el.type === 'arrow' && pts.length > 1) {
-      const a = pts[pts.length - 2];
-      const z = pts[pts.length - 1];
-      ops.push({ ...base, dashed: false, path: arrowHead(a.x, a.y, z.x, z.y, 10 + el.width * 3, opts) });
+      const heads = el.heads || 'end';
+      const size = 10 + el.width * 3;
+      if (heads === 'end' || heads === 'both') {
+        const a = pts[pts.length - 2];
+        const z = pts[pts.length - 1];
+        ops.push({ ...base, dashed: false, path: arrowHead(a.x, a.y, z.x, z.y, size, opts) });
+      }
+      if (heads === 'start' || heads === 'both') {
+        ops.push({ ...base, dashed: false, path: arrowHead(pts[1].x, pts[1].y, pts[0].x, pts[0].y, size, { ...opts, seed: opts.seed + 1 }) });
+      }
     }
     return ops;
   } else {

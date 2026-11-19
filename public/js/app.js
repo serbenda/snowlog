@@ -3082,7 +3082,7 @@ async function historyModal(id) {
   notice('Version restored. The one before is still in the history.');
 }
 
-// --- Drawings (serbenda/sketch) ---
+// --- Drawings (serbenda/bsketch) ---
 // They are .sketch attachments (JSON, encrypted online). They are edited right here and shown in notes
 // with ![[drawing.sketch]]. The editor comes from sketch and does not use innerHTML.
 const SKETCH_TYPE = 'application/vnd.sketch+json';
