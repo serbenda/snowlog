@@ -32,7 +32,7 @@ flowchart LR
 | Local vault | The same interface over plain `.md` files in a folder (File System Access), OPFS, or a folder kept in browser storage (`kvdir.js`) | — | `public/js/localvault.js`, `kvdir.js` |
 | Markdown | Safe renderer: escapes everything before formatting; frontmatter, tables, callouts, tasks, tags, `[[links]]` | — | `public/js/markdown.js` |
 | Index and queries | In-memory index of decrypted notes; Dataview-style `TASK/LIST/TABLE` queries; search; links; graph | — | `noteindex.js`, `query.js`, `search.js`, `links.js`, `graph.js` |
-| Drawing engine | Copied from [sketch](https://github.com/serbenda/sketch); never edited here | — | `public/js/sketch-*.js`, `public/css/sketch.css`, `public/fonts/` |
+| Drawing engine | Copied from [bsketch](https://github.com/serbenda/bsketch); never edited here | — | `public/js/sketch-*.js`, `public/css/sketch.css`, `public/fonts/` |
 | Service worker | Stores the web app itself for offline use; never GitHub or sign-in responses | — | `public/sw.js` |
 | Sign-in Worker | Exchanges the GitHub App code for a token; holds the client secret | Cloudflare Workers | `worker/` |
 | Portable build | Bundles `public/` into one HTML file with `connect-src 'none'` and hashed script and style | Node script | `scripts/build-portable.mjs` |
@@ -86,7 +86,7 @@ the code of the site.
 |---|---|---|---|
 | GitHub REST and GraphQL APIs | Storage, history and sync of the encrypted notes | GitHub terms | Offline mode: reading cached notes and queueing saves; GraphQL falls back to REST |
 | GitHub App + Cloudflare Worker | Sign-in with GitHub | GitHub and Cloudflare terms | A personal access token still works |
-| [sketch](https://github.com/serbenda/sketch) | The drawing engine, copied by `scripts/update-sketch.mjs` | The owner's own code | Drawings keep working with the copied version |
+| [bsketch](https://github.com/serbenda/bsketch) | The drawing engine, copied by `scripts/update-sketch.mjs` | The owner's own code | Drawings keep working with the copied version |
 | Caveat font (in `public/fonts/`) | Handwriting in drawings | SIL Open Font License 1.1 (`public/fonts/OFL.txt`) | The system cursive is used (as in the portable build) |
 
 ## Code conventions

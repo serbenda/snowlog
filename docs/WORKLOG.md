@@ -16,6 +16,20 @@
 - **Pending:**
 -->
 
+## 2026-11-19 — The drawing engine from bsketch
+- **Phase / issue:** —
+- **What:** `scripts/update-sketch.mjs` and the docs point at `serbenda/bsketch` (the sketch repository was renamed);
+  the engine copy (`public/js/sketch-*.js`, `public/css/sketch.css`) refreshed from bsketch `3ec8fd5`; the service
+  worker's cache bumped to `snowlog-v3` so installed copies get the new engine.
+- **Why:** the copy was several bsketch releases behind and the script named the old repository.
+- **Rejected:** copying bsketch's `drawings.js` and `i18n.js` (Snowlog keeps its own drawings in the vault and its
+  interface is in English, so the editor's default text fits).
+- **Files:** scripts/update-sketch.mjs, public/js/sketch-*.js, public/css/sketch.css, public/sw.js, public/js/app.js,
+  public/js/vault.js, README.md, AGENTS.md, docs/ARCHITECTURE.md, CHANGELOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 163 pass; `npm run test:e2e` 5 pass.
+- **Pending:** drawings inside Snowlog not checked by eye with the new engine.
+
 ## 2026-11-17 — Adopt project-template 1.0.0; everything in English
 - **Phase / issue:** P01 · PR #6
 - **What:**
