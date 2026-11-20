@@ -1,8 +1,10 @@
-// Copied from serbenda/bsketch (js/render.js, commit 3ec8fd5) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/render.js, commit 59f9453) by scripts/update-sketch.mjs. Do not edit here.
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // Paints a scene on a <canvas> or turns it into SVG (text to download, or DOM nodes to embed). The
 // drawing's texts never go in as HTML: they are escaped or set with textContent.
 
-import { drawOps, sceneBounds, textLayout, setTextMeasurer, aabb, fontOf, FONT, FONT_NAME } from './sketch-scene.js';
+import { drawOps, sceneBounds, textLayout, setTextMeasurer, aabb, bounds, center, fontOf, isImageData, FONT, FONT_NAME, FRAME_TITLE, FRAME_COLOR, FRAME_FONT } from './sketch-scene.js';
 import { toSvgD, tracePath } from './sketch-stroke.js';
 
 // Measures texts with a canvas (the handwriting font is narrower than the no-DOM estimate).
@@ -27,6 +29,33 @@ export function fontReady(doc) {
   }
 }
 
+// Pictures, decoded once per data: URL. Painting needs them decoded: until then a picture is a grey box, and
+// onImageReady() tells the painter (the editor) to paint again.
+const pictures = new Map();
+const waiting = new Set();
+export function onImageReady(fn) {
+  waiting.add(fn);
+  return () => waiting.delete(fn);
+}
+function picture(data) {
+  if (!isImageData(data) || typeof Image === 'undefined') return null;
+  let p = pictures.get(data);
+  if (!p) {
+    const img = new Image();
+    p = { img, ready: false, failed: false };
+    img.src = data;
+    p.done = img.decode().then(() => { p.ready = true; }, () => { p.failed = true; }).then(() => { for (const fn of waiting) fn(); });
+    if (pictures.size > 300) pictures.delete(pictures.keys().next().value);
+    pictures.set(data, p);
+  }
+  return p;
+}
+// Waits until every picture in the scene is decoded (for exports).
+export function imagesReady(scene) {
+  return Promise.all(scene.elements.filter((e) => e.type === 'image').map((e) => picture(scene.files?.[e.fileId])?.done));
+}
+const frameTitle = (el) => el.name || 'Frame';
+
 // Strokes prepared once per element (Path2D when available): repainting an unchanged element does not
 // recompute its hand-drawn stroke or hachure. Elements are never changed in place.
 const prepared = new WeakMap();
@@ -50,8 +79,37 @@ function opsOf(el) {
   return ops;
 }
 
-export function paintElement(ctx, el) {
+// `imageFilter`: a canvas filter for pictures (the editor's dark appearance inverts the canvas; pictures are
+// inverted back so they keep their colours).
+export function paintElement(ctx, el, files, imageFilter = '') {
   ctx.save();
+  if (el.type === 'image') {
+    const b = bounds(el);
+    ctx.globalAlpha = el.opacity;
+    if (el.angle) {
+      const c = center(el);
+      ctx.translate(c.x, c.y);
+      ctx.rotate(el.angle);
+      ctx.translate(-c.x, -c.y);
+    }
+    const p = picture(files?.[el.fileId]);
+    if (imageFilter) ctx.filter = imageFilter;
+    if (p?.ready) ctx.drawImage(p.img, b.x, b.y, b.w, b.h);
+    else {
+      ctx.fillStyle = 'rgba(134, 142, 150, 0.25)';
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+    }
+    ctx.restore();
+    return;
+  }
+  if (el.type === 'frame') {
+    const b = bounds(el);
+    ctx.fillStyle = FRAME_COLOR;
+    ctx.font = `14px ${FRAME_FONT}`;
+    ctx.textBaseline = 'bottom';
+    ctx.textAlign = 'left';
+    ctx.fillText(frameTitle(el), b.x, b.y - 4, Math.max(40, b.w));
+  }
   if (el.type === 'text') {
     const L = textLayout(el);
     ctx.globalAlpha = el.opacity;
@@ -93,6 +151,8 @@ export function paintElement(ctx, el) {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.setLineDash(op.dashed ? [op.width * 4, op.width * 3] : []);
+      // A flow moves its dashes from start to end: one pattern length per FLOW_PERIOD.
+      if (op.flow) ctx.lineDashOffset = -((flowTime % FLOW_PERIOD) / FLOW_PERIOD) * op.width * 7;
       if (op.p2d) ctx.stroke(op.p2d);
       else ctx.stroke();
     }
@@ -101,8 +161,14 @@ export function paintElement(ctx, el) {
   ctx.restore();
 }
 
+// Animated lines: the time their dashes are painted at (ms), set by paintScene; 0 paints them still.
+export const FLOW_PERIOD = 700;
+let flowTime = 0;
+export const hasFlow = (elements) => elements.some((e) => e.animated === true && (e.type === 'arrow' || e.type === 'line'));
+
 // view: { x, y, zoom } (offset in screen pixels, and scale).
-export function paintScene(ctx, scene, { view = { x: 0, y: 0, zoom: 1 }, width, height, background = true } = {}) {
+export function paintScene(ctx, scene, { view = { x: 0, y: 0, zoom: 1 }, width, height, background = true, imageFilter = '', time = 0 } = {}) {
+  flowTime = Number.isFinite(time) ? time : 0;
   ctx.save();
   if (background) {
     ctx.fillStyle = scene.background || '#ffffff';
@@ -119,7 +185,7 @@ export function paintScene(ctx, scene, { view = { x: 0, y: 0, zoom: 1 }, width, 
   for (const el of scene.elements) {
     const b = aabb(el);
     if (b.x > x2 || b.y > y2 || b.x + b.w < x1 || b.y + b.h < y1) continue;
-    paintElement(ctx, el);
+    paintElement(ctx, el, scene.files, imageFilter);
   }
   ctx.restore();
 }
@@ -131,8 +197,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 // Scene → SVG as text (to download). `padding` around the drawing.
 // `background: false` leaves it out (a transparent SVG).
-export function toSvgString(scene, { padding = 20, background = true } = {}) {
-  const b = sceneBounds(scene.elements);
+export function toSvgString(scene, { padding = 20, background = true, box = null } = {}) {
+  const b = box || sceneBounds(scene.elements);
   const W = Math.ceil(b.w + padding * 2);
   const H = Math.ceil(b.h + padding * 2);
   const parts = [];
@@ -145,6 +211,19 @@ export function toSvgString(scene, { padding = 20, background = true } = {}) {
       parts.push(L.angle ? `<g transform="rotate(${(n(L.angle) * 180) / Math.PI} ${n(L.c.x)} ${n(L.c.y)})">${lines}</g>` : lines);
       continue;
     }
+    if (el.type === 'image') {
+      const data = scene.files?.[el.fileId];
+      if (!isImageData(data)) continue; // only checked pictures go into the markup
+      const ib = bounds(el);
+      const c = center(el);
+      const rot = el.angle ? ` transform="rotate(${(n(el.angle) * 180) / Math.PI} ${n(c.x)} ${n(c.y)})"` : '';
+      parts.push(`<image href="${data}" x="${n(ib.x)}" y="${n(ib.y)}" width="${n(ib.w)}" height="${n(ib.h)}" preserveAspectRatio="none" opacity="${n(el.opacity, 1)}"${rot}/>`);
+      continue;
+    }
+    if (el.type === 'frame') {
+      const fb = bounds(el);
+      parts.push(`<text x="${n(fb.x)}" y="${n(fb.y - 4)}" font-size="14" font-family="${esc(FRAME_FONT)}" fill="${FRAME_COLOR}">${esc(frameTitle(el))}</text>`);
+    }
     for (const op of drawOps(el)) {
       let clip = '';
       if (op.clip) {
@@ -155,7 +234,9 @@ export function toSvgString(scene, { padding = 20, background = true } = {}) {
       const style = op.fill
         ? `fill="${esc(op.fill)}" stroke="none"`
         : `fill="none" stroke="${esc(op.stroke)}" stroke-width="${n(op.width, 2)}" stroke-linecap="round" stroke-linejoin="round"${op.dashed ? ` stroke-dasharray="${n(op.width, 2) * 4} ${n(op.width, 2) * 3}"` : ''}`;
-      parts.push(`<path d="${toSvgD(op.path)}" ${style} opacity="${n(op.opacity, 1)}"${clip}/>`);
+      // A flow: the dashes move with SVG's own animation (no script).
+      const flow = op.flow ? `<animate attributeName="stroke-dashoffset" from="${n(op.width, 2) * 7}" to="0" dur="${FLOW_PERIOD / 1000}s" repeatCount="indefinite"/>` : '';
+      parts.push(flow ? `<path d="${toSvgD(op.path)}" ${style} opacity="${n(op.opacity, 1)}"${clip}>${flow}</path>` : `<path d="${toSvgD(op.path)}" ${style} opacity="${n(op.opacity, 1)}"${clip}/>`);
     }
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${n(W)}" height="${n(H)}" viewBox="${n(b.x - padding)} ${n(b.y - padding)} ${n(W)} ${n(H)}">`
@@ -164,7 +245,7 @@ export function toSvgString(scene, { padding = 20, background = true } = {}) {
 }
 
 // Scene → an <svg> node built with the DOM (no innerHTML), to embed in another page.
-export function toSvgElement(doc, scene, { padding = 20, maxWidth = null } = {}) {
+export function toSvgElement(doc, scene, { padding = 20, maxWidth = null, background = true } = {}) {
   measureWithCanvas(doc);
   const NS = 'http://www.w3.org/2000/svg';
   const b = sceneBounds(scene.elements);
@@ -176,7 +257,7 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null } = {})
     return n;
   };
   const svg = mk('svg', { viewBox: `${b.x - padding} ${b.y - padding} ${W} ${H}`, width: maxWidth ? Math.min(W, maxWidth) : W, role: 'img' });
-  svg.append(mk('rect', { x: b.x - padding, y: b.y - padding, width: W, height: H, fill: scene.background || '#ffffff' }));
+  if (background) svg.append(mk('rect', { x: b.x - padding, y: b.y - padding, width: W, height: H, fill: scene.background || '#ffffff' }));
   let clipN = 0;
   const prefix = `s${Math.random().toString(36).slice(2, 8)}`;
   for (const el of scene.elements) {
@@ -191,6 +272,22 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null } = {})
       if (g !== svg) svg.append(g);
       continue;
     }
+    if (el.type === 'image') {
+      const data = scene.files?.[el.fileId];
+      if (!isImageData(data)) continue;
+      const ib = bounds(el);
+      const c = center(el);
+      const attrs = { href: data, x: ib.x, y: ib.y, width: ib.w, height: ib.h, preserveAspectRatio: 'none', opacity: el.opacity ?? 1 };
+      if (el.angle) attrs.transform = `rotate(${(el.angle * 180) / Math.PI} ${c.x} ${c.y})`;
+      svg.append(mk('image', attrs));
+      continue;
+    }
+    if (el.type === 'frame') {
+      const fb = bounds(el);
+      const t = mk('text', { x: fb.x, y: fb.y - 4, 'font-size': 14, 'font-family': FRAME_FONT, fill: FRAME_COLOR });
+      t.textContent = frameTitle(el);
+      svg.append(t);
+    }
     for (const op of drawOps(el)) {
       const attrs = op.fill
         ? { d: toSvgD(op.path), fill: op.fill, stroke: 'none', opacity: op.opacity ?? 1 }
@@ -203,7 +300,9 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null } = {})
         svg.append(cp);
         attrs['clip-path'] = `url(#${prefix}c${clipN})`;
       }
-      svg.append(mk('path', attrs));
+      const path = mk('path', attrs);
+      if (op.flow) path.append(mk('animate', { attributeName: 'stroke-dashoffset', from: op.width * 7, to: 0, dur: `${FLOW_PERIOD / 1000}s`, repeatCount: 'indefinite' }));
+      svg.append(path);
     }
   }
   return svg;
@@ -220,10 +319,11 @@ export function pngScale(w, h, scale) {
 
 // Scene → PNG (Blob) at `scale` times its size, or less if it would not fit; null if it cannot be made.
 // `background: false` gives transparent pixels outside the shapes.
-export async function toPngBlob(doc, scene, { padding = 20, scale = 2, background = true } = {}) {
+export async function toPngBlob(doc, scene, { padding = 20, scale = 2, background = true, box = null } = {}) {
   measureWithCanvas(doc);
   await fontReady(doc);
-  const b = sceneBounds(scene.elements);
+  await imagesReady(scene);
+  const b = box || sceneBounds(scene.elements);
   scale = pngScale(b.w + padding * 2, b.h + padding * 2, scale);
   const canvas = doc.createElement('canvas');
   canvas.width = Math.max(1, Math.ceil((b.w + padding * 2) * scale));

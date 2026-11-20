@@ -16,6 +16,21 @@
 - **Pending:**
 -->
 
+## 2026-11-20 — The drawing engine from bsketch, with text to diagram
+- **Phase / issue:** —
+- **What:** `scripts/update-sketch.mjs` also copies `textdiagram.js` (the editor imports it now); the engine copy
+  refreshed from bsketch `59f9453` (pictures, frames, text to diagram, Ctrl+arrow chaining, animated arrows,
+  clipboard between tabs); `sketch-textdiagram.js` added to the service worker's files and its cache bumped to
+  `snowlog-v4`.
+- **Why:** bsketch's 1.2.0 work, inside Snowlog's encrypted notes.
+- **Rejected:** bsketch's library and templates (they need a place to keep them that Snowlog doesn't give the editor
+  yet; the editor hides them without one).
+- **Files:** scripts/update-sketch.mjs, public/js/sketch-*.js, public/css/sketch.css, public/sw.js, CHANGELOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 163 pass; `npm run test:e2e` 5 pass; the portable build; a Mermaid diagram pasted on a
+  drawing in Chrome is drawn, saved encrypted and opens again after locking and unlocking.
+- **Pending:** —
+
 ## 2026-11-19 — The drawing engine from bsketch
 - **Phase / issue:** —
 - **What:** `scripts/update-sketch.mjs` and the docs point at `serbenda/bsketch` (the sketch repository was renamed);

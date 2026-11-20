@@ -6,6 +6,9 @@ and versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **Drawings get bsketch's latest engine:** pictures (insert, paste or drop), frames, text to diagram without AI
+  (paste an indented list, a Mermaid flowchart or `A -> B` lines on a drawing), Ctrl+arrow keys to chain the next
+  shape, animated flow arrows, and copy and paste of drawings' pieces between tabs.
 - **Drawings use the latest bsketch engine** (the project was renamed from sketch to
   [bsketch](https://github.com/serbenda/bsketch)): elbow and curved arrows and lines, arrowheads at either end, three
   fonts for text (hand, normal, code), and the grid when resizing and rotating.

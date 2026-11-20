@@ -1,4 +1,6 @@
-// Copied from serbenda/bsketch (js/scene.js, commit 3ec8fd5) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/scene.js, commit 59f9453) by scripts/update-sketch.mjs. Do not edit here.
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // A drawing's scene: a list of elements with their style. Pure functions (no DOM) to create, measure,
 // hit-test, move, rotate, resize, bind, save, open (also .excalidraw) and turn into strokes.
 //
@@ -7,10 +9,15 @@
 //   group         group id: selected and moved together
 //   containerId   (text) the shape that holds it: centered inside, follows it
 //   startId/endId (arrow) the shapes each end is attached to
+//   fileId        (image) its picture, kept once per scene in `scene.files` as a data: URL
+//   name          (frame) the frame's title, shown above it
+//   animated      (arrow, line) true: its dashes move along it, showing a flow
+//
+// A scene is { type, version, background, elements, files? }; `files` maps a file id to an image's data: URL.
 
 import { polylinePath, ellipsePath, freehandPath, hachurePath, arrowHead } from './sketch-stroke.js';
 
-export const TYPES = ['rectangle', 'ellipse', 'diamond', 'line', 'arrow', 'draw', 'text'];
+export const TYPES = ['rectangle', 'ellipse', 'diamond', 'line', 'arrow', 'draw', 'text', 'image', 'frame'];
 export const FORMAT = 'sketch';
 export const VERSION = 1;
 export const LINE_HEIGHT = 1.25;
@@ -25,6 +32,10 @@ export const FONTS = {
 };
 export const fontOf = (el) => FONTS[el.font] || FONT;
 const ARROW_GAP = 6;
+// Frames: the height of the title above them, and their colour (a neutral grey that reads on any background).
+export const FRAME_TITLE = 20;
+export const FRAME_COLOR = '#868e96';
+export const FRAME_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
 // The grid: lines every GRID_SIZE drawing units. snap() rounds a coordinate to the nearest line.
 export const GRID_SIZE = 20;
@@ -48,6 +59,42 @@ export const newSeed = () => Math.floor(Math.random() * 2 ** 31);
 
 export function emptyScene() {
   return { type: FORMAT, version: VERSION, elements: [], background: '#ffffff' };
+}
+
+// --- Images: a picture is a data: URL of one of these types, in base64, and not too big. Anything else is refused
+// (no SVG: it could carry script; no remote URL: the page never connects anywhere). ---
+export const IMAGE_TYPES = ['png', 'jpeg', 'gif', 'webp'];
+export const MAX_IMAGE_CHARS = 10 * 1024 * 1024; // ~7.5 MB of picture
+export const MAX_FILES_CHARS = 60 * 1024 * 1024; // all the pictures of one drawing
+const MAX_FILES = 500;
+const DATA_URL_RE = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+// Names an object must never take from a file (they would reach its prototype).
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+export const isImageData = (v) => typeof v === 'string' && v.length <= MAX_IMAGE_CHARS && DATA_URL_RE.test(v);
+
+// The files a list of elements uses, taken from `files` (nothing else is kept).
+export function filesFor(elements, files) {
+  if (!files) return {};
+  const used = elements.filter((e) => e.type === 'image' && !UNSAFE_KEYS.has(e.fileId) && Object.hasOwn(files, e.fileId) && isImageData(files[e.fileId]));
+  return Object.fromEntries(used.map((e) => [e.fileId, files[e.fileId]]));
+}
+
+// Validated files from a file or storage: known ids, data: URLs of allowed types, within the limits.
+function cleanFiles(raw) {
+  const out = [];
+  if (!raw || typeof raw !== 'object') return {};
+  let total = 0;
+  let n = 0;
+  for (const [id, v] of Object.entries(raw)) {
+    if (n >= MAX_FILES) break;
+    const data = typeof v === 'string' ? v : v?.dataURL; // ours, or Excalidraw's { mimeType, dataURL }
+    if (!ref(id) || UNSAFE_KEYS.has(id) || !isImageData(data) || total + data.length > MAX_FILES_CHARS) continue;
+    out.push([id, data]);
+    total += data.length;
+    n += 1;
+  }
+  // Built from pairs (no `obj[name] = …` with a name from the file).
+  return Object.fromEntries(out);
 }
 
 // Arrowheads of an arrow: at its end (the default, not stored), its start, both or none.
@@ -92,16 +139,19 @@ export function createElement(type, x, y, style = {}) {
   const el = { id: newId(), type, x, y, w: 0, h: 0, seed: newSeed(), ...DEFAULT_STYLE, ...style };
   if (type !== 'arrow' || el.heads === 'end' || !HEADS.includes(el.heads)) delete el.heads;
   if ((type !== 'arrow' && type !== 'line') || el.route === 'straight' || !ROUTES.includes(el.route)) delete el.route;
+  if ((type !== 'arrow' && type !== 'line') || el.animated !== true) delete el.animated;
   if (type !== 'text' || el.font === 'hand' || !Object.hasOwn(FONTS, String(el.font))) delete el.font;
   if (type === 'draw' || type === 'line' || type === 'arrow') el.points = [{ x: 0, y: 0 }];
   if (type === 'text') el.text = '';
+  if (type === 'frame') el.name = '';
   return el;
 }
 
 export const isLinear = (el) => el.type === 'line' || el.type === 'arrow' || el.type === 'draw';
 export const isContainer = (el) => el.type === 'rectangle' || el.type === 'ellipse' || el.type === 'diamond';
 export const isBoundText = (el) => el.type === 'text' && !!el.containerId;
-const isBindable = (el) => isContainer(el) || (el.type === 'text' && !el.containerId);
+const isBindable = (el) => isContainer(el) || el.type === 'image' || (el.type === 'text' && !el.containerId);
+export const isFrame = (el) => el.type === 'frame';
 
 // --- Text: measuring and lines ---
 // The real measure comes from the renderer (canvas.measureText); without a DOM it is estimated.
@@ -208,6 +258,10 @@ export function corners(el) {
 
 // The box it takes on screen (with its rotation).
 export function aabb(el) {
+  if (el.type === 'frame') {
+    const b = bounds(el);
+    return { x: b.x, y: b.y - FRAME_TITLE, w: b.w, h: b.h + FRAME_TITLE };
+  }
   if (isLinear(el) || !el.angle) return bounds(el);
   const ps = corners(el);
   const x = Math.min(...ps.map((p) => p.x));
@@ -241,15 +295,22 @@ function toLocal(el, x, y) {
 export function hitTest(el, x, y, tol = 6) {
   ({ x, y } = toLocal(el, x, y));
   const b = bounds(el);
-  if (x < b.x - tol || x > b.x + b.w + tol || y < b.y - tol || y > b.y + b.h + tol) return false;
-  const filled = el.fill && el.fill !== 'transparent';
+  const top = el.type === 'frame' ? FRAME_TITLE : 0;
+  if (x < b.x - tol || x > b.x + b.w + tol || y < b.y - top - tol || y > b.y + b.h + tol) return false;
+  const filled = (el.fill && el.fill !== 'transparent') || el.type === 'image';
   if (el.type === 'text') return true;
+  if (el.type === 'frame') {
+    // A frame is taken by its border or its title, so what is drawn inside it stays easy to pick.
+    if (y < b.y && y >= b.y - FRAME_TITLE - tol && x <= b.x + Math.max(60, b.w / 2)) return true;
+    const edges = [[b.x, b.y, b.x + b.w, b.y], [b.x + b.w, b.y, b.x + b.w, b.y + b.h], [b.x + b.w, b.y + b.h, b.x, b.y + b.h], [b.x, b.y + b.h, b.x, b.y]];
+    return edges.some((e) => distToSegment(x, y, ...e) <= tol);
+  }
   if (isLinear(el)) {
     const pts = el.type === 'draw' ? el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y })) : routePoints(el);
     if (pts.length === 1) return Math.hypot(x - pts[0].x, y - pts[0].y) <= tol + el.width;
     return pts.some((p, i) => i > 0 && distToSegment(x, y, pts[i - 1].x, pts[i - 1].y, p.x, p.y) <= tol + el.width / 2);
   }
-  if (el.type === 'rectangle') {
+  if (el.type === 'rectangle' || el.type === 'image') {
     const inside = x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
     if (filled && inside) return true;
     const edges = [[b.x, b.y, b.x + b.w, b.y], [b.x + b.w, b.y, b.x + b.w, b.y + b.h], [b.x + b.w, b.y + b.h, b.x, b.y + b.h], [b.x, b.y + b.h, b.x, b.y]];
@@ -310,6 +371,16 @@ export function shapeAt(elements, x, y, { tol = 0, except = null, containersOnly
   return null;
 }
 
+// The elements inside a frame: those whose box lies within it (other frames too, so frames can nest).
+export function inFrame(elements, frame) {
+  const b = bounds(frame);
+  return elements.filter((e) => {
+    if (e === frame || e.id === frame.id) return false;
+    const a = aabb(e);
+    return a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
+  });
+}
+
 export function elementsInBox(elements, box) {
   const x2 = box.x + box.w;
   const y2 = box.y + box.h;
@@ -362,7 +433,9 @@ export function resizeByHandle(el, handle, p, { keepRatio = false } = {}) {
   if (handle.includes('e')) x2 = q.x;
   if (handle.includes('n')) y1 = q.y;
   if (handle.includes('s')) y2 = q.y;
-  if ((keepRatio || el.type === 'text') && b.w && b.h) {
+  // Texts and pictures keep their proportions (Shift lets a picture stretch).
+  const ratio = el.type === 'image' ? !keepRatio : keepRatio || el.type === 'text';
+  if (ratio && b.w && b.h) {
     const corner = handle.length === 2;
     const k = corner ? Math.max(Math.abs(x2 - x1) / b.w, Math.abs(y2 - y1) / b.h) : handle === 'n' || handle === 's' ? Math.abs(y2 - y1) / b.h : Math.abs(x2 - x1) / b.w;
     const nw = b.w * k;
@@ -390,6 +463,7 @@ const normAngle = (a) => {
 
 // Rotates the element `delta` radians around the point c.
 export function rotateElement(el, c, delta) {
+  if (el.type === 'frame') return el; // frames stay upright
   if (isLinear(el)) {
     const abs = el.points.map((p) => rotatePoint({ x: el.x + p.x, y: el.y + p.y }, c, delta));
     return { ...el, x: abs[0].x, y: abs[0].y, points: abs.map((p) => ({ x: p.x - abs[0].x, y: p.y - abs[0].y })) };
@@ -490,13 +564,21 @@ export function syncBindings(elements) {
       if (!s) delete out.startId;
       if (!e) delete out.endId;
       if (!s && !e) return out;
-      const pts = el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y }));
+      // Every point within ±MAX_COORD, like anything read from a file (before and after laying out the ends), so
+      // saving and opening again changes nothing.
+      const lim = (v) => Math.max(-MAX_COORD, Math.min(MAX_COORD, v));
+      const keep = (list) => {
+        for (let i = 0; i < list.length; i++) list[i] = { x: lim(list[i].x), y: lim(list[i].y) };
+        return list;
+      };
+      const pts = keep(el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y })));
       const n = pts.length;
       if (n < 2) return out;
       const refStart = n > 2 ? pts[1] : e ? center(e) : pts[n - 1];
       const refEnd = n > 2 ? pts[n - 2] : s ? center(s) : pts[0];
       if (s) pts[0] = outlinePoint(s, refStart);
       if (e) pts[n - 1] = outlinePoint(e, refEnd);
+      keep(pts);
       out.x = pts[0].x;
       out.y = pts[0].y;
       out.points = pts.map((p) => ({ x: p.x - pts[0].x, y: p.y - pts[0].y }));
@@ -566,7 +648,12 @@ export function mergeScenes(base, mine, theirs) {
     prev = t.id;
   }
   const bg = mine.background === theirs.background || theirs.background === base.background ? mine.background : theirs.background;
-  return { scene: { ...mine, background: bg, elements: syncBindings(out) }, conflict };
+  const elements = syncBindings(out);
+  const files = filesFor(elements, { ...(theirs.files || {}), ...(mine.files || {}) });
+  const scene = { ...mine, background: bg, elements };
+  if (Object.keys(files).length) scene.files = files;
+  else delete scene.files;
+  return { scene, conflict };
 }
 
 // Copies of some elements, offset: new ids, and bindings and groups remapped between the copies.
@@ -590,7 +677,12 @@ export function cloneElements(list, dx = 0, dy = 0) {
 }
 
 // --- Open and save (whatever comes from a file is validated: it is never trusted) ---
-const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+// Only numbers and numeric strings count: converting anything else (an object whose toString isn't a function) could throw.
+const num = (v, d = 0) => {
+  const x = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
+  return Number.isFinite(x) ? x : d;
+};
+const str = (v) => (typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : '');
 const COLOR_RE = /^(#[0-9a-f]{3,8}|transparent|rgba?\([\d\s.,%]+\)|[a-z]{3,20})$/i;
 const color = (v, d) => (typeof v === 'string' && COLOR_RE.test(v.trim()) ? v.trim() : d);
 export const isColor = (v) => typeof v === 'string' && COLOR_RE.test(v) && v === v.trim();
@@ -620,16 +712,22 @@ export function cleanElement(raw) {
     opacity: clamp(num(raw.opacity, 1), 0.05, 1),
     fontSize: clamp(num(raw.fontSize, 24), 6, 400),
   };
+  if (el.type === 'image') {
+    if (!ref(raw.fileId)) return null;
+    el.fileId = raw.fileId;
+  }
+  if (el.type === 'frame') el.name = str(raw.name).replace(/\s+/g, ' ').trim().slice(0, 100);
   if (isLinear(el)) {
-    const pts = Array.isArray(raw.points) ? raw.points.slice(0, 5000).map((p) => ({ x: coord(p?.x), y: coord(p?.y) })) : [];
+    // Points are relative to x, y; where they land stays within ±MAX_COORD like any coordinate.
+    const pts = Array.isArray(raw.points) ? raw.points.slice(0, 5000).map((p) => ({ x: coord(el.x + num(p?.x)) - el.x, y: coord(el.y + num(p?.y)) - el.y })) : [];
     if (!pts.length) return null;
     el.points = pts;
-  } else {
+  } else if (el.type !== 'frame') {
     const angle = normAngle(num(raw.angle));
     if (angle) el.angle = angle;
   }
   if (el.type === 'text') {
-    el.text = String(raw.text ?? '').slice(0, 10000);
+    el.text = str(raw.text).slice(0, 10000);
     if (raw.font !== 'hand' && typeof raw.font === 'string' && Object.hasOwn(FONTS, raw.font)) el.font = raw.font;
     if (ref(raw.containerId)) {
       el.containerId = ref(raw.containerId);
@@ -642,6 +740,7 @@ export function cleanElement(raw) {
   }
   if (el.type === 'arrow' && HEADS.includes(raw.heads) && raw.heads !== 'end') el.heads = raw.heads;
   if ((el.type === 'arrow' || el.type === 'line') && ROUTES.includes(raw.route) && raw.route !== 'straight' && el.points.length === 2) el.route = raw.route;
+  if ((el.type === 'arrow' || el.type === 'line') && raw.animated === true) el.animated = true;
   if (ref(raw.group)) el.group = ref(raw.group);
   return el;
 }
@@ -655,16 +754,28 @@ export function parseScene(text) {
   }
   if (data?.type === 'excalidraw') return fromExcalidraw(data);
   if (data?.type !== FORMAT || !Array.isArray(data.elements)) throw new Error('bad_file');
-  return {
+  return withFiles({
     type: FORMAT,
     version: VERSION,
     background: color(data.background, '#ffffff'),
-    elements: syncBindings(data.elements.slice(0, 20000).map(cleanElement).filter(Boolean)),
-  };
+    elements: data.elements.slice(0, 20000).map(cleanElement).filter(Boolean),
+  }, cleanFiles(data.files));
+}
+
+// Keeps the pictures the elements use; a picture element whose file is missing or refused is dropped.
+function withFiles(scene, files) {
+  const elements = syncBindings(scene.elements.filter((e) => e.type !== 'image' || Object.hasOwn(files, e.fileId)));
+  const used = filesFor(elements, files);
+  const out = { ...scene, elements };
+  if (Object.keys(used).length) out.files = used;
+  return out;
 }
 
 export function serializeScene(scene) {
-  return `${JSON.stringify({ type: FORMAT, version: VERSION, background: scene.background, elements: scene.elements })}\n`;
+  const files = filesFor(scene.elements, scene.files);
+  const data = { type: FORMAT, version: VERSION, background: scene.background, elements: scene.elements };
+  if (Object.keys(files).length) data.files = files;
+  return `${JSON.stringify(data)}\n`;
 }
 
 // Excalidraw's font numbers: handwriting (Virgil, Excalifont), normal (Helvetica, Nunito), code (Cascadia,
@@ -680,10 +791,10 @@ function excalidrawHeads(e) {
 
 // The .excalidraw format (public JSON): the types and styles with an equivalent are translated.
 export function fromExcalidraw(data) {
-  const map = { rectangle: 'rectangle', ellipse: 'ellipse', diamond: 'diamond', line: 'line', arrow: 'arrow', freedraw: 'draw', text: 'text' };
+  const map = { rectangle: 'rectangle', ellipse: 'ellipse', diamond: 'diamond', line: 'line', arrow: 'arrow', freedraw: 'draw', text: 'text', image: 'image', frame: 'frame', magicframe: 'frame' };
   const elements = [];
   for (const e of Array.isArray(data.elements) ? data.elements.slice(0, 20000) : []) {
-    if (!e || e.isDeleted || !map[e.type]) continue;
+    if (!e || e.isDeleted || typeof e.type !== 'string' || !Object.hasOwn(map, e.type)) continue;
     const el = cleanElement({
       id: e.id,
       type: map[e.type],
@@ -701,19 +812,94 @@ export function fromExcalidraw(data) {
       roughness: e.roughness,
       opacity: e.opacity != null ? num(e.opacity, 100) / 100 : 1,
       fontSize: e.fontSize,
-      font: EXCALIDRAW_FONTS[e.fontFamily],
+      font: typeof e.fontFamily === 'number' ? EXCALIDRAW_FONTS[e.fontFamily] : undefined,
       text: e.originalText ?? e.text,
       containerId: e.containerId,
       heads: excalidrawHeads(e),
-      route: e.elbowed ? 'elbow' : undefined,
+      route: e.elbowed === true ? 'elbow' : undefined,
       startId: e.startBinding?.elementId,
       endId: e.endBinding?.elementId,
       group: Array.isArray(e.groupIds) ? e.groupIds[e.groupIds.length - 1] : undefined,
       points: Array.isArray(e.points) ? e.points.map((p) => ({ x: p?.[0], y: p?.[1] })) : undefined,
+      fileId: e.fileId,
+      name: e.name,
     });
     if (el) elements.push(el);
   }
-  return { type: FORMAT, version: VERSION, background: color(data.appState?.viewBackgroundColor, '#ffffff'), elements: syncBindings(elements) };
+  return withFiles({ type: FORMAT, version: VERSION, background: color(data.appState?.viewBackgroundColor, '#ffffff'), elements }, cleanFiles(data.files));
+}
+
+// A scene in the .excalidraw format, to open it in Excalidraw. Hand, Normal and Code become Excalidraw's handwriting,
+// normal and code fonts; elbow and curved routes go as the points they are drawn through; animation has no
+// equivalent and is left out.
+const TO_EXCALIDRAW_FONT = { hand: 1, normal: 2, code: 3 };
+export function toExcalidraw(scene) {
+  const els = scene.elements;
+  const bound = new Map(); // shape id → [{ id, type }] of the texts and arrows attached to it
+  const attach = (shapeId, id, type) => {
+    if (!shapeId) return;
+    if (!bound.has(shapeId)) bound.set(shapeId, []);
+    bound.get(shapeId).push({ id, type });
+  };
+  for (const e of els) {
+    if (e.type === 'text' && e.containerId) attach(e.containerId, e.id, 'text');
+    if (e.type === 'arrow') {
+      attach(e.startId, e.id, 'arrow');
+      if (e.endId !== e.startId) attach(e.endId, e.id, 'arrow');
+    }
+  }
+  const frameOf = new Map();
+  for (const f of els) if (f.type === 'frame') for (const e of inFrame(els, f)) if (!frameOf.has(e.id)) frameOf.set(e.id, f.id);
+  let nonce = 1;
+  const out = els.map((e) => {
+    const b = bounds(e);
+    const base = {
+      id: e.id, type: e.type === 'draw' ? 'freedraw' : e.type, x: e.x, y: e.y, width: b.w, height: b.h,
+      angle: isLinear(e) ? 0 : e.angle || 0, strokeColor: e.stroke, backgroundColor: e.fill,
+      fillStyle: e.fillStyle === 'solid' ? 'solid' : 'hachure', strokeWidth: e.width, strokeStyle: e.dashed ? 'dashed' : 'solid',
+      roughness: e.roughness, opacity: Math.round(e.opacity * 100), seed: e.seed, version: 1, versionNonce: nonce++,
+      isDeleted: false, groupIds: e.group ? [e.group] : [], frameId: frameOf.get(e.id) || null,
+      boundElements: bound.get(e.id) || null, updated: 0, link: null, locked: false, roundness: null,
+    };
+    if (isLinear(e)) {
+      const pts = e.type === 'draw' ? e.points.map((p) => ({ x: e.x + p.x, y: e.y + p.y })) : routePoints(e);
+      const x0 = pts[0].x;
+      const y0 = pts[0].y;
+      Object.assign(base, { x: x0, y: y0, width: b.w, height: b.h, points: pts.map((p) => [p.x - x0, p.y - y0]) });
+      if (e.type === 'draw') Object.assign(base, { pressures: [], simulatePressure: true });
+      else {
+        const heads = e.type === 'arrow' ? e.heads || 'end' : 'none';
+        Object.assign(base, {
+          lastCommittedPoint: null,
+          startBinding: e.startId ? { elementId: e.startId, focus: 0, gap: ARROW_GAP } : null,
+          endBinding: e.endId ? { elementId: e.endId, focus: 0, gap: ARROW_GAP } : null,
+          startArrowhead: heads === 'start' || heads === 'both' ? 'arrow' : null,
+          endArrowhead: heads === 'end' || heads === 'both' ? 'arrow' : null,
+          elbowed: false,
+          ...(e.route === 'curve' ? { roundness: { type: 2 } } : {}),
+        });
+      }
+    } else if (e.type === 'text') {
+      Object.assign(base, {
+        x: b.x, y: b.y, text: e.text, originalText: e.text, fontSize: e.fontSize, fontFamily: TO_EXCALIDRAW_FONT[e.font || 'hand'],
+        textAlign: e.containerId ? 'center' : 'left', verticalAlign: e.containerId ? 'middle' : 'top',
+        containerId: e.containerId || null, lineHeight: LINE_HEIGHT, autoResize: true,
+      });
+    } else if (e.type === 'image') {
+      Object.assign(base, { fileId: e.fileId, status: 'saved', scale: [1, 1], backgroundColor: 'transparent' });
+    } else if (e.type === 'frame') {
+      Object.assign(base, { name: e.name || null, strokeColor: '#bbb', backgroundColor: 'transparent' });
+    }
+    return base;
+  });
+  const files = {};
+  for (const [id, dataURL] of Object.entries(filesFor(els, scene.files))) {
+    files[id] = { id, mimeType: dataURL.slice(5, dataURL.indexOf(';')), dataURL, created: 0 };
+  }
+  return {
+    type: 'excalidraw', version: 2, source: 'https://bendi.dev/bsketch/', elements: out,
+    appState: { viewBackgroundColor: scene.background || '#ffffff', gridSize: null }, files,
+  };
 }
 
 // --- Element → strokes to paint: [{ path, stroke?, fill?, width, dashed, opacity, clip? }] ---
@@ -744,13 +930,18 @@ export function drawOps(el) {
   } else if (el.type === 'ellipse') {
     outline = ellipsePath(b.x, b.y, b.w, b.h, opts);
     shape = ellipsePath(b.x, b.y, b.w, b.h, { seed: el.seed, roughness: 0, passes: 1 });
+  } else if (el.type === 'frame') {
+    // A clean, thin border (not hand-drawn): it frames the drawing rather than being part of it.
+    const pts = [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }];
+    return [{ stroke: FRAME_COLOR, width: 1, dashed: false, opacity: 1, path: [{ op: 'M', ...pts[0] }, ...pts.slice(1).map((p) => ({ op: 'L', ...p })), { op: 'Z' }] }];
   } else if (el.type === 'draw') {
     ops.push({ ...base, path: freehandPath(el.points.map((p) => ({ x: el.x + p.x, y: el.y + p.y }))) });
     return ops;
   } else if (el.type === 'line' || el.type === 'arrow') {
     const pts = routePoints(el);
     // A curve is drawn smooth (the hand-drawn wobble is for straight strokes); straight and elbow lines wobble.
-    ops.push({ ...base, path: el.route === 'curve' ? freehandPath(pts) : polylinePath(pts, opts) });
+    // An animated line is dashed and its dashes move (`flow`); its arrowheads stay solid.
+    ops.push({ ...base, ...(el.animated ? { flow: true, dashed: true } : {}), path: el.route === 'curve' ? freehandPath(pts) : polylinePath(pts, opts) });
     if (el.type === 'arrow' && pts.length > 1) {
       const heads = el.heads || 'end';
       const size = 10 + el.width * 3;
@@ -788,4 +979,47 @@ export function textLayout(el) {
     c: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
     lines: textLines(el).map((t, i) => ({ t, x: mid ? b.x + b.w / 2 : b.x, y: b.y + i * lh })),
   };
+}
+
+// --- Library: pieces of drawings kept to use again ---
+// A library file is { type: 'bsketchlib', version: 1, items: [{ id, name, elements, files }] }. Excalidraw's
+// libraries are read too (version 2: { type: 'excalidrawlib', libraryItems: [{ name, elements }] }, version 1:
+// { library: [[elements]] }). Each item is validated as a scene of its own; empty ones are dropped.
+export const LIBRARY_FORMAT = 'bsketchlib';
+export const MAX_LIBRARY_ITEMS = 200;
+
+export function parseLibrary(text) {
+  let data;
+  try {
+    data = typeof text === 'string' ? JSON.parse(text) : text;
+  } catch {
+    throw new Error('bad_file');
+  }
+  let raw;
+  if (data?.type === LIBRARY_FORMAT && Array.isArray(data.items)) {
+    raw = data.items.map((it) => ({ name: it?.name, scene: { type: FORMAT, elements: Array.isArray(it?.elements) ? it.elements : [], files: it?.files } }));
+  } else if (data?.type === 'excalidrawlib' && (Array.isArray(data.libraryItems) || Array.isArray(data.library))) {
+    const list = Array.isArray(data.libraryItems) ? data.libraryItems.map((it) => ({ name: it?.name, elements: it?.elements })) : data.library.map((els) => ({ elements: els }));
+    raw = list.map((it) => ({ name: it.name, scene: { type: 'excalidraw', elements: Array.isArray(it.elements) ? it.elements : [], files: data.files } }));
+  } else {
+    throw new Error('bad_file');
+  }
+  const items = [];
+  for (const r of raw.slice(0, MAX_LIBRARY_ITEMS)) {
+    let s;
+    try {
+      s = parseScene(JSON.stringify(r.scene));
+    } catch {
+      continue;
+    }
+    if (!s.elements.length) continue;
+    const item = { id: newId(), name: typeof r.name === 'string' ? r.name.replace(/\s+/g, ' ').trim().slice(0, 80) : '', elements: s.elements };
+    if (s.files) item.files = s.files;
+    items.push(item);
+  }
+  return items;
+}
+
+export function serializeLibrary(items) {
+  return `${JSON.stringify({ type: LIBRARY_FORMAT, version: 1, items: items.map((it) => ({ name: it.name || '', elements: it.elements, ...(it.files ? { files: filesFor(it.elements, it.files) } : {}) })) })}\n`;
 }
