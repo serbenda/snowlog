@@ -1,4 +1,4 @@
-/* Copied from serbenda/bsketch (css/sketch.css, commit 59f9453). Do not edit here. */
+/* Copied from serbenda/bsketch (css/sketch.css, commit fe1613f). Do not edit here. */
 /* © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
    and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e */
 /* The sketch editor. Everything uses the sk- prefix so it can be embedded in other pages (Snowlog). */
@@ -436,4 +436,87 @@
     width: auto;
     max-height: 45%;
   }
+}
+
+/* Search: a small box at the top right. */
+.sk-search {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  top: 64px;
+  width: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+.sk-searchinput {
+  width: 12rem;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--sk-border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+
+.sk-searchcount {
+  min-width: 4.5rem;
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .sk-search {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    transform: none;
+  }
+
+  .sk-searchinput {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Presenting: only the slide and a small bar to move through it. */
+.sk-presenting .sk-toolbar,
+.sk-presenting .sk-panel,
+.sk-presenting .sk-bottom,
+.sk-presenting .sk-library,
+.sk-presenting .sk-search {
+  display: none !important;
+}
+
+.sk-present {
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  opacity: 0.35;
+  transition: opacity 0.2s;
+}
+
+.sk-present:hover,
+.sk-present:focus-within {
+  opacity: 1;
+}
+
+.sk-slidecount {
+  min-width: 3.5rem;
+  text-align: center;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sk-editor.sk-presenting:fullscreen {
+  background: #ffffff;
 }

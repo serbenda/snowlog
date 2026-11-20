@@ -1,4 +1,4 @@
-// Copied from serbenda/bsketch (js/textdiagram.js, commit 59f9453) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/textdiagram.js, commit fe1613f) by scripts/update-sketch.mjs. Do not edit here.
 // © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
 // and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // Text to diagram, in the browser and without AI: an indented list, a simple Mermaid flowchart or `A -> B` lines

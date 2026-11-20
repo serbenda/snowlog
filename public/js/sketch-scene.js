@@ -1,4 +1,4 @@
-// Copied from serbenda/bsketch (js/scene.js, commit 59f9453) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/scene.js, commit fe1613f) by scripts/update-sketch.mjs. Do not edit here.
 // © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
 // and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // A drawing's scene: a list of elements with their style. Pure functions (no DOM) to create, measure,
@@ -12,6 +12,10 @@
 //   fileId        (image) its picture, kept once per scene in `scene.files` as a data: URL
 //   name          (frame) the frame's title, shown above it
 //   animated      (arrow, line) true: its dashes move along it, showing a flow
+//   dotted        true (with dashed): a dotted line instead of a dashed one
+//   rounded       (rectangle) true: round corners
+//   bend          (curved arrow, line) how far it bends, as a share of its length (DEFAULT_BEND when missing)
+//   locked        true: can't be selected, moved, erased or written into until unlocked
 //
 // A scene is { type, version, background, elements, files? }; `files` maps a file id to an image's data: URL.
 
@@ -99,10 +103,37 @@ function cleanFiles(raw) {
 
 // Arrowheads of an arrow: at its end (the default, not stored), its start, both or none.
 export const HEADS = ['end', 'start', 'both', 'none'];
+// Fills: hachure (the default), cross-hatch or solid.
+export const FILL_STYLES = ['hachure', 'cross-hatch', 'solid'];
 
 // How a line or an arrow goes from one end to the other: straight (the default, not stored), with right-angle
 // elbows, or along a gentle curve. Only for lines and arrows with two points (their ends).
 export const ROUTES = ['straight', 'elbow', 'curve'];
+
+// How much a curve bends: the default, or the one dragged by hand.
+export const DEFAULT_BEND = 0.25;
+export const bendOf = (el) => (Number.isFinite(el.bend) ? el.bend : DEFAULT_BEND);
+
+// The bend that makes a curve from a to z pass through p (its middle point goes there), as a share of the length.
+export function bendThrough(a, z, p) {
+  const dx = z.x - a.x;
+  const dy = z.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1) return 0;
+  // The curve's middle is halfway between the chord's middle and the control point: twice the offset, along (-dy, dx).
+  const off = (p.x - (a.x + dx / 2)) * -dy + (p.y - (a.y + dy / 2)) * dx;
+  return Math.max(-2, Math.min(2, (2 * off) / len2));
+}
+
+// The point in the middle of a two-point line as drawn (on the curve when it is one).
+export function midPoint(el) {
+  const a = { x: el.x + el.points[0].x, y: el.y + el.points[0].y };
+  const z = { x: el.x + el.points[1].x, y: el.y + el.points[1].y };
+  const m = { x: (a.x + z.x) / 2, y: (a.y + z.y) / 2 };
+  if (el.route !== 'curve') return m;
+  const k = bendOf(el) / 2;
+  return { x: m.x - (z.y - a.y) * k, y: m.y + (z.x - a.x) * k };
+}
 
 // The points a line or arrow is drawn through, from its two ends and its route (absolute coordinates).
 export function routePoints(el) {
@@ -121,10 +152,12 @@ export function routePoints(el) {
     const my = a.y + dy / 2;
     return [a, { x: a.x, y: my }, { x: z.x, y: my }, z];
   }
-  // curve: a quadratic arc whose control point sits off the middle, to the left of the way from a to z
+  // curve: a quadratic arc whose control point sits off the middle, `bend` × the length to the left of the way from a
+  // to z (right when negative)
   const len = Math.hypot(dx, dy);
   if (len < 1) return pts;
-  const c = { x: a.x + dx / 2 - (dy / len) * len * 0.25, y: a.y + dy / 2 + (dx / len) * len * 0.25 };
+  const k = bendOf(el);
+  const c = { x: a.x + dx / 2 - dy * k, y: a.y + dy / 2 + dx * k };
   const out = [];
   const n = 16;
   for (let i = 0; i <= n; i++) {
@@ -140,6 +173,10 @@ export function createElement(type, x, y, style = {}) {
   if (type !== 'arrow' || el.heads === 'end' || !HEADS.includes(el.heads)) delete el.heads;
   if ((type !== 'arrow' && type !== 'line') || el.route === 'straight' || !ROUTES.includes(el.route)) delete el.route;
   if ((type !== 'arrow' && type !== 'line') || el.animated !== true) delete el.animated;
+  if (el.route !== 'curve' || !Number.isFinite(el.bend)) delete el.bend;
+  if (type !== 'rectangle' || el.rounded !== true) delete el.rounded;
+  if (el.dotted !== true || type === 'text' || type === 'image' || type === 'frame') delete el.dotted;
+  delete el.locked;
   if (type !== 'text' || el.font === 'hand' || !Object.hasOwn(FONTS, String(el.font))) delete el.font;
   if (type === 'draw' || type === 'line' || type === 'arrow') el.points = [{ x: 0, y: 0 }];
   if (type === 'text') el.text = '';
@@ -371,11 +408,39 @@ export function shapeAt(elements, x, y, { tol = 0, except = null, containersOnly
   return null;
 }
 
-// The elements inside a frame: those whose box lies within it (other frames too, so frames can nest).
+// Frames hold what lies on them: an element belongs to a frame when the centre of its box is inside it (the smallest
+// frame, when they nest); a frame belongs to one only when it lies wholly inside it. Worked out per list of elements
+// and kept while that list is the same.
+const centreOf = (e) => {
+  const a = aabb(e);
+  return { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+};
+const inside = (p, b) => p.x >= b.x && p.y >= b.y && p.x <= b.x + b.w && p.y <= b.y + b.h;
+const owners = new WeakMap();
+// id → the frame that clips it.
+export function frameOwners(elements) {
+  let map = owners.get(elements);
+  if (map) return map;
+  map = new Map();
+  const frames = elements.filter((e) => e.type === 'frame').map((f) => ({ f, b: bounds(f) })).sort((x, y) => x.b.w * x.b.h - y.b.w * y.b.h);
+  if (frames.length) {
+    for (const e of elements) {
+      if (e.type === 'frame') continue;
+      const c = centreOf(e);
+      const hit = frames.find((x) => inside(c, x.b));
+      if (hit) map.set(e.id, hit.f);
+    }
+  }
+  owners.set(elements, map);
+  return map;
+}
+
+// What a frame carries when it moves: the elements on it (also inside frames nested in it) and those frames.
 export function inFrame(elements, frame) {
   const b = bounds(frame);
   return elements.filter((e) => {
     if (e === frame || e.id === frame.id) return false;
+    if (e.type !== 'frame') return inside(centreOf(e), b);
     const a = aabb(e);
     return a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
   });
@@ -705,7 +770,7 @@ export function cleanElement(raw) {
     seed: Math.floor(num(raw.seed, newSeed())) >>> 0,
     stroke: color(raw.stroke, DEFAULT_STYLE.stroke),
     fill: color(raw.fill, DEFAULT_STYLE.fill),
-    fillStyle: raw.fillStyle === 'solid' ? 'solid' : 'hachure',
+    fillStyle: FILL_STYLES.includes(raw.fillStyle) ? raw.fillStyle : 'hachure',
     width: clamp(num(raw.width, 2), 0.5, 40),
     dashed: raw.dashed === true,
     roughness: clamp(num(raw.roughness, 1), 0, 3),
@@ -741,6 +806,10 @@ export function cleanElement(raw) {
   if (el.type === 'arrow' && HEADS.includes(raw.heads) && raw.heads !== 'end') el.heads = raw.heads;
   if ((el.type === 'arrow' || el.type === 'line') && ROUTES.includes(raw.route) && raw.route !== 'straight' && el.points.length === 2) el.route = raw.route;
   if ((el.type === 'arrow' || el.type === 'line') && raw.animated === true) el.animated = true;
+  if (el.route === 'curve' && typeof raw.bend === 'number' && Number.isFinite(raw.bend) && raw.bend !== DEFAULT_BEND) el.bend = clamp(raw.bend, -2, 2);
+  if (el.type === 'rectangle' && raw.rounded === true) el.rounded = true;
+  if (raw.dotted === true && raw.dashed === true && el.type !== 'text' && el.type !== 'image' && el.type !== 'frame') el.dotted = true;
+  if (raw.locked === true) el.locked = true;
   if (ref(raw.group)) el.group = ref(raw.group);
   return el;
 }
@@ -806,9 +875,12 @@ export function fromExcalidraw(data) {
       seed: e.seed,
       stroke: e.strokeColor,
       fill: e.backgroundColor,
-      fillStyle: e.fillStyle === 'solid' ? 'solid' : 'hachure',
+      fillStyle: FILL_STYLES.includes(e.fillStyle) ? e.fillStyle : 'hachure',
       width: e.strokeWidth,
       dashed: e.strokeStyle === 'dashed' || e.strokeStyle === 'dotted',
+      dotted: e.strokeStyle === 'dotted',
+      rounded: e.type === 'rectangle' && !!e.roundness,
+      locked: e.locked === true,
       roughness: e.roughness,
       opacity: e.opacity != null ? num(e.opacity, 100) / 100 : 1,
       fontSize: e.fontSize,
@@ -848,18 +920,17 @@ export function toExcalidraw(scene) {
       if (e.endId !== e.startId) attach(e.endId, e.id, 'arrow');
     }
   }
-  const frameOf = new Map();
-  for (const f of els) if (f.type === 'frame') for (const e of inFrame(els, f)) if (!frameOf.has(e.id)) frameOf.set(e.id, f.id);
+  const frameOf = new Map([...frameOwners(els)].map(([id, f]) => [id, f.id]));
   let nonce = 1;
   const out = els.map((e) => {
     const b = bounds(e);
     const base = {
       id: e.id, type: e.type === 'draw' ? 'freedraw' : e.type, x: e.x, y: e.y, width: b.w, height: b.h,
       angle: isLinear(e) ? 0 : e.angle || 0, strokeColor: e.stroke, backgroundColor: e.fill,
-      fillStyle: e.fillStyle === 'solid' ? 'solid' : 'hachure', strokeWidth: e.width, strokeStyle: e.dashed ? 'dashed' : 'solid',
+      fillStyle: FILL_STYLES.includes(e.fillStyle) ? e.fillStyle : 'hachure', strokeWidth: e.width, strokeStyle: e.dotted ? 'dotted' : e.dashed ? 'dashed' : 'solid',
       roughness: e.roughness, opacity: Math.round(e.opacity * 100), seed: e.seed, version: 1, versionNonce: nonce++,
       isDeleted: false, groupIds: e.group ? [e.group] : [], frameId: frameOf.get(e.id) || null,
-      boundElements: bound.get(e.id) || null, updated: 0, link: null, locked: false, roundness: null,
+      boundElements: bound.get(e.id) || null, updated: 0, link: null, locked: e.locked === true, roundness: e.rounded ? { type: 3 } : null,
     };
     if (isLinear(e)) {
       const pts = e.type === 'draw' ? e.points.map((p) => ({ x: e.x + p.x, y: e.y + p.y })) : routePoints(e);
@@ -911,16 +982,36 @@ const turnPath = (path, c, a) => path.map((cmd) => {
   return { ...cmd, x: p.x, y: p.y, cx: q.x, cy: q.y };
 });
 
+// A rectangle's outline with round corners: the straight sides and a few points along each corner.
+function roundedCorners(b) {
+  const r = Math.min(32, Math.min(b.w, b.h) * 0.2);
+  const pts = [];
+  const corner = (cx, cy, a0) => {
+    for (let i = 0; i <= 4; i++) {
+      const a = a0 + (i / 4) * (Math.PI / 2);
+      pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+    }
+  };
+  corner(b.x + b.w - r, b.y + r, -Math.PI / 2);
+  corner(b.x + b.w - r, b.y + b.h - r, 0);
+  corner(b.x + r, b.y + b.h - r, Math.PI / 2);
+  corner(b.x + r, b.y + r, Math.PI);
+  return pts;
+}
+
+// A path mirrored left to right around x = axis / 2.
+const mirrorX = (path, axis) => path.map((c) => (c.op === 'Z' ? c : c.op === 'Q' ? { ...c, x: axis - c.x, cx: axis - c.cx } : { ...c, x: axis - c.x }));
+
 export function drawOps(el) {
   const opts = { seed: el.seed, roughness: el.roughness };
-  const base = { stroke: el.stroke, width: el.width, dashed: el.dashed, opacity: el.opacity };
+  const base = { stroke: el.stroke, width: el.width, dashed: el.dashed, opacity: el.opacity, ...(el.dotted ? { dotted: true } : {}) };
   const b = bounds(el);
   const ops = [];
   const filled = el.fill && el.fill !== 'transparent';
   let outline = null;
   let shape = null; // clean outline to fill or to clip the hachure
   if (el.type === 'rectangle') {
-    const pts = [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }];
+    const pts = el.rounded ? roundedCorners(b) : [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }];
     outline = polylinePath(pts, { ...opts, closed: true });
     shape = [{ op: 'M', ...pts[0] }, ...pts.slice(1).map((p) => ({ op: 'L', ...p })), { op: 'Z' }];
   } else if (el.type === 'diamond') {
@@ -960,7 +1051,11 @@ export function drawOps(el) {
   }
   if (filled) {
     if (el.fillStyle === 'solid') ops.push({ fill: el.fill, opacity: el.opacity, path: shape });
-    else ops.push({ stroke: el.fill, width: Math.max(1, el.width / 2), opacity: el.opacity, path: hachurePath(b.x, b.y, b.w, b.h, opts), clip: shape });
+    else {
+      ops.push({ stroke: el.fill, width: Math.max(1, el.width / 2), opacity: el.opacity, path: hachurePath(b.x, b.y, b.w, b.h, opts), clip: shape });
+      // Cross-hatch: the same lines again, mirrored, so they cross.
+      if (el.fillStyle === 'cross-hatch') ops.push({ stroke: el.fill, width: Math.max(1, el.width / 2), opacity: el.opacity, path: mirrorX(hachurePath(b.x, b.y, b.w, b.h, { ...opts, seed: opts.seed + 11 }), b.x * 2 + b.w), clip: shape });
+    }
   }
   ops.push({ ...base, path: outline });
   if (!el.angle) return ops;

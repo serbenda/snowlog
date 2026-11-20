@@ -16,6 +16,8 @@ const TRASH = '.trash';
 const HISTORY = '.history';
 // Folder settings: a plain JSON inside a hidden folder (it travels with the folder).
 const SETTINGS = '.snowlog/settings.json';
+// The drawing editor's library: a plain library file inside the hidden folder (it travels with the folder).
+const LIBRARY = '.snowlog/library.bsketchlib';
 // Name used before the interface was translated to English: still read if there is no settings.json.
 const LEGACY_SETTINGS = '.snowlog/ajustes.json';
 const SNAP_EVERY_MS = 10 * 60 * 1000;
@@ -362,6 +364,19 @@ export class LocalVault {
   async saveSettings(settings) {
     await writeFile(this.root, SETTINGS, `${JSON.stringify(settings, null, 2)}\n`);
     this.index.settings = { ...settings };
+  }
+
+  // The drawing library (null when there is none yet).
+  async readLibrary() {
+    try {
+      return await readFile(this.root, LIBRARY);
+    } catch {
+      return null;
+    }
+  }
+
+  async saveLibrary(text) {
+    await writeFile(this.root, LIBRARY, String(text));
   }
 
   // Attachments: plain files inside the folder.

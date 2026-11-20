@@ -250,3 +250,14 @@ test('local drawings: outside changes to other elements are combined', async () 
   const res2 = await v.saveFile(id, enc(base), { merge });
   assert.ok(res2.conflict);
 });
+
+test('the drawing library is a plain file in the hidden .snowlog folder', async () => {
+  const root = sampleFolder();
+  const v = await new LocalVault(root).load();
+  assert.equal(await v.readLibrary(), null, 'none yet');
+  await v.saveLibrary('{"type":"bsketchlib","items":[]}');
+  assert.equal(await v.readLibrary(), '{"type":"bsketchlib","items":[]}');
+  const again = await new LocalVault(root).load();
+  assert.equal(await again.readLibrary(), '{"type":"bsketchlib","items":[]}');
+  assert.ok(!again.notes().some((n) => n.path.includes('library')), 'not shown as a note');
+});

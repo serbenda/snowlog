@@ -389,6 +389,7 @@ test('rotating the key: everything is re-encrypted, the history is still readabl
   const id = await vault.createNote('Rotate/Secret', 'version 1');
   await vault.saveNote(id, 'version 2');
   const att = await vault.addFile('Rotate', 'photo.png', new Uint8Array([1, 2, 3, 4]));
+  await vault.saveLibrary('{"type":"bsketchlib","items":[{"name":"rotating piece"}]}');
   const before = new Map(fake.files());
   const oldDek = vault.dek;
   const vaultFile = await Vault.fetchVaultFile(newRepo());
@@ -409,6 +410,8 @@ test('rotating the key: everything is re-encrypted, the history is still readabl
   await other.loadIndex();
   assert.equal(await other.read(id), 'version 2');
   assert.deepEqual(await other.readFile(att.id), new Uint8Array([1, 2, 3, 4]));
+  assert.match(await other.readLibrary(), /rotating piece/, 'the drawing library is encrypted again too');
+  assert.notEqual(after.get('.snowlog/library.enc'), before.get('.snowlog/library.enc'));
   // The history (encrypted with the old key) is still readable thanks to the keyring.
   const versions = await other.history(id);
   assert.deepEqual(await Promise.all(versions.map((v) => other.readVersion(id, v.ref))), ['version 2', 'version 2', 'version 1']);
@@ -475,4 +478,35 @@ test('drawings: changes from two devices to different elements are combined', as
   assert.ok(res2.conflict);
   assert.equal(dec(res2.merged).elements[0].x, 2);
   for (const [p, c] of fake.files()) assert.ok(!c.includes('combine') && !c.includes('rectangle'), p);
+});
+
+test('changes on two devices in the same millisecond are still noticed (version = date + rev)', async () => {
+  // Every save gets the same date: before `rev`, the second device couldn't tell the note had changed and
+  // overwrote it.
+  const realIso = Date.prototype.toISOString;
+  Date.prototype.toISOString = () => '2026-01-01T00:00:00.000Z';
+  try {
+    const id = await vault.createNote('Same time', 'first');
+    const other = new Vault(newRepo(), vault.dek);
+    await other.loadIndex();
+    await other.read(id);
+    await vault.saveNote(id, 'here');
+    const res = await other.saveNote(id, 'there');
+    assert.ok(res.conflict, 'the other version is kept apart');
+    const check = new Vault(newRepo(), vault.dek);
+    await check.loadIndex();
+    assert.equal(await check.read(id), 'there');
+    assert.equal(await check.read(res.conflict.id), 'here', 'nothing was lost');
+  } finally {
+    Date.prototype.toISOString = realIso;
+  }
+  assert.match(vault.versionOf(Object.keys(vault.index.notes)[0]), /\|/);
+});
+
+test('the drawing library: encrypted in the repository, read from another device', async () => {
+  await vault.saveLibrary('{"type":"bsketchlib","version":1,"items":[{"name":"Secret server","elements":[]}]}');
+  for (const [path, content] of fake.files()) assert.ok(!content.includes('Secret server'), `${path} in plaintext`);
+  const other = new Vault(newRepo(), vault.dek);
+  await other.loadIndex();
+  assert.match(await other.readLibrary(), /Secret server/);
 });
