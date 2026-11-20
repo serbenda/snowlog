@@ -13,6 +13,8 @@ export const VAULT_FILE = '.snowlog/vault.json';
 export const INDEX_FILE = '.snowlog/index.enc';
 // Earlier keys (after rotating), encrypted with the current one: to keep reading the history.
 export const KEYRING_FILE = '.snowlog/keyring.enc';
+// The drawing editor's library (pieces kept to reuse), encrypted like everything else and shared between devices.
+export const LIBRARY_FILE = '.snowlog/library.enc';
 const notePath = (id) => `n/${id}.enc`;
 const filePath = (id) => `a/${id}.enc`;
 
@@ -525,6 +527,9 @@ export class Vault {
       changes.push({ path: filePath(f.id), content: C.toB64(await C.encryptBytes(dek, await this.readFile(f.id), f.id)) });
       onProgress(++done, total);
     }
+    // The drawing library is encrypted again too (it would be unreadable with the new key otherwise).
+    const library = await this.readLibrary();
+    if (library != null) changes.push({ path: LIBRARY_FILE, content: await C.encryptText(dek, library, 'library') });
     const ring = [{ key: oldKey, until: next.rotated }, ...(this.keyringRaw || [])];
     this.index.hasKeyring = true;
     changes.push({ path: KEYRING_FILE, content: await C.encryptText(dek, JSON.stringify(ring), 'keyring') });
@@ -699,6 +704,18 @@ export class Vault {
       for (const f of Object.values(idx.files || {})) f.path = moved(f.path);
       this.addFolderChain(idx, to);
     });
+  }
+
+  // --- The drawing library: one encrypted file, read when the editor opens it and saved when it changes ---
+  // The index notes whether there is one (like the keyring), so a vault without it asks the repository for nothing.
+  async readLibrary() {
+    if (!this.index.hasLibrary) return null;
+    const text = await this.repo.readText(LIBRARY_FILE);
+    return text ? C.decryptText(this.dek, text, 'library') : null;
+  }
+
+  async saveLibrary(text) {
+    await this.apply('Snowlog: drawing library', (idx) => { idx.hasLibrary = true; }, async () => [{ path: LIBRARY_FILE, content: await C.encryptText(this.dek, String(text), 'library') }]);
   }
 
   // --- Vault settings (encrypted inside the index, so they are shared between devices) ---

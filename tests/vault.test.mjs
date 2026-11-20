@@ -389,6 +389,7 @@ test('rotating the key: everything is re-encrypted, the history is still readabl
   const id = await vault.createNote('Rotate/Secret', 'version 1');
   await vault.saveNote(id, 'version 2');
   const att = await vault.addFile('Rotate', 'photo.png', new Uint8Array([1, 2, 3, 4]));
+  await vault.saveLibrary('{"type":"bsketchlib","items":[{"name":"rotating piece"}]}');
   const before = new Map(fake.files());
   const oldDek = vault.dek;
   const vaultFile = await Vault.fetchVaultFile(newRepo());
@@ -409,6 +410,8 @@ test('rotating the key: everything is re-encrypted, the history is still readabl
   await other.loadIndex();
   assert.equal(await other.read(id), 'version 2');
   assert.deepEqual(await other.readFile(att.id), new Uint8Array([1, 2, 3, 4]));
+  assert.match(await other.readLibrary(), /rotating piece/, 'the drawing library is encrypted again too');
+  assert.notEqual(after.get('.snowlog/library.enc'), before.get('.snowlog/library.enc'));
   // The history (encrypted with the old key) is still readable thanks to the keyring.
   const versions = await other.history(id);
   assert.deepEqual(await Promise.all(versions.map((v) => other.readVersion(id, v.ref))), ['version 2', 'version 2', 'version 1']);
@@ -498,4 +501,12 @@ test('changes on two devices in the same millisecond are still noticed (version 
     Date.prototype.toISOString = realIso;
   }
   assert.match(vault.versionOf(Object.keys(vault.index.notes)[0]), /\|/);
+});
+
+test('the drawing library: encrypted in the repository, read from another device', async () => {
+  await vault.saveLibrary('{"type":"bsketchlib","version":1,"items":[{"name":"Secret server","elements":[]}]}');
+  for (const [path, content] of fake.files()) assert.ok(!content.includes('Secret server'), `${path} in plaintext`);
+  const other = new Vault(newRepo(), vault.dek);
+  await other.loadIndex();
+  assert.match(await other.readLibrary(), /Secret server/);
 });

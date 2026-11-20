@@ -16,6 +16,25 @@
 - **Pending:**
 -->
 
+## 2026-11-20 — The drawing library and templates
+- **Phase / issue:** — (bsketch P18)
+- **What:** `readLibrary`/`saveLibrary` in both vaults: in a GitHub vault an encrypted `.snowlog/library.enc` (AAD
+  `library`), flagged in the index as `hasLibrary` so a vault without one asks for nothing, and encrypted again by
+  `rotate`; in a folder a plain `.snowlog/library.bsketchlib`. The editor gets them as its `library` (and `onNotice`).
+  `templates.js` copied from bsketch; the command palette lists "New drawing from a template: …" for each; cache
+  `snowlog-v6`.
+- **Why:** bsketch's S6 (P18): the editor's library and templates were hidden in Snowlog for lack of a place to keep
+  them.
+- **Rejected:** keeping the library in the index's settings (it can hold pictures: megabytes in every index read);
+  a visible attachment (it would show in the file tree and search).
+- **Files:** public/js/vault.js, public/js/localvault.js, public/js/app.js, public/js/sketch-templates.js,
+  scripts/update-sketch.mjs, public/sw.js, tests/vault.test.mjs, tests/localvault.test.mjs, CHANGELOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 166 pass (encrypted in the repository, read from another device, survives key rotation, the
+  folder's plain file); `npm run test:e2e` 5 pass; the portable build; in Chrome a template drawing, a piece kept in
+  the library, and the library read back after locking and unlocking (`library.enc` holds no plaintext).
+- **Pending:** —
+
 ## 2026-11-20 — bsketch 1.3's engine; saves in the same millisecond no longer clash
 - **Phase / issue:** — (bsketch P17)
 - **What:** the drawing engine copied from bsketch `v1.3.0` (`fe1613f`): frame clipping, presentation mode, arrows

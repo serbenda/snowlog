@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = resolve(process.argv[2] || join(ROOT, '..', 'sketch'));
-const FILES = ['stroke', 'scene', 'render', 'textdiagram', 'editor'];
+const FILES = ['stroke', 'scene', 'render', 'textdiagram', 'templates', 'editor'];
 let commit = 'unknown';
 try {
   commit = execFileSync('git', ['-C', SRC, 'rev-parse', '--short', 'HEAD']).toString().trim();
@@ -20,7 +20,7 @@ try {
 
 for (const f of FILES) {
   let src = readFileSync(join(SRC, 'js', `${f}.js`), 'utf8');
-  src = src.replace(/from '\.\/(stroke|scene|render|textdiagram|editor)\.js'/g, "from './sketch-$1.js'");
+  src = src.replace(/from '\.\/(stroke|scene|render|textdiagram|templates|editor)\.js'/g, "from './sketch-$1.js'");
   const head = `// Copied from serbenda/bsketch (js/${f}.js, commit ${commit}) by scripts/update-sketch.mjs. Do not edit here.\n`;
   writeFileSync(join(ROOT, 'public', 'js', `sketch-${f}.js`), head + src);
 }

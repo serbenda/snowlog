@@ -18,6 +18,7 @@ import * as K from './kanban.js';
 import { createEditor as createSketch } from './sketch-editor.js';
 import { emptyScene as emptySketch, parseScene as parseSketch, serializeScene as serializeSketch, mergeScenes as mergeSketch } from './sketch-scene.js';
 import { toSvgElement as sketchSvg } from './sketch-render.js';
+import { TEMPLATES as SKETCH_TEMPLATES, template as sketchTemplate } from './sketch-templates.js';
 import { merge3 } from './merge.js';
 import { openKvDir, browserBackend } from './kvdir.js';
 import { buildGraph, localGraph, initLayout, step as graphStep } from './graph.js';
@@ -2675,6 +2676,7 @@ function commands() {
     cur && ['graph-local', 'Graph of this note', '', () => graphView(cur)],
     ['board', 'New Kanban board', '', () => newBoard()],
     ['drawing', 'New drawing', '', () => newDrawing()],
+    ...Object.keys(SKETCH_TEMPLATES).map((t) => ['drawing', `New drawing from a template: ${sketchTemplate(t, 'en').name}`, '', () => newDrawing({ template: t })]),
     cur && ['drawing-in', 'Insert a new drawing into the note', '', () => newDrawing({ insert: true })],
     ['files', 'Show files', '', () => showLeftPane('files')],
     ['tags', 'Show tags', '', () => showLeftPane('tags')],
@@ -3140,7 +3142,13 @@ async function openDrawing(id) {
     notice(`The drawing could not be opened: ${errText(e)}`, 'error');
   }
   if (D.id !== id) return;
-  D.editor = createSketch(box, { scene, onChange: () => scheduleDrawingSave() });
+  D.editor = createSketch(box, {
+    scene,
+    onChange: () => scheduleDrawingSave(),
+    // The library of pieces to reuse lives in the vault (encrypted in a GitHub vault, a plain file in a folder).
+    library: { load: () => S.vault.readLibrary(), save: (text) => S.vault.saveLibrary(text) },
+    onNotice: (text) => notice(text),
+  });
   sketchTheme(D.editor.root);
   D.editor.focus();
 }
@@ -3225,12 +3233,14 @@ async function closeDrawing() {
   $('drawing').hidden = true;
 }
 
-async function newDrawing({ insert = false } = {}) {
+// A new drawing (empty, or from one of the editor's templates), opened; `insert` also embeds it in the open note.
+async function newDrawing({ insert = false, template: tplId = null } = {}) {
   if (!S.vault) return;
   const into = insert && S.current ? S.current : null;
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  const name = `Drawing ${isoDate(d)} ${p(d.getHours())}${p(d.getMinutes())}.sketch`;
+  const tpl = tplId ? sketchTemplate(tplId, 'en') : null;
+  const name = `${tpl ? tpl.name : 'Drawing'} ${isoDate(d)} ${p(d.getHours())}${p(d.getMinutes())}.sketch`;
   try {
     const { id, path } = await S.vault.addFile(WS.drawingsFolder || '', name, new TextEncoder().encode(serializeSketch(emptySketch())));
     if (into) {
@@ -3238,6 +3248,10 @@ async function newDrawing({ insert = false } = {}) {
       await saveNow();
     }
     await openDrawing(id);
+    if (tpl && D.id === id && D.editor) {
+      D.editor.insertText(tpl.text, { direction: tpl.direction, keepSelected: false });
+      D.editor.zoomToFit();
+    }
   } catch (e) {
     notice(`The drawing could not be created: ${errText(e)}`, 'error');
   }
