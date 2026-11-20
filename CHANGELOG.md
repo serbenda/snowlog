@@ -5,7 +5,14 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Two devices saving in the same millisecond no longer overwrite each other.** A note's or drawing's version was
+  only its date, so two saves that landed in the same millisecond looked like the same version and the second one
+  silently replaced the first. Each save now also records a random `rev`; versions written before keep working.
+
 ### Changed
+- **Drawings get bsketch 1.3's engine:** frames clip what lies on them, a presentation mode (Shift+P) shows the frames
+  one by one with a laser pointer, and arrows bend by dragging their middle.
 - **Drawings get bsketch's latest engine:** pictures (insert, paste or drop), frames, text to diagram without AI
   (paste an indented list, a Mermaid flowchart or `A -> B` lines on a drawing), Ctrl+arrow keys to chain the next
   shape, animated flow arrows, and copy and paste of drawings' pieces between tabs.

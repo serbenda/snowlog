@@ -476,3 +476,26 @@ test('drawings: changes from two devices to different elements are combined', as
   assert.equal(dec(res2.merged).elements[0].x, 2);
   for (const [p, c] of fake.files()) assert.ok(!c.includes('combine') && !c.includes('rectangle'), p);
 });
+
+test('changes on two devices in the same millisecond are still noticed (version = date + rev)', async () => {
+  // Every save gets the same date: before `rev`, the second device couldn't tell the note had changed and
+  // overwrote it.
+  const realIso = Date.prototype.toISOString;
+  Date.prototype.toISOString = () => '2026-01-01T00:00:00.000Z';
+  try {
+    const id = await vault.createNote('Same time', 'first');
+    const other = new Vault(newRepo(), vault.dek);
+    await other.loadIndex();
+    await other.read(id);
+    await vault.saveNote(id, 'here');
+    const res = await other.saveNote(id, 'there');
+    assert.ok(res.conflict, 'the other version is kept apart');
+    const check = new Vault(newRepo(), vault.dek);
+    await check.loadIndex();
+    assert.equal(await check.read(id), 'there');
+    assert.equal(await check.read(res.conflict.id), 'here', 'nothing was lost');
+  } finally {
+    Date.prototype.toISOString = realIso;
+  }
+  assert.match(vault.versionOf(Object.keys(vault.index.notes)[0]), /\|/);
+});

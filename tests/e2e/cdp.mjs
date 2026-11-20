@@ -11,22 +11,46 @@ export function findChrome() {
   return candidates.find((p) => p && existsSync(p)) || null;
 }
 
-export async function launch(chrome = findChrome()) {
+// Starts Chrome once and waits for its DevTools address. If it doesn't come in time (a slow or busy CI machine),
+// Chrome is killed and its profile removed, so nothing is left running to keep the tests from ending.
+function startChrome(chrome, timeoutMs) {
   const profile = mkdtempSync(join(tmpdir(), 'snowlog-e2e-'));
   const proc = spawn(chrome, [
     '--headless=new', '--no-sandbox', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+    // /dev/shm is small on CI machines and containers; without this Chrome can stall while starting.
+    '--disable-dev-shm-usage',
     '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=1280,800', 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
-  const wsUrl = await new Promise((resolve, reject) => {
+  const stop = () => {
+    try { proc.kill('SIGKILL'); } catch { /* already gone */ }
+    try { rmSync(profile, { recursive: true, force: true }); } catch { /* does not matter */ }
+  };
+  return new Promise((resolve, reject) => {
     let buf = '';
-    const t = setTimeout(() => reject(new Error(`Chrome did not start: ${buf}`)), 20000);
+    const fail = (err) => { clearTimeout(t); stop(); reject(err); };
+    const t = setTimeout(() => fail(new Error(`Chrome did not start in ${timeoutMs / 1000} s: ${buf.slice(-500)}`)), timeoutMs);
     proc.stderr.on('data', (d) => {
       buf += d;
       const m = buf.match(/DevTools listening on (ws:\/\/\S+)/);
-      if (m) { clearTimeout(t); resolve(m[1]); }
+      if (m) { clearTimeout(t); resolve({ proc, profile, wsUrl: m[1] }); }
     });
-    proc.on('exit', (code) => reject(new Error(`Chrome exited (${code}): ${buf}`)));
+    proc.on('exit', (code) => fail(new Error(`Chrome exited (${code}): ${buf.slice(-500)}`)));
   });
+}
+
+export async function launch(chrome = findChrome()) {
+  // Up to three tries: a CI machine sometimes takes long to start Chrome the first time.
+  let started;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      started = await startChrome(chrome, 45000);
+      break;
+    } catch (err) {
+      if (attempt >= 3) throw err;
+      console.error(`Chrome did not start (try ${attempt} of 3), trying again: ${err.message.split('\n')[0]}`);
+    }
+  }
+  const { proc, profile, wsUrl } = started;
   const ws = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
   let id = 0;

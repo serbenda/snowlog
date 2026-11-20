@@ -54,6 +54,11 @@ const WELCOME = `Your personal notebook, end-to-end encrypted.
 `;
 
 // Name of the copy that keeps another device's version.
+// A note's or attachment's version in the index: its date and a random `rev` set on every save. Dates alone can tie
+// (two saves in the same millisecond) and then a change from another device would go unnoticed; `rev` alone would
+// miss a change made by something that only sets the date. Entries from before `rev` have just the date.
+export const verOf = (e) => (e ? `${e.updated || e.created || ''}|${e.rev || ''}` : null);
+
 export function conflictName(name, date = new Date()) {
   const p = (n) => String(n).padStart(2, '0');
   return `${name} (other device ${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}${p(date.getMinutes())})`;
@@ -101,7 +106,7 @@ export class Vault {
     this.index = { v: 1, notes: {}, folders: [], files: {} };
     this.cache = new Map();
     this.fileCache = new Map();
-    // The `updated` date of each note when it was read or saved here: if the index brings another one
+    // The version (verOf) of each note when it was read or saved here: if the index brings another one
     // on save, the note changed on another device in the meantime.
     this.base = new Map();
     // Text of that same version: the base for combining the changes of two devices.
@@ -113,7 +118,7 @@ export class Vault {
 
   remember(id, text) {
     this.cache.set(id, text);
-    this.base.set(id, this.index.notes[id]?.updated);
+    this.base.set(id, verOf(this.index.notes[id]));
     this.baseText.set(id, text);
   }
 
@@ -161,7 +166,7 @@ export class Vault {
     if (!this.index.folders) this.index.folders = [];
     // What another device changed is read again from the repository (the version here is no longer the latest).
     for (const id of [...this.cache.keys()]) {
-      if (this.index.notes[id]?.updated !== this.base.get(id)) this.cache.delete(id);
+      if (verOf(this.index.notes[id]) !== this.base.get(id)) this.cache.delete(id);
     }
     for (const id of [...this.fileCache.keys()]) {
       if (this.fileBase.has(id) && this.versionOf(id) !== this.fileBase.get(id)) this.fileCache.delete(id);
@@ -182,7 +187,7 @@ export class Vault {
 
   // A file's version according to the index: if it matches the cache's, the cache is valid.
   versionOf(id) {
-    return this.index.notes[id]?.updated || this.index.files?.[id]?.updated || this.index.files?.[id]?.created || null;
+    return verOf(this.index.notes[id]) || verOf(this.index.files?.[id]);
   }
 
   // Reads an encrypted file: from the cache if it is up to date, otherwise from the repository (and caches it).
@@ -333,7 +338,7 @@ export class Vault {
   }
 
   async createOffline(id, p, text, now) {
-    this.index.notes[id] = { path: p, created: now, updated: now };
+    this.index.notes[id] = { path: p, created: now, updated: now, rev: C.randomId() };
     this.addFolderChain(this.index, parentPath(p));
     await this.queue(id, text, true);
     return id;
@@ -343,7 +348,7 @@ export class Vault {
     await this.apply(
       'Snowlog: new note',
       (idx) => {
-        idx.notes[id] = { path: p, created: now, updated: now };
+        idx.notes[id] = { path: p, created: now, updated: now, rev: C.randomId() };
         this.addFolderChain(idx, parentPath(p));
       },
       async () => [{ path: notePath(id), content: await C.encryptText(this.dek, text, id) }],
@@ -380,7 +385,7 @@ export class Vault {
         (idx) => {
           if (i === 0) for (const f of folders) this.addFolderChain(idx, f);
           for (const n of batch) {
-            idx.notes[n.id] = { path: n.path, created: now, updated: now };
+            idx.notes[n.id] = { path: n.path, created: now, updated: now, rev: C.randomId() };
             this.addFolderChain(idx, parentPath(n.path));
           }
         },
@@ -402,7 +407,7 @@ export class Vault {
     await this.apply(
       `Snowlog: ${message}`,
       (idx) => {
-        for (const { id } of items) if (idx.notes[id]) idx.notes[id].updated = now;
+        for (const { id } of items) if (idx.notes[id]) Object.assign(idx.notes[id], { updated: now, rev: C.randomId() });
       },
       async () => Promise.all(items.map(async ({ id, text }) => ({ path: notePath(id), content: await C.encryptText(this.dek, text, id) }))),
     );
@@ -433,6 +438,7 @@ export class Vault {
     const meta = this.index.notes[id];
     const prev = this.outbox.get(id);
     meta.updated = new Date().toISOString();
+    meta.rev = C.randomId();
     this.outbox.set(id, {
       text,
       path: meta.path,
@@ -443,7 +449,7 @@ export class Vault {
     });
     this.cache.set(id, text);
     if (this.store) {
-      await this.store.put(notePath(id), { v: meta.updated, content: await C.encryptText(this.dek, text, id) });
+      await this.store.put(notePath(id), { v: verOf(meta), content: await C.encryptText(this.dek, text, id) });
       await this.store.put('index', { content: (await this.indexChange()).content });
       await this.saveOutbox();
     }
@@ -589,10 +595,10 @@ export class Vault {
           idx.notes[id] = { ...mine, path: this.freePathIn(idx, parentPath(mine.path), baseName(mine.path)) };
           this.addFolderChain(idx, parentPath(idx.notes[id].path));
         }
-        idx.notes[id].updated = now;
+        Object.assign(idx.notes[id], { updated: now, rev: C.randomId() });
         if (conflict) {
           conflict.path = this.freePathIn(idx, parentPath(idx.notes[id].path), conflictName(baseName(idx.notes[id].path)));
-          idx.notes[conflict.id] = { path: conflict.path, created: now, updated: now };
+          idx.notes[conflict.id] = { path: conflict.path, created: now, updated: now, rev: C.randomId() };
         }
       },
       async () => {
@@ -600,7 +606,7 @@ export class Vault {
         finalText = text;
         const extra = [];
         const remote = this.index.notes[id];
-        if (remote && this.base.has(id) && remote.updated !== this.base.get(id)) {
+        if (remote && this.base.has(id) && verOf(remote) !== this.base.get(id)) {
           const theirs = await this.repo.readText(notePath(id));
           const plain = theirs ? await C.decryptText(this.dek, theirs, id) : '';
           if (plain !== text) {
@@ -766,7 +772,7 @@ export class Vault {
     const content = C.toB64(await C.encryptBytes(this.dek, bytes, id));
     await this.apply(`Snowlog: add attachment`, (idx) => {
       if (!idx.files) idx.files = {};
-      idx.files[id] = { path, type: ATTACHMENT_TYPES[extOf(path)], size: bytes.length, created: now };
+      idx.files[id] = { path, type: ATTACHMENT_TYPES[extOf(path)], size: bytes.length, created: now, rev: C.randomId() };
       this.addFolderChain(idx, parentPath(path));
     }, async () => [{ path: filePath(id), content }]);
     this.fileCache.set(id, bytes);
@@ -800,13 +806,12 @@ export class Vault {
     await this.apply('Snowlog: save drawing', (idx) => {
       const now = new Date().toISOString();
       if (!idx.files[id]) idx.files[id] = { ...mine };
-      idx.files[id].updated = now;
-      idx.files[id].size = out.length;
+      Object.assign(idx.files[id], { updated: now, rev: C.randomId(), size: out.length });
       if (conflict) {
         const name = baseName(idx.files[id].path);
         const ext = extOf(name);
         conflict.path = this.freeFilePath(parentPath(idx.files[id].path), `${conflictName(name.slice(0, -(ext.length + 1)))}.${ext}`);
-        idx.files[conflict.id] = { path: conflict.path, type: idx.files[id].type, size: conflict.bytes.length, created: now };
+        idx.files[conflict.id] = { path: conflict.path, type: idx.files[id].type, size: conflict.bytes.length, created: now, rev: C.randomId() };
       }
     }, async () => {
       conflict = null;
@@ -814,7 +819,7 @@ export class Vault {
       const changes = [];
       const remote = this.index.files?.[id];
       const base = this.fileBase.get(id);
-      if (remote && base !== undefined && (remote.updated || remote.created) !== base) {
+      if (remote && base !== undefined && verOf(remote) !== base) {
         const theirs = await this.repo.readText(filePath(id));
         if (theirs) {
           const plain = await C.decryptBytes(this.dek, C.fromB64(theirs.trim()), id);

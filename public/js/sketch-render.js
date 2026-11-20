@@ -1,10 +1,10 @@
-// Copied from serbenda/bsketch (js/render.js, commit 59f9453) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/render.js, commit fe1613f) by scripts/update-sketch.mjs. Do not edit here.
 // © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
 // and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // Paints a scene on a <canvas> or turns it into SVG (text to download, or DOM nodes to embed). The
 // drawing's texts never go in as HTML: they are escaped or set with textContent.
 
-import { drawOps, sceneBounds, textLayout, setTextMeasurer, aabb, bounds, center, fontOf, isImageData, FONT, FONT_NAME, FRAME_TITLE, FRAME_COLOR, FRAME_FONT } from './sketch-scene.js';
+import { drawOps, sceneBounds, textLayout, setTextMeasurer, aabb, bounds, center, fontOf, isImageData, frameOwners, FONT, FONT_NAME, FRAME_TITLE, FRAME_COLOR, FRAME_FONT } from './sketch-scene.js';
 import { toSvgD, tracePath } from './sketch-stroke.js';
 
 // Measures texts with a canvas (the handwriting font is narrower than the no-DOM estimate).
@@ -150,7 +150,7 @@ export function paintElement(ctx, el, files, imageFilter = '') {
       ctx.lineWidth = op.width;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.setLineDash(op.dashed ? [op.width * 4, op.width * 3] : []);
+      ctx.setLineDash(op.dotted ? [0.1, op.width * 2.4] : op.dashed ? [op.width * 4, op.width * 3] : []);
       // A flow moves its dashes from start to end: one pattern length per FLOW_PERIOD.
       if (op.flow) ctx.lineDashOffset = -((flowTime % FLOW_PERIOD) / FLOW_PERIOD) * op.width * 7;
       if (op.p2d) ctx.stroke(op.p2d);
@@ -167,7 +167,8 @@ let flowTime = 0;
 export const hasFlow = (elements) => elements.some((e) => e.animated === true && (e.type === 'arrow' || e.type === 'line'));
 
 // view: { x, y, zoom } (offset in screen pixels, and scale).
-export function paintScene(ctx, scene, { view = { x: 0, y: 0, zoom: 1 }, width, height, background = true, imageFilter = '', time = 0 } = {}) {
+// `hideFrames`: frames still clip what lies on them but their border and title aren't painted (presenting).
+export function paintScene(ctx, scene, { view = { x: 0, y: 0, zoom: 1 }, width, height, background = true, imageFilter = '', time = 0, hideFrames = false } = {}) {
   flowTime = Number.isFinite(time) ? time : 0;
   ctx.save();
   if (background) {
@@ -182,10 +183,22 @@ export function paintScene(ctx, scene, { view = { x: 0, y: 0, zoom: 1 }, width, 
   const y1 = -view.y / view.zoom - m;
   const x2 = (width - view.x) / view.zoom + m;
   const y2 = (height - view.y) / view.zoom + m;
+  const clipTo = frameOwners(scene.elements);
   for (const el of scene.elements) {
+    if (hideFrames && el.type === 'frame') continue;
     const b = aabb(el);
     if (b.x > x2 || b.y > y2 || b.x + b.w < x1 || b.y + b.h < y1) continue;
+    // What lies on a frame is cut at its border.
+    const f = clipTo.get(el.id);
+    if (f) {
+      const fb = bounds(f);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(fb.x, fb.y, fb.w, fb.h);
+      ctx.clip();
+    }
     paintElement(ctx, el, scene.files, imageFilter);
+    if (f) ctx.restore();
   }
   ctx.restore();
 }
@@ -203,7 +216,12 @@ export function toSvgString(scene, { padding = 20, background = true, box = null
   const H = Math.ceil(b.h + padding * 2);
   const parts = [];
   let clipN = 0;
+  const clipTo = frameOwners(scene.elements);
+  const frameClips = new Map(); // frame id → its clipPath's id
   for (const el of scene.elements) {
+    const mark = parts.length;
+    // One element's markup; `continue` leaves this block (do … while (false)), then it is cut to its frame.
+    do {
     if (el.type === 'text') {
       const L = textLayout(el);
       const anchor = L.anchor === 'middle' ? 'middle' : 'start';
@@ -233,10 +251,23 @@ export function toSvgString(scene, { padding = 20, background = true, box = null
       }
       const style = op.fill
         ? `fill="${esc(op.fill)}" stroke="none"`
-        : `fill="none" stroke="${esc(op.stroke)}" stroke-width="${n(op.width, 2)}" stroke-linecap="round" stroke-linejoin="round"${op.dashed ? ` stroke-dasharray="${n(op.width, 2) * 4} ${n(op.width, 2) * 3}"` : ''}`;
+        : `fill="none" stroke="${esc(op.stroke)}" stroke-width="${n(op.width, 2)}" stroke-linecap="round" stroke-linejoin="round"${op.dotted ? ` stroke-dasharray="0.1 ${n(op.width, 2) * 2.4}"` : op.dashed ? ` stroke-dasharray="${n(op.width, 2) * 4} ${n(op.width, 2) * 3}"` : ''}`;
       // A flow: the dashes move with SVG's own animation (no script).
       const flow = op.flow ? `<animate attributeName="stroke-dashoffset" from="${n(op.width, 2) * 7}" to="0" dur="${FLOW_PERIOD / 1000}s" repeatCount="indefinite"/>` : '';
       parts.push(flow ? `<path d="${toSvgD(op.path)}" ${style} opacity="${n(op.opacity, 1)}"${clip}>${flow}</path>` : `<path d="${toSvgD(op.path)}" ${style} opacity="${n(op.opacity, 1)}"${clip}/>`);
+    }
+    } while (false);
+    const f = clipTo.get(el.id);
+    if (f && parts.length > mark) {
+      const body = parts.splice(mark);
+      let id = frameClips.get(f.id);
+      if (!id) {
+        id = `f${frameClips.size + 1}`;
+        frameClips.set(f.id, id);
+        const fb = bounds(f);
+        parts.push(`<clipPath id="${id}"><rect x="${n(fb.x)}" y="${n(fb.y)}" width="${n(fb.w)}" height="${n(fb.h)}"/></clipPath>`);
+      }
+      parts.push(`<g clip-path="url(#${id})">${body.join('')}</g>`);
     }
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${n(W)}" height="${n(H)}" viewBox="${n(b.x - padding)} ${n(b.y - padding)} ${n(W)} ${n(H)}">`
@@ -260,16 +291,32 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null, backgr
   if (background) svg.append(mk('rect', { x: b.x - padding, y: b.y - padding, width: W, height: H, fill: scene.background || '#ffffff' }));
   let clipN = 0;
   const prefix = `s${Math.random().toString(36).slice(2, 8)}`;
+  const clipTo = frameOwners(scene.elements);
+  const frameClips = new Map();
   for (const el of scene.elements) {
+    // What lies on a frame goes in a group cut at the frame's border.
+    let host = svg;
+    const f = clipTo.get(el.id);
+    if (f) {
+      if (!frameClips.has(f.id)) {
+        const fb = bounds(f);
+        const cp = mk('clipPath', { id: `${prefix}f${frameClips.size + 1}` });
+        cp.append(mk('rect', { x: fb.x, y: fb.y, width: fb.w, height: fb.h }));
+        svg.append(cp);
+        frameClips.set(f.id, cp.getAttribute('id'));
+      }
+      host = mk('g', { 'clip-path': `url(#${frameClips.get(f.id)})` });
+      svg.append(host);
+    }
     if (el.type === 'text') {
       const L = textLayout(el);
-      const g = L.angle ? mk('g', { transform: `rotate(${(L.angle * 180) / Math.PI} ${L.c.x} ${L.c.y})` }) : svg;
+      const g = L.angle ? mk('g', { transform: `rotate(${(L.angle * 180) / Math.PI} ${L.c.x} ${L.c.y})` }) : host;
       for (const l of L.lines) {
         const t = mk('text', { x: l.x, y: l.y, 'font-size': el.fontSize, 'font-family': fontOf(el), fill: el.stroke, opacity: el.opacity, 'text-anchor': L.anchor, 'dominant-baseline': 'hanging' });
         t.textContent = l.t;
         g.append(t);
       }
-      if (g !== svg) svg.append(g);
+      if (g !== host) host.append(g);
       continue;
     }
     if (el.type === 'image') {
@@ -279,7 +326,7 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null, backgr
       const c = center(el);
       const attrs = { href: data, x: ib.x, y: ib.y, width: ib.w, height: ib.h, preserveAspectRatio: 'none', opacity: el.opacity ?? 1 };
       if (el.angle) attrs.transform = `rotate(${(el.angle * 180) / Math.PI} ${c.x} ${c.y})`;
-      svg.append(mk('image', attrs));
+      host.append(mk('image', attrs));
       continue;
     }
     if (el.type === 'frame') {
@@ -292,7 +339,7 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null, backgr
       const attrs = op.fill
         ? { d: toSvgD(op.path), fill: op.fill, stroke: 'none', opacity: op.opacity ?? 1 }
         : { d: toSvgD(op.path), fill: 'none', stroke: op.stroke, 'stroke-width': op.width, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: op.opacity ?? 1 };
-      if (!op.fill && op.dashed) attrs['stroke-dasharray'] = `${op.width * 4} ${op.width * 3}`;
+      if (!op.fill && op.dashed) attrs['stroke-dasharray'] = op.dotted ? `0.1 ${op.width * 2.4}` : `${op.width * 4} ${op.width * 3}`;
       if (op.clip) {
         clipN += 1;
         const cp = mk('clipPath', { id: `${prefix}c${clipN}` });
@@ -302,7 +349,7 @@ export function toSvgElement(doc, scene, { padding = 20, maxWidth = null, backgr
       }
       const path = mk('path', attrs);
       if (op.flow) path.append(mk('animate', { attributeName: 'stroke-dashoffset', from: op.width * 7, to: 0, dur: `${FLOW_PERIOD / 1000}s`, repeatCount: 'indefinite' }));
-      svg.append(path);
+      host.append(path);
     }
   }
   return svg;

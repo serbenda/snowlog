@@ -16,6 +16,24 @@
 - **Pending:**
 -->
 
+## 2026-11-20 — bsketch 1.3's engine; saves in the same millisecond no longer clash
+- **Phase / issue:** — (bsketch P17)
+- **What:** the drawing engine copied from bsketch `v1.3.0` (`fe1613f`): frame clipping, presentation mode, arrows
+  bent by hand; the e2e driver starts Chrome like bsketch's (`--disable-dev-shm-usage`, 45 s, three tries, nothing
+  left running); the service worker's cache `snowlog-v5`. **Fix:** notes and attachments are versioned by
+  `verOf` = date + a random `rev` set on every save, instead of the date alone.
+- **Why:** the engine update was planned (bsketch's S6). The fix came from "drawings: changes from two devices…",
+  which started failing on a fast machine: two saves in the same millisecond had the same version, so the second
+  device didn't notice the first one's change and overwrote it.
+- **Rejected:** a counter (two devices can't agree on the next number without the server); `rev` alone (the MCP
+  server or older versions that only set the date would go unnoticed).
+- **Files:** public/js/sketch-*.js, public/css/sketch.css, public/sw.js, public/js/vault.js, tests/e2e/cdp.mjs,
+  tests/vault.test.mjs, CHANGELOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 164 pass (a new test pins the clock so every save shares one millisecond: it fails without
+  the fix); `npm run test:e2e` 5 pass; the portable build; a drawing pasted from Mermaid saves encrypted and opens again.
+- **Pending:** —
+
 ## 2026-11-20 — The drawing engine from bsketch, with text to diagram
 - **Phase / issue:** —
 - **What:** `scripts/update-sketch.mjs` also copies `textdiagram.js` (the editor imports it now); the engine copy
