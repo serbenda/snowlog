@@ -1,4 +1,6 @@
-// Copied from serbenda/bsketch (js/stroke.js, commit 3ec8fd5) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/stroke.js, commit 59f9453) by scripts/update-sketch.mjs. Do not edit here.
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // "Hand-drawn" strokes: turns geometric shapes into paths with a slight wobble, always the same for the
 // same shape (seeded pseudo-random generator). Our own implementation.
 //

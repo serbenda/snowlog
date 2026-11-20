@@ -1,4 +1,6 @@
-/* Copied from serbenda/bsketch (css/sketch.css, commit 3ec8fd5). Do not edit here. */
+/* Copied from serbenda/bsketch (css/sketch.css, commit 59f9453). Do not edit here. */
+/* © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+   and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e */
 /* The sketch editor. Everything uses the sk- prefix so it can be embedded in other pages (Snowlog). */
 
 /* Handwriting font: Caveat (SIL Open Font License, see fonts/OFL.txt), subset to Latin characters. */
@@ -288,8 +290,9 @@
     gap: 0;
   }
 
+  /* 13 buttons in a phone's width (still above the 24 px a finger needs, WCAG 2.5.8). */
   .sk-toolbar .sk-btn {
-    width: 34px;
+    width: 28px;
   }
 
   .sk-panel {
@@ -323,4 +326,114 @@
 .sk-editor input:focus-visible {
   outline: 2px solid var(--sk-accent);
   outline-offset: 1px;
+}
+
+/* The library: pieces kept to use again, on the right. */
+.sk-library {
+  left: auto;
+  right: 10px;
+  width: 230px;
+}
+
+.sk-libhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sk-libhead .sk-label {
+  margin: 0;
+}
+
+.sk-textbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--sk-border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sk-textbtn:hover {
+  background: var(--sk-active);
+}
+
+.sk-libempty {
+  margin: 10px 0 0;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.sk-liblist {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.sk-liblist li {
+  position: relative;
+}
+
+.sk-libitem {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 4px;
+  border: 1px solid var(--sk-border);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.sk-libthumb {
+  width: 100%;
+  height: 100%;
+}
+
+.sk-libdel {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  border: 1px solid var(--sk-border);
+  border-radius: 50%;
+  background: var(--sk-ui);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.sk-liblist li:hover .sk-libdel,
+.sk-libdel:focus-visible {
+  opacity: 1;
+}
+
+.sk-libdel .sk-icon {
+  width: 14px;
+  height: 14px;
+}
+
+@media (hover: none) {
+  .sk-libdel {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .sk-library {
+    top: 10px;
+    left: 10px;
+    width: auto;
+    max-height: 45%;
+  }
 }
