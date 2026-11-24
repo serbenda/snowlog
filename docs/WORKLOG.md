@@ -16,6 +16,19 @@
 - **Pending:**
 -->
 
+## 2026-11-24 — bsketch's engine after its pre-2.0 audits
+- **Phase / issue:** — (bsketch P25)
+- **What:** `scripts/update-sketch.mjs` copied bsketch `main` (`0a573ca`: 1.5.0 plus P25's fixes) into
+  `public/js/sketch-*.js` and `public/css/sketch.css`; cache `snowlog-v7`.
+- **Why:** P25 fixed denial-of-service issues with hostile drawings (a hachure budget, elbow routing with a budget, a
+  slide cap, libraries sharing pictures, linear-time text to diagram) and malformed SVG exports; Snowlog opens
+  drawings from vaults, so it needs the same fixes.
+- **Rejected:** waiting for bsketch 2.0.0 (the fixes are already on bsketch's `main` and released to its site).
+- **Files:** public/js/sketch-*.js, public/css/sketch.css, public/sw.js, CHANGELOG.md, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 166 pass; `npm run test:e2e` 5 pass (Chrome). The editor's API is unchanged since 1.3.
+- **Pending:** —
+
 ## 2026-11-20 — The drawing library and templates
 - **Phase / issue:** — (bsketch P18)
 - **What:** `readLibrary`/`saveLibrary` in both vaults: in a GitHub vault an encrypted `.snowlog/library.enc` (AAD

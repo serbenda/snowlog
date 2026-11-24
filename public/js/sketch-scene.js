@@ -1,4 +1,4 @@
-// Copied from serbenda/bsketch (js/scene.js, commit fe1613f) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/scene.js, commit 0a573ca) by scripts/update-sketch.mjs. Do not edit here.
 // © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
 // and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // A drawing's scene: a list of elements with their style. Pure functions (no DOM) to create, measure,
@@ -11,6 +11,7 @@
 //   startId/endId (arrow) the shapes each end is attached to
 //   fileId        (image) its picture, kept once per scene in `scene.files` as a data: URL
 //   name          (frame) the frame's title, shown above it
+//   notes         (frame) speaker notes, shown only while presenting
 //   animated      (arrow, line) true: its dashes move along it, showing a flow
 //   dotted        true (with dashed): a dotted line instead of a dashed one
 //   rounded       (rectangle) true: round corners
@@ -19,7 +20,7 @@
 //
 // A scene is { type, version, background, elements, files? }; `files` maps a file id to an image's data: URL.
 
-import { polylinePath, ellipsePath, freehandPath, hachurePath, arrowHead } from './sketch-stroke.js';
+import { polylinePath, ellipsePath, freehandPath, hachurePath, arrowHead, MAX_HACHURE_LINES } from './sketch-stroke.js';
 
 export const TYPES = ['rectangle', 'ellipse', 'diamond', 'line', 'arrow', 'draw', 'text', 'image', 'frame'];
 export const FORMAT = 'sketch';
@@ -38,6 +39,7 @@ export const fontOf = (el) => FONTS[el.font] || FONT;
 const ARROW_GAP = 6;
 // Frames: the height of the title above them, and their colour (a neutral grey that reads on any background).
 export const FRAME_TITLE = 20;
+export const MAX_NOTES = 2000; // speaker notes per frame
 export const FRAME_COLOR = '#868e96';
 export const FRAME_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
@@ -70,6 +72,7 @@ export function emptyScene() {
 export const IMAGE_TYPES = ['png', 'jpeg', 'gif', 'webp'];
 export const MAX_IMAGE_CHARS = 10 * 1024 * 1024; // ~7.5 MB of picture
 export const MAX_FILES_CHARS = 60 * 1024 * 1024; // all the pictures of one drawing
+export const MAX_FILE_BYTES = 100 * 1024 * 1024; // a file bigger than this isn't read at all
 const MAX_FILES = 500;
 const DATA_URL_RE = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
 // Names an object must never take from a file (they would reach its prototype).
@@ -143,6 +146,8 @@ export function routePoints(el) {
   const dx = z.x - a.x;
   const dy = z.y - a.y;
   if (el.route === 'elbow') {
+    const smart = routed.get(el);
+    if (smart) return smart;
     if (Math.abs(dx) < 1 || Math.abs(dy) < 1) return pts;
     // Along the longer direction first, turning halfway.
     if (Math.abs(dx) >= Math.abs(dy)) {
@@ -435,6 +440,25 @@ export function frameOwners(elements) {
   return map;
 }
 
+// The slides of a presentation or a PDF: the frames not inside another frame, in reading order (top to bottom, then
+// left to right); [null] (the whole drawing) when there are none.
+// At most MAX_SLIDES (of the first MAX_SLIDE_FRAMES frames): a presentation or PDF never grows without bound.
+export const MAX_SLIDES = 500;
+const MAX_SLIDE_FRAMES = 2000;
+export function slideFrames(elements) {
+  const frames = elements.filter((e) => e.type === 'frame').slice(0, MAX_SLIDE_FRAMES);
+  const top = frames.filter((f) => !frames.some((g) => g !== f && inFrame([f], g).length));
+  top.sort((a, b) => {
+    const pa = bounds(a);
+    const pb = bounds(b);
+    return Math.abs(pa.y - pb.y) > 40 ? pa.y - pb.y : pa.x - pb.x;
+  });
+  return top.length ? top.slice(0, MAX_SLIDES) : [null];
+}
+
+// What a slide shows: the frame and what lies on it (or every element when the slide is the whole drawing).
+export const slideElements = (elements, frame) => (frame ? [frame, ...inFrame(elements, frame)] : elements);
+
 // What a frame carries when it moves: the elements on it (also inside frames nested in it) and those frames.
 export function inFrame(elements, frame) {
   const b = bounds(frame);
@@ -605,7 +629,7 @@ function innerBox(el) {
 // bindings to elements that no longer exist. Does not change the array it receives.
 export function syncBindings(elements) {
   const byId = new Map(elements.map((e) => [e.id, e]));
-  return elements.map((el) => {
+  const result = elements.map((el) => {
     if (el.type === 'text' && el.containerId) {
       const c = byId.get(el.containerId);
       if (!c || !isContainer(c)) {
@@ -641,8 +665,10 @@ export function syncBindings(elements) {
       if (n < 2) return out;
       const refStart = n > 2 ? pts[1] : e ? center(e) : pts[n - 1];
       const refEnd = n > 2 ? pts[n - 2] : s ? center(s) : pts[0];
-      if (s) pts[0] = outlinePoint(s, refStart);
-      if (e) pts[n - 1] = outlinePoint(e, refEnd);
+      // An elbow connector leaves (and reaches) a shape at the middle of the side facing the other end.
+      const elbow = el.route === 'elbow' && n === 2;
+      if (s) pts[0] = elbow ? sideOf(s, refStart).p : outlinePoint(s, refStart);
+      if (e) pts[n - 1] = elbow ? sideOf(e, refEnd).p : outlinePoint(e, refEnd);
       keep(pts);
       out.x = pts[0].x;
       out.y = pts[0].y;
@@ -651,6 +677,238 @@ export function syncBindings(elements) {
     }
     return el;
   });
+  routeElbows(result);
+  return result;
+}
+
+// --- Elbow connectors: right-angled paths around the shapes in the way ---
+// The path of each elbow arrow or line, worked out among the shapes near it and kept per element object (elements are
+// never changed in place) and per list (routeElbows runs once per list). routePoints uses it when there is one.
+const routed = new WeakMap();
+const routedLists = new WeakMap();
+const ROUTE_MARGIN = 18; // the room kept around shapes
+const ROUTE_STUB = 22; // how far a connector goes straight out of a shape before turning
+const ROUTE_TURN = 40; // a turn costs like this many units of length
+const ROUTE_MAX_GRID = 4000; // grid points; bigger cases use the plain elbow
+
+// The middle of the side of `shape` that faces `toward`, just outside it, and the direction out of that side.
+function sideOf(shape, toward) {
+  const b = bounds(shape);
+  const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  const dx = toward.x - c.x;
+  const dy = toward.y - c.y;
+  const g = ARROW_GAP;
+  if (Math.abs(dx) * (b.h || 1) >= Math.abs(dy) * (b.w || 1)) {
+    return dx >= 0 ? { p: { x: b.x + b.w + g, y: c.y }, d: { x: 1, y: 0 } } : { p: { x: b.x - g, y: c.y }, d: { x: -1, y: 0 } };
+  }
+  return dy >= 0 ? { p: { x: c.x, y: b.y + b.h + g }, d: { x: 0, y: 1 } } : { p: { x: c.x, y: b.y - g }, d: { x: 0, y: -1 } };
+}
+
+// A min-heap of [cost, …] entries.
+class Heap {
+  constructor() { this.a = []; }
+  get size() { return this.a.length; }
+  push(v) {
+    const a = this.a;
+    a.push(v);
+    for (let i = a.length - 1; i > 0;) {
+      const p = (i - 1) >> 1;
+      if (a[p][0] <= a[i][0]) break;
+      [a[p], a[i]] = [a[i], a[p]];
+      i = p;
+    }
+  }
+  pop() {
+    const a = this.a;
+    const top = a[0];
+    const last = a.pop();
+    if (a.length) {
+      a[0] = last;
+      for (let i = 0; ;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < a.length && a[l][0] < a[m][0]) m = l;
+        if (r < a.length && a[r][0] < a[m][0]) m = r;
+        if (m === i) break;
+        [a[m], a[i]] = [a[i], a[m]];
+        i = m;
+      }
+    }
+    return top;
+  }
+}
+
+const isObstacle = (e) => e.type === 'rectangle' || e.type === 'diamond' || e.type === 'ellipse' || e.type === 'image';
+
+// Shortest right-angled path from a to z (each with the direction it must leave/arrive along, or null) that keeps out
+// of the boxes, with a cost per turn. Null when there is none (or the grid would be too big).
+// `budget.left` (optional) is shared work: each step and box check takes from it, and when it runs out the search
+// gives up (null).
+export function orthogonalPath(a, z, boxes, { da = null, dz = null, budget = null } = {}) {
+  const inflated = boxes.map((b) => ({ x1: b.x - ROUTE_MARGIN + 1, y1: b.y - ROUTE_MARGIN + 1, x2: b.x + b.w + ROUTE_MARGIN - 1, y2: b.y + b.h + ROUTE_MARGIN - 1 }));
+  const s = da ? { x: a.x + da.x * ROUTE_STUB, y: a.y + da.y * ROUTE_STUB } : a;
+  const t = dz ? { x: z.x + dz.x * ROUTE_STUB, y: z.y + dz.y * ROUTE_STUB } : z;
+  const inside = (x, y) => inflated.some((r) => x > r.x1 && x < r.x2 && y > r.y1 && y < r.y2);
+  if (inside(s.x, s.y) || inside(t.x, t.y)) return null;
+  const xs = [...new Set([s.x, t.x, (s.x + t.x) / 2, ...inflated.flatMap((r) => [r.x1 - 1, r.x2 + 1])])].sort((p, q) => p - q);
+  const ys = [...new Set([s.y, t.y, (s.y + t.y) / 2, ...inflated.flatMap((r) => [r.y1 - 1, r.y2 + 1])])].sort((p, q) => p - q);
+  if (xs.length * ys.length > ROUTE_MAX_GRID) return null;
+  // A segment is clear when it doesn't cross any box's inside.
+  const clear = (x1, y1, x2, y2) => !inflated.some((r) => (x1 === x2
+    ? x1 > r.x1 && x1 < r.x2 && Math.max(y1, y2) > r.y1 && Math.min(y1, y2) < r.y2
+    : y1 > r.y1 && y1 < r.y2 && Math.max(x1, x2) > r.x1 && Math.min(x1, x2) < r.x2));
+  const W = xs.length;
+  const key = (i, j, d) => (j * W + i) * 3 + d; // d: 0 none, 1 horizontal, 2 vertical
+  const si = xs.indexOf(s.x);
+  const sj = ys.indexOf(s.y);
+  const ti = xs.indexOf(t.x);
+  const tj = ys.indexOf(t.y);
+  const startDir = da ? (da.x ? 1 : 2) : 0;
+  const endDir = dz ? (dz.x ? 1 : 2) : 0;
+  // Dijkstra over (point, last direction), with a binary heap.
+  const dist = new Map([[key(si, sj, startDir), 0]]);
+  const prev = new Map();
+  const open = new Heap();
+  open.push([0, si, sj, startDir]);
+  let found = null;
+  let steps = 0;
+  const work = 4 * (inflated.length + 1);
+  while (open.size && steps++ < 60000) {
+    if (budget && (budget.left -= work) < 0) return null;
+    const [cost, i, j, d] = open.pop();
+    if (cost > (dist.get(key(i, j, d)) ?? Infinity)) continue;
+    if (i === ti && j === tj) {
+      // Arriving along the end's direction is free; otherwise one more turn.
+      found = [i, j, d];
+      if (!endDir || d === endDir || d === 0) break;
+    }
+    for (const [ni, nj, nd] of [[i + 1, j, 1], [i - 1, j, 1], [i, j + 1, 2], [i, j - 1, 2]]) {
+      if (ni < 0 || nj < 0 || ni >= W || nj >= ys.length) continue;
+      if (!clear(xs[i], ys[j], xs[ni], ys[nj])) continue;
+      const turn = d && d !== nd ? ROUTE_TURN : 0;
+      const c = cost + Math.abs(xs[ni] - xs[i]) + Math.abs(ys[nj] - ys[j]) + turn + (ni === ti && nj === tj && endDir && nd !== endDir ? ROUTE_TURN : 0);
+      const k2 = key(ni, nj, nd);
+      if (c < (dist.get(k2) ?? Infinity)) {
+        dist.set(k2, c);
+        prev.set(k2, key(i, j, d));
+        open.push([c, ni, nj, nd]);
+      }
+    }
+  }
+  if (!found) return null;
+  const path = [];
+  for (let k = key(...found); k !== undefined; k = prev.get(k)) {
+    const cell = Math.floor(k / 3);
+    path.unshift({ x: xs[cell % W], y: ys[Math.floor(cell / W)] });
+  }
+  const pts = [a, ...(da ? [s] : []), ...path, ...(dz ? [t] : []), z];
+  // Drop repeated and in-line points.
+  const out = [];
+  for (const p of pts) {
+    if (out.length && out[out.length - 1].x === p.x && out[out.length - 1].y === p.y) continue;
+    if (out.length >= 2) {
+      const q = out[out.length - 1];
+      const r = out[out.length - 2];
+      if ((r.x === q.x && q.x === p.x) || (r.y === q.y && q.y === p.y)) out.pop();
+    }
+    out.push(p);
+  }
+  return out;
+}
+
+// The work routing may take for one list of elements (path steps and box checks): a drawing with very many elbow
+// arrows, or a hostile file, gets plain elbows for the rest instead of freezing the page.
+export const ROUTE_BUDGET = 4_000_000;
+const ROUTE_CELL = 400;
+// Paths already worked out, by everything they depend on: editing one shape doesn't re-route the others.
+const routeCache = new Map();
+
+// Shapes in a grid of cells, to find the ones near a box without looking at all of them.
+function shapeGrid(shapes) {
+  const cells = new Map();
+  const big = [];
+  for (const sh of shapes) {
+    if (sh.angle) continue;
+    const b = bounds(sh);
+    const i1 = Math.floor(b.x / ROUTE_CELL);
+    const i2 = Math.floor((b.x + b.w) / ROUTE_CELL);
+    const j1 = Math.floor(b.y / ROUTE_CELL);
+    const j2 = Math.floor((b.y + b.h) / ROUTE_CELL);
+    if ((i2 - i1 + 1) * (j2 - j1 + 1) > 64) {
+      big.push({ sh, b });
+      continue;
+    }
+    for (let i = i1; i <= i2; i++) for (let j = j1; j <= j2; j++) {
+      const k = `${i},${j}`;
+      if (!cells.has(k)) cells.set(k, []);
+      cells.get(k).push({ sh, b });
+    }
+  }
+  return { cells, big, all: shapes };
+}
+function shapesNear(grid, box, budget, max) {
+  const out = new Set();
+  const take = ({ sh, b }) => {
+    budget.left -= 1;
+    if (out.size < max && b.x < box.x2 && b.x + b.w > box.x1 && b.y < box.y2 && b.y + b.h > box.y1) out.add(sh);
+  };
+  const i1 = Math.floor(box.x1 / ROUTE_CELL);
+  const i2 = Math.floor(box.x2 / ROUTE_CELL);
+  const j1 = Math.floor(box.y1 / ROUTE_CELL);
+  const j2 = Math.floor(box.y2 / ROUTE_CELL);
+  grid.big.forEach(take);
+  if ((i2 - i1 + 1) * (j2 - j1 + 1) > grid.cells.size) {
+    for (const list of grid.cells.values()) list.forEach(take);
+  } else {
+    for (let i = i1; i <= i2; i++) for (let j = j1; j <= j2; j++) grid.cells.get(`${i},${j}`)?.forEach(take);
+  }
+  return [...out];
+}
+
+// Works out the path of every elbow arrow or line in a list (once per list).
+export function routeElbows(elements) {
+  if (routedLists.has(elements)) return;
+  routedLists.set(elements, true);
+  let byId = null;
+  let grid = null;
+  const budget = { left: ROUTE_BUDGET };
+  for (const el of elements) {
+    // Worked out again for each new list: a shape in the way may have moved while the arrow stayed the same.
+    if ((el.type !== 'arrow' && el.type !== 'line') || el.route !== 'elbow' || el.points?.length !== 2) continue;
+    const a = { x: el.x + el.points[0].x, y: el.y + el.points[0].y };
+    const z = { x: el.x + el.points[1].x, y: el.y + el.points[1].y };
+    boxes.delete(el); // its box follows the path
+    if (budget.left <= 0) {
+      routed.delete(el);
+      continue;
+    }
+    byId ??= new Map(elements.map((e) => [e.id, e]));
+    grid ??= shapeGrid(elements.filter(isObstacle));
+    const sShape = el.startId ? byId.get(el.startId) : null;
+    const eShape = el.endId ? byId.get(el.endId) : null;
+    // The shapes near the way from a to z are the ones that can be in it.
+    const pad = 200;
+    const box = { x1: Math.min(a.x, z.x) - pad, y1: Math.min(a.y, z.y) - pad, x2: Math.max(a.x, z.x) + pad, y2: Math.max(a.y, z.y) + pad };
+    const near = shapesNear(grid, box, budget, 60).map((sh) => bounds(sh));
+    const dirOf = (shape, other) => (shape && !shape.angle && isObstacle(shape) ? sideOf(shape, other).d : null);
+    const da = dirOf(sShape, eShape ? center(eShape) : z);
+    const dz = dirOf(eShape, sShape ? center(sShape) : a);
+    let path = null;
+    if (near.length) {
+      const k = JSON.stringify([a, z, da, dz, near]);
+      if (routeCache.has(k)) path = routeCache.get(k);
+      else {
+        path = orthogonalPath(a, z, near, { da, dz, budget });
+        if (budget.left > 0) {
+          if (routeCache.size > 5000) routeCache.clear();
+          routeCache.set(k, path);
+        }
+      }
+    }
+    if (path && path.length >= 2) routed.set(el, path);
+    else routed.delete(el);
+  }
 }
 
 // The element as it was if nothing changed, so the caches kept per object (boxes, prepared strokes)
@@ -747,7 +1005,13 @@ const num = (v, d = 0) => {
   const x = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
   return Number.isFinite(x) ? x : d;
 };
-const str = (v) => (typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : '');
+// Text from a file: control characters (other than tab and new lines), lone surrogates and U+FFFE/U+FFFF are
+// dropped, so whatever is exported (SVG, PDF) is well-formed.
+export const plainText = (s) => {
+  const t = String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFE\uFFFF]/g, '');
+  return t.toWellFormed ? t.toWellFormed().replace(/\uFFFD/g, (c, i) => (t[i] === c ? c : '')) : t;
+};
+const str = (v) => (typeof v === 'string' ? plainText(v) : typeof v === 'number' && Number.isFinite(v) ? String(v) : '');
 const COLOR_RE = /^(#[0-9a-f]{3,8}|transparent|rgba?\([\d\s.,%]+\)|[a-z]{3,20})$/i;
 const color = (v, d) => (typeof v === 'string' && COLOR_RE.test(v.trim()) ? v.trim() : d);
 export const isColor = (v) => typeof v === 'string' && COLOR_RE.test(v) && v === v.trim();
@@ -781,7 +1045,11 @@ export function cleanElement(raw) {
     if (!ref(raw.fileId)) return null;
     el.fileId = raw.fileId;
   }
-  if (el.type === 'frame') el.name = str(raw.name).replace(/\s+/g, ' ').trim().slice(0, 100);
+  if (el.type === 'frame') {
+    el.name = str(raw.name).replace(/\s+/g, ' ').trim().slice(0, 100);
+    const notes = str(raw.notes).replace(/\r\n?/g, '\n').trim().slice(0, MAX_NOTES);
+    if (notes) el.notes = notes;
+  }
   if (isLinear(el)) {
     // Points are relative to x, y; where they land stays within ±MAX_COORD like any coordinate.
     const pts = Array.isArray(raw.points) ? raw.points.slice(0, 5000).map((p) => ({ x: coord(el.x + num(p?.x)) - el.x, y: coord(el.y + num(p?.y)) - el.y })) : [];
@@ -821,6 +1089,11 @@ export function parseScene(text) {
   } catch {
     throw new Error('bad_file');
   }
+  return sceneFrom(data);
+}
+
+// A scene from already parsed JSON (checked like a file).
+function sceneFrom(data) {
   if (data?.type === 'excalidraw') return fromExcalidraw(data);
   if (data?.type !== FORMAT || !Array.isArray(data.elements)) throw new Error('bad_file');
   return withFiles({
@@ -1002,7 +1275,25 @@ function roundedCorners(b) {
 // A path mirrored left to right around x = axis / 2.
 const mirrorX = (path, axis) => path.map((c) => (c.op === 'Z' ? c : c.op === 'Q' ? { ...c, x: axis - c.x, cx: axis - c.cx } : { ...c, x: axis - c.x }));
 
-export function drawOps(el) {
+// The hachure of a whole drawing stays within HACHURE_BUDGET lines: with many hatched shapes each gets fewer lines
+// (wider gaps), so a file full of giant cross-hatched shapes can't use up the page's memory. A normal drawing (up to
+// a few hundred hatched shapes) is drawn as before.
+export const HACHURE_BUDGET = 300000;
+const capOf = new WeakMap();
+const hatched = (e) => (e.type === 'rectangle' || e.type === 'ellipse' || e.type === 'diamond') && e.fill && e.fill !== 'transparent' && e.fillStyle !== 'solid';
+export function hachureCap(elements) {
+  if (!Array.isArray(elements)) return MAX_HACHURE_LINES;
+  let cap = capOf.get(elements);
+  if (cap === undefined) {
+    let n = 0;
+    for (const e of elements) if (hatched(e)) n += e.fillStyle === 'cross-hatch' ? 2 : 1;
+    cap = Math.max(4, Math.min(MAX_HACHURE_LINES, Math.floor(HACHURE_BUDGET / Math.max(1, n))));
+    capOf.set(elements, cap);
+  }
+  return cap;
+}
+
+export function drawOps(el, { maxLines = MAX_HACHURE_LINES } = {}) {
   const opts = { seed: el.seed, roughness: el.roughness };
   const base = { stroke: el.stroke, width: el.width, dashed: el.dashed, opacity: el.opacity, ...(el.dotted ? { dotted: true } : {}) };
   const b = bounds(el);
@@ -1052,9 +1343,9 @@ export function drawOps(el) {
   if (filled) {
     if (el.fillStyle === 'solid') ops.push({ fill: el.fill, opacity: el.opacity, path: shape });
     else {
-      ops.push({ stroke: el.fill, width: Math.max(1, el.width / 2), opacity: el.opacity, path: hachurePath(b.x, b.y, b.w, b.h, opts), clip: shape });
+      ops.push({ stroke: el.fill, width: Math.max(1, el.width / 2), opacity: el.opacity, path: hachurePath(b.x, b.y, b.w, b.h, { ...opts, maxLines }), clip: shape });
       // Cross-hatch: the same lines again, mirrored, so they cross.
-      if (el.fillStyle === 'cross-hatch') ops.push({ stroke: el.fill, width: Math.max(1, el.width / 2), opacity: el.opacity, path: mirrorX(hachurePath(b.x, b.y, b.w, b.h, { ...opts, seed: opts.seed + 11 }), b.x * 2 + b.w), clip: shape });
+      if (el.fillStyle === 'cross-hatch') ops.push({ stroke: el.fill, width: Math.max(1, el.width / 2), opacity: el.opacity, path: mirrorX(hachurePath(b.x, b.y, b.w, b.h, { ...opts, maxLines, seed: opts.seed + 11 }), b.x * 2 + b.w), clip: shape });
     }
   }
   ops.push({ ...base, path: outline });
@@ -1095,19 +1386,25 @@ export function parseLibrary(text) {
     raw = data.items.map((it) => ({ name: it?.name, scene: { type: FORMAT, elements: Array.isArray(it?.elements) ? it.elements : [], files: it?.files } }));
   } else if (data?.type === 'excalidrawlib' && (Array.isArray(data.libraryItems) || Array.isArray(data.library))) {
     const list = Array.isArray(data.libraryItems) ? data.libraryItems.map((it) => ({ name: it?.name, elements: it?.elements })) : data.library.map((els) => ({ elements: els }));
-    raw = list.map((it) => ({ name: it.name, scene: { type: 'excalidraw', elements: Array.isArray(it.elements) ? it.elements : [], files: data.files } }));
+    // The pictures are shared by every item: checked once, and each item keeps only the ones it uses.
+    const files = cleanFiles(data.files);
+    raw = list.map((it) => ({ name: it.name, scene: { type: 'excalidraw', elements: Array.isArray(it.elements) ? it.elements : [], files } }));
   } else {
     throw new Error('bad_file');
   }
   const items = [];
+  let total = 0; // characters of pictures in the whole library, as it will be stored
   for (const r of raw.slice(0, MAX_LIBRARY_ITEMS)) {
     let s;
     try {
-      s = parseScene(JSON.stringify(r.scene));
+      s = sceneFrom(r.scene);
     } catch {
       continue;
     }
     if (!s.elements.length) continue;
+    const size = Object.values(s.files || {}).reduce((k, v) => k + v.length, 0);
+    if (total + size > MAX_FILES_CHARS) continue;
+    total += size;
     const item = { id: newId(), name: typeof r.name === 'string' ? r.name.replace(/\s+/g, ' ').trim().slice(0, 80) : '', elements: s.elements };
     if (s.files) item.files = s.files;
     items.push(item);

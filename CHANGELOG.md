@@ -5,6 +5,16 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- **bsketch's drawing engine after its pre-2.0 audits** (serbenda/bsketch `0a573ca`). A hostile drawing in a vault can
+  no longer use up the page's memory or freeze it: hachure and elbow routing have a budget per drawing, presentations
+  and PDFs are capped at 500 slides, libraries share their pictures, and text to diagram parses in linear time.
+  Texts with control characters no longer break an exported SVG.
+
+### Added
+- From the same engine: speaker notes per frame (N while presenting) and a timer; elbow arrows that go around the
+  shapes in their way; templates in Catalan, French and Portuguese.
+
 ### Fixed
 - **Two devices saving in the same millisecond no longer overwrite each other.** A note's or drawing's version was
   only its date, so two saves that landed in the same millisecond looked like the same version and the second one
