@@ -1,4 +1,4 @@
-// Copied from serbenda/bsketch (js/editor.js, commit fe1613f) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/editor.js, commit 0a573ca) by scripts/update-sketch.mjs. Do not edit here.
 // © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
 // and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // Drawing editor: toolbar, canvas and style panel. It mounts in any container (the sketch site or
@@ -37,6 +37,7 @@ const ICONS = {
   fit: 'M4 9V4h5 M15 4h5v5 M20 15v5h-5 M9 20H4v-5',
   present: 'M3 4h18v12H3z M12 16v4 M8 20h8 M10 8l4 2-4 2z',
   prev: 'M15 6l-6 6 6 6',
+  notes: 'M5 5h14 M5 10h14 M5 15h9 M5 20h6',
   next: 'M9 6l6 6-6 6',
   front: 'M8 8h12v12H8z M4 4h10v2 M4 4v10h2',
   back: 'M4 4h12v12H4z M18 8h2v12H8v-2',
@@ -147,7 +148,12 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
     if (color !== 'transparent') b.style.backgroundColor = color;
     return b;
   };
-  const btn = (name, label, onclick) => ui('button', { class: 'sk-btn', type: 'button', title: label, 'aria-label': label.replace(/ \(.*\)$/, ''), onclick }, icon(name));
+  // An icon button: its title shows the shortcut; its name for screen readers doesn't. Both translated (the name is
+  // the translated title without its "(shortcut)", so it needs no translation of its own).
+  const btn = (name, label, onclick) => {
+    const title = tr(label);
+    return el('button', { class: 'sk-btn', type: 'button', title, 'aria-label': title.replace(/ \(.*\)$/, ''), onclick }, icon(name));
+  };
   const strokeColor = ui('input', { type: 'color', class: 'sk-color', 'aria-label': 'Other stroke color', value: style.stroke });
   const fillColor = ui('input', { type: 'color', class: 'sk-color', 'aria-label': 'Other fill color', value: '#a5d8ff' });
   const seg = (name, options, onPick) => ui('div', { class: 'sk-seg', role: 'group', 'aria-label': name },
@@ -235,15 +241,26 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
     btn('up', 'Previous (Shift+Enter)', () => findNext(-1)),
     btn('down', 'Next (Enter)', () => findNext(1)),
     btn('close', 'Close the search (Esc)', () => closeSearch()));
+  // The selected frame: its name and its speaker notes (shown only while presenting).
+  const frameNameInput = ui('input', { type: 'text', class: 'sk-framename', 'aria-label': 'Name of the frame', maxlength: '100', spellcheck: 'false' });
+  const frameNotes = ui('textarea', { class: 'sk-framenotes', 'aria-label': 'Speaker notes', rows: '6', maxlength: String(E.MAX_NOTES) });
+  const framePanel = ui('div', { class: 'sk-panel sk-framepanel', 'aria-label': 'Frame', hidden: true },
+    ui('div', { class: 'sk-label' }, 'Frame'), frameNameInput,
+    ui('div', { class: 'sk-label' }, 'Speaker notes'), frameNotes,
+    ui('p', { class: 'sk-hint' }, 'Shown only to you while presenting (N).'));
+  const notesView = ui('div', { class: 'sk-panel sk-notesview', 'aria-label': 'Speaker notes', 'aria-live': 'polite', hidden: true });
+  const presentTimer = ui('span', { class: 'sk-timer', 'aria-label': 'Time presenting' }, '0:00');
   const slideCount = ui('span', { class: 'sk-slidecount', 'aria-live': 'polite' });
   const presentBar = ui('div', { class: 'sk-group sk-present', role: 'toolbar', 'aria-label': 'Presentation', hidden: true },
     btn('prev', 'Previous slide (←)', () => goSlide(-1)),
     slideCount,
     btn('next', 'Next slide (→)', () => goSlide(1)),
+    presentTimer,
+    btn('notes', 'Speaker notes (N)', () => toggleNotes()),
     btn('close', 'End the presentation (Esc)', () => stopPresenting()));
   const stage = ui('div', { class: 'sk-stage' }, canvas, textBox);
   if (readOnly) root.append(stage);
-  else root.append(stage, toolbar, panel, ...(library ? [libPanel] : []), searchBox, bottom, presentBar, status, help, imageInput);
+  else root.append(stage, toolbar, panel, framePanel, ...(library ? [libPanel] : []), searchBox, bottom, presentBar, notesView, status, help, imageInput);
   container.append(root);
   const ctx = canvas.getContext('2d');
 
@@ -383,7 +400,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const slide = presenting ? presenting.slides[presenting.at] : null;
     const hidden = presenting
-      ? (slide ? { ...scene, elements: [slide, ...E.inFrame(scene.elements, slide)] } : scene)
+      ? { ...scene, elements: E.slideElements(scene.elements, slide) }
       : editingText ? { ...scene, elements: scene.elements.filter((e) => e.id !== editingText) } : scene;
     ctx.fillStyle = scene.background || '#ffffff';
     ctx.fillRect(0, 0, r.width, r.height);
@@ -591,6 +608,12 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
     cornersBlock.hidden = !(rectEl || (!s.length && tool === 'rectangle'));
     const rounded = (rectEl || style).rounded === true;
     unlockBtn.hidden = !scene.elements.some((e) => e.locked);
+    const oneFrame = s.length === 1 && s[0].type === 'frame' ? s[0] : null;
+    framePanel.hidden = readOnly || !oneFrame || !!presenting;
+    if (oneFrame && !framePanel.contains(document.activeElement)) {
+      frameNameInput.value = oneFrame.name || '';
+      frameNotes.value = oneFrame.notes || '';
+    }
     const animated = (lineEl || style).animated === true;
     segs.forEach((g, i) => {
       const textEl = s.filter((e) => e.type === 'text').pop();
@@ -624,6 +647,25 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
     update(scene.elements.map((e) => (e.id === f.id ? { ...e, name: name.replace(/\s+/g, ' ').trim().slice(0, 100) } : e)));
     changed();
   }
+
+  // The frame panel's edits: one undo step each, when the field is left (or Enter in the name).
+  function setFrameField(key, value) {
+    const f = primary()[0];
+    if (!f || f.type !== 'frame') return;
+    const clean = key === 'name' ? value.replace(/\s+/g, ' ').trim().slice(0, 100) : value.replace(/\r\n?/g, '\n').trim().slice(0, E.MAX_NOTES);
+    if ((f[key] || '') === clean) return;
+    commit();
+    update(scene.elements.map((e) => {
+      if (e.id !== f.id) return e;
+      const { [key]: _, ...rest } = e;
+      return clean || key === 'name' ? { ...rest, [key]: clean } : rest;
+    }));
+    changed();
+  }
+  frameNameInput.addEventListener('change', () => setFrameField('name', frameNameInput.value));
+  frameNameInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); frameNameInput.blur(); } ev.stopPropagation(); });
+  frameNotes.addEventListener('change', () => setFrameField('notes', frameNotes.value));
+  frameNotes.addEventListener('keydown', (ev) => ev.stopPropagation());
 
   // --- Images ---
   function readAsDataUrl(file) {
@@ -709,7 +751,17 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
   // selected. The caller has already called commit().
   function addElements(list, files = {}) {
     const all = { ...(scene.files || {}) };
-    for (const [k, v] of Object.entries(files || {})) if (!Object.hasOwn(all, k)) all[k] = v;
+    // A picture whose id is already used by a different one gets a new id (and its elements with it).
+    const renamed = new Map();
+    for (const [k, v] of Object.entries(files || {})) {
+      if (!Object.hasOwn(all, k)) all[k] = v;
+      else if (all[k] !== v) {
+        const id = E.newId();
+        all[id] = v;
+        renamed.set(k, id);
+      }
+    }
+    if (renamed.size) list = list.map((e) => (e.type === 'image' && renamed.has(e.fileId) ? { ...e, fileId: renamed.get(e.fileId) } : e));
     if (Object.keys(all).length) scene.files = all;
     update([...list.filter((e) => e.type === 'frame'), ...scene.elements, ...list.filter((e) => e.type !== 'frame')]);
     setTool('select');
@@ -872,6 +924,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
     const [file] = libFile.files;
     libFile.value = '';
     if (!file) return;
+    if (file.size > E.MAX_FILE_BYTES) return onNotice(tr('That file is too big to open (more than 100 MB).'));
     let items;
     try {
       items = E.parseLibrary(await file.text());
@@ -935,17 +988,11 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
   }
 
   // --- Presenting: the frames one by one (or the whole drawing), full screen, with a laser pointer ---
-  let presenting = null; // { slides: [frame | null], at, view, tool }
+  let presenting = null; // { slides: [frame | null], at, view, tool, start }
+  let timerTick = 0;
   let laser = []; // the pointer's trail: { x, y, t } in drawing coordinates
   let laserTimer = 0;
-  function slidesOf() {
-    const frames = scene.elements.filter((e) => e.type === 'frame');
-    // Frames inside another frame are part of that frame's slide.
-    const top = frames.filter((f) => !frames.some((g) => g !== f && E.inFrame([f], g).length));
-    const pos = (f) => E.bounds(f);
-    top.sort((a, b) => (Math.abs(pos(a).y - pos(b).y) > 40 ? pos(a).y - pos(b).y : pos(a).x - pos(b).x));
-    return top.length ? top : [null];
-  }
+  const slidesOf = () => E.slideFrames(scene.elements);
   function fitSlide() {
     const slide = presenting.slides[presenting.at];
     const r = canvas.getBoundingClientRect();
@@ -961,6 +1008,8 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
   function showSlide() {
     const n = presenting.slides.length;
     slideCount.textContent = `${presenting.at + 1} / ${n}`;
+    const slide = presenting.slides[presenting.at];
+    notesView.textContent = slide?.notes || tr('No notes for this slide.');
     // Wait for the full-screen resize before fitting.
     requestAnimationFrame(() => {
       if (!presenting) return;
@@ -973,7 +1022,14 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
   function startPresenting() {
     if (presenting || readOnly) return;
     finishText();
-    presenting = { slides: slidesOf(), at: 0, view: { ...view }, tool };
+    presenting = { slides: slidesOf(), at: 0, view: { ...view }, tool, start: performance.now() };
+    presentTimer.textContent = '0:00';
+    clearInterval(timerTick);
+    timerTick = setInterval(() => {
+      if (!presenting) return;
+      const sec = Math.floor((performance.now() - presenting.start) / 1000);
+      presentTimer.textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    }, 1000);
     selected.clear();
     announce();
     setTool('select');
@@ -993,6 +1049,8 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
     const back = presenting;
     presenting = null;
     laser = [];
+    clearInterval(timerTick);
+    notesView.hidden = true;
     root.classList.remove('sk-presenting');
     presentBar.hidden = true;
     if (document.fullscreenElement === root) document.exitFullscreen?.().catch(() => {});
@@ -1002,6 +1060,11 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
     status.textContent = '';
     redraw();
     root.focus();
+  }
+  // Speaker notes: hidden until asked for (the audience may see the same screen).
+  function toggleNotes() {
+    if (!presenting) return;
+    notesView.hidden = !notesView.hidden;
   }
   function goSlide(d, to = null) {
     if (!presenting) return;
@@ -1017,6 +1080,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
     else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp' || k === 'Backspace') goSlide(-1);
     else if (k === 'Home') goSlide(0, 0);
     else if (k === 'End') goSlide(0, presenting.slides.length - 1);
+    else if (k === 'n' || k === 'N') toggleNotes();
     else return;
     ev.preventDefault();
   }
@@ -1957,6 +2021,7 @@ export function createEditor(container, { scene: initial, onChange = () => {}, o
       offImages();
       clearTimeout(flowTimer);
       clearTimeout(laserTimer);
+      clearInterval(timerTick);
       cancelAnimationFrame(raf);
       root.remove();
     },

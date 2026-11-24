@@ -1,4 +1,4 @@
-/* Copied from serbenda/bsketch (css/sketch.css, commit fe1613f). Do not edit here. */
+/* Copied from serbenda/bsketch (css/sketch.css, commit 0a573ca). Do not edit here. */
 /* © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
    and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e */
 /* The sketch editor. Everything uses the sk- prefix so it can be embedded in other pages (Snowlog). */
@@ -519,4 +519,61 @@
 
 .sk-editor.sk-presenting:fullscreen {
   background: #ffffff;
+}
+
+/* The selected frame's name and speaker notes. */
+.sk-framepanel {
+  width: 230px;
+}
+
+.sk-framename,
+.sk-framenotes {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--sk-border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+
+.sk-framenotes {
+  resize: vertical;
+  min-height: 7rem;
+  line-height: 1.4;
+}
+
+.sk-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* Presenting: the notes box and the timer. */
+.sk-notesview {
+  left: 14px;
+  right: auto;
+  top: auto;
+  bottom: 64px;
+  width: min(28rem, calc(100% - 28px));
+  max-height: 40%;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.sk-presenting .sk-notesview:not([hidden]) {
+  display: block !important;
+}
+
+.sk-timer {
+  min-width: 3rem;
+  text-align: center;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
 }

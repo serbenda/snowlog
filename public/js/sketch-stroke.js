@@ -1,4 +1,4 @@
-// Copied from serbenda/bsketch (js/stroke.js, commit fe1613f) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/stroke.js, commit 0a573ca) by scripts/update-sketch.mjs. Do not edit here.
 // © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
 // and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // "Hand-drawn" strokes: turns geometric shapes into paths with a slight wobble, always the same for the
@@ -92,7 +92,7 @@ export function freehandPath(points) {
 
 // Hachure fill: parallel lines at 45° covering the box; clipped to the shape when painted.
 export const MAX_HACHURE_LINES = 2000;
-export function hachurePath(x, y, w, h, { gap = 8, seed = 1, roughness = 1 } = {}) {
+export function hachurePath(x, y, w, h, { gap = 8, seed = 1, roughness = 1, maxLines = MAX_HACHURE_LINES } = {}) {
   const rand = rng(seed + 7);
   const out = [];
   const x0 = Math.min(x, x + w);
@@ -101,7 +101,7 @@ export function hachurePath(x, y, w, h, { gap = 8, seed = 1, roughness = 1 } = {
   const H = Math.abs(h);
   // Lines x + y = c crossing the box, `gap` apart perpendicularly. A huge box gets wider gaps, so one shape never
   // makes more than MAX_HACHURE_LINES lines (a small file with a giant shape must not hang the page).
-  const step = Math.max(gap * Math.SQRT2, (W + H) / MAX_HACHURE_LINES);
+  const step = Math.max(gap * Math.SQRT2, (W + H) / Math.max(1, Math.min(MAX_HACHURE_LINES, maxLines)));
   for (let c = x0 + y0 + step / 2; c < x0 + y0 + W + H; c += step) {
     const xa = Math.max(x0, c - (y0 + H));
     const xb = Math.min(x0 + W, c - y0);

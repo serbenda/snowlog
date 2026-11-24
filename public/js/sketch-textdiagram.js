@@ -1,4 +1,4 @@
-// Copied from serbenda/bsketch (js/textdiagram.js, commit fe1613f) by scripts/update-sketch.mjs. Do not edit here.
+// Copied from serbenda/bsketch (js/textdiagram.js, commit 0a573ca) by scripts/update-sketch.mjs. Do not edit here.
 // © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
 // and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. bsketch-7f3a9c2e
 // Text to diagram, in the browser and without AI: an indented list, a simple Mermaid flowchart or `A -> B` lines
@@ -10,7 +10,8 @@ import { createElement, measureText, newId, syncBindings, FONT } from './sketch-
 export const LIMITS = { chars: 50000, nodes: 300, edges: 600, label: 200 };
 const DIRS = ['TD', 'LR', 'BT', 'RL'];
 
-const clean = (s) => String(s).replace(/<br\s*\/?>/gi, '\n').replace(/\s+\n/g, '\n').replace(/[ \t]+/g, ' ').trim().slice(0, LIMITS.label);
+// (Line by line, with no regex that can backtrack over a long run of spaces.)
+const clean = (s) => String(s).replace(/<br\s*\/?>/gi, '\n').split('\n').map((l) => l.trimEnd()).join('\n').replace(/\n+/g, '\n').replace(/[ \t]+/g, ' ').trim().slice(0, LIMITS.label);
 const unquote = (s) => {
   const t = s.trim();
   return t.length >= 2 && t[0] === '"' && t[t.length - 1] === '"' ? t.slice(1, -1) : t;
@@ -61,7 +62,7 @@ function parseOutline(lines) {
 }
 
 // --- `A -> B: label` lines ---
-const ARROW_LINE_RE = /\s*(?:->|→|=>|⟶)\s*/;
+const ARROW_LINE_RE = /->|→|=>|⟶/; // the parts are trimmed after splitting
 function parseArrowLines(lines) {
   const g = graph('TD');
   for (const raw of lines) {
