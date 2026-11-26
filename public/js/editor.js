@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Editor helpers: pure functions over (text, selection) that return an edit.
 // An edit is { start, end, insert, selStart, selEnd }: replace [start, end) with `insert`
 // and leave the selection at [selStart, selEnd) of the resulting text.

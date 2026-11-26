@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // A "fake" folder stored inside the browser, for the portable build in Firefox and Safari
 // (which neither let you pick folders on disk nor use file storage for pages opened with file://).
 // It mimics just enough of FileSystemDirectoryHandle for LocalVault to work as with a real folder.

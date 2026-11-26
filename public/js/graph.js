@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Note graph: nodes = notes, edges = [[links]] between them.
 // Force-directed layout (repulsion between nodes, springs on links and a little gravity
 // towards the center), with no libraries. The functions are pure so they can be tested.

@@ -1,0 +1,58 @@
+Snowlog — Proprietary License (all rights reserved)
+
+Copyright (c) 2026 Sergio Santiago Bendaña Quesada. All rights reserved.
+
+This license applies to Snowlog: the source code, the documentation, the designs, the "Snowlog" name and its logo
+(together, "the Software").
+
+1. Ownership. The Software is the work of Sergio Santiago Bendaña Quesada ("the Author"), who keeps every
+   intellectual and industrial property right in it. Nothing in this license transfers any of them.
+
+2. What is allowed without asking.
+   a) Viewing the source code on GitHub, as GitHub's Terms of Service allow for public repositories.
+   b) Using the Author's official website (https://snowlog.bendi.dev/) and the official releases published in this
+      repository, for personal, non-commercial evaluation only.
+
+3. What needs the Author's prior written permission. Anything else, in particular:
+   a) using the Software, in whole or in part, for any commercial, professional, educational or organisational
+      purpose, or beyond evaluation;
+   b) copying, modifying, translating, adapting or creating derivative works of the Software or of any part of it;
+   c) distributing, publishing, hosting, sublicensing, selling, renting or lending the Software or copies of it,
+      modified or not, including self-hosted copies of the website or of the portable file;
+   d) embedding the Software or any part of it in another product or service;
+   e) any use of the Software, or of any part of it, by or for artificial intelligence or automated systems: training,
+      fine-tuning, distilling or evaluating models; building datasets, embeddings or indexes; retrieval-augmented
+      generation; using it as a reference, example or context for code generators, AI assistants or agents; and
+      scraping, crawling, mirroring or harvesting it with bots, crawlers or other automated tools (the Author's
+      text-and-data-mining reservation under Article 4(3) of Directive (EU) 2019/790 and Article 67 of the Spanish
+      Royal Decree-law 24/2021). Search engines may index the official website and repository only to show them in
+      ordinary search results;
+   f) removing or changing this notice, the copyright notices or the attributions.
+
+4. How to ask. Write to the Author through https://github.com/serbenda (a GitHub issue in this repository, or the
+   contact shown on that profile), saying who you are, what you want to do and for how long. Permission exists only
+   when the Author grants it in writing, and only for what it states.
+
+5. Names and logo. "Snowlog" and its logo may not be used to name, promote or identify any other product,
+   service or fork.
+
+6. Contributions. Contributions are not accepted without a prior written agreement with the Author. Anything sent
+   without one may be ignored and grants no right over the Software.
+
+7. Earlier versions. This license governs the Software as published in this repository, its earlier commits included,
+   and anything obtained from it.
+
+8. Other parts. The drawing editor (public/js/sketch-*.js and public/css/sketch.css) is copied from bsketch, also the
+   Author's work, and is governed by bsketch's own license (https://github.com/serbenda/bsketch/blob/main/LICENSE).
+   Parts made by others keep their own licenses, which this license does not change: the Caveat font (SIL Open Font
+   License, public/fonts/OFL.txt), the agent skills under .claude/skills (each with its LICENSE), and the libraries
+   the desktop app is built with (their licenses, as listed by Cargo when it is built).
+
+9. No warranty. The Software is provided "as is", without warranty of any kind, express or implied. In no event shall
+   the Author be liable for any claim, damages or other liability arising from the Software or its use.
+
+10. Breach. Any use beyond this license infringes the Author's rights. Any permission granted ends automatically if
+    its conditions are not met.
+
+11. Law. This license is governed by Spanish law, including the Spanish Intellectual Property Act (Real Decreto
+    Legislativo 1/1996), and by the international treaties Spain is party to.

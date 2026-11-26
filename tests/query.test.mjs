@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseNote, toggleTaskLine, linksTo, contentLines } from '../public/js/noteindex.js';

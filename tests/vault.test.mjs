@@ -1,8 +1,13 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createFakeGitHub } from './fake-github.mjs';
+import { KDF_LIMITS as KDF } from '../public/js/crypto.js';
 
 const ITER = 1000;
+// Below the app's floor of 600,000 only so the tests are fast.
+KDF.min = 1000;
 const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
 globalThis.fetch = fake.fetch;
 
@@ -509,4 +514,14 @@ test('the drawing library: encrypted in the repository, read from another device
   const other = new Vault(newRepo(), vault.dek);
   await other.loadIndex();
   assert.match(await other.readLibrary(), /Secret server/);
+});
+
+test('a note whose encrypted file was deleted in the repository is an error, not an empty note', async () => {
+  const id = await vault.createNote(`Gone ${Date.now()}`, 'something worth keeping');
+  const path = [...fake.files().keys()].find((p) => p.includes(id) && p.endsWith('.enc'));
+  assert.ok(path, 'the note has its file');
+  fake.externalDelete(path);
+  const other = new Vault(newRepo(), vault.dek); // another device with the same key
+  await other.loadIndex();
+  await assert.rejects(other.read(id), /missing_note/);
 });

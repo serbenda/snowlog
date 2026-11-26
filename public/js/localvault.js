@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Local vault: notes are plain .md files inside a folder, like in other Markdown notes apps.
 // It works with a folder on the computer (File System Access API, Chrome and Edge) or with the
 // browser's private storage (OPFS, every modern browser).

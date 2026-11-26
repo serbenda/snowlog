@@ -111,5 +111,8 @@ Every flow, as diagrams: [docs/WORKFLOWS.md](docs/WORKFLOWS.md).
 Read [AGENTS.md](AGENTS.md) and the [Definition of Done](docs/DEFINITION_OF_DONE.md).
 
 ## License
-No license: © Sergio Santiago Bendaña Quesada. All rights reserved.
-The code may be viewed, but not copied, modified or redistributed without the author's written permission.
+© 2026 Sergio Santiago Bendaña Quesada. **All rights reserved** ([LICENSE](LICENSE)): the code may be viewed and the
+official site used for personal evaluation; anything else (using it beyond that, copying, modifying, redistributing,
+embedding) needs the author's written permission, asked through [GitHub](https://github.com/serbenda). **No use by
+AI or automated tools** (training, datasets, retrieval, code generation, scraping): the text-and-data-mining rights
+are reserved. The drawing editor comes from [bsketch](https://github.com/serbenda/bsketch), under its own license.

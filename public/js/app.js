@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Snowlog: main interface.
 import { CONFIG } from './config.js';
 import * as C from './crypto.js';
@@ -143,6 +145,9 @@ function errText(e) {
     name_too_long: 'The name is too long.',
     into_itself: 'You cannot move a folder into itself.',
     bad_secret: 'That is not right. Check it and try again.',
+    missing_note: 'This note\'s encrypted file is missing from the repository (it may have been deleted there). Nothing was changed: restore it from the note\'s history or the repository.',
+    bad_vault: 'The vault file (.snowlog/vault.json) on GitHub has been changed or is damaged: Snowlog will not use it. Check the repository\'s history.',
+    rolled_back: 'The vault file (.snowlog/vault.json) on GitHub is older than the one this device last opened: it may have been put back on purpose. Snowlog will not use it. Check the repository\'s history.',
     bad_state: 'The sign-in is not valid. Try again.',
     oauth_denied: 'You cancelled the access on GitHub.',
     no_worker: 'The sign-in service (authWorker) is not configured.',
@@ -652,7 +657,10 @@ function showUnlock(vaultFile, { fresh = false, message = '' } = {}) {
     const done = busy(btn, 'Decrypting…');
     try {
       const pass = p1.value;
-      S.dek = await C.unlockVault(vaultFile, pass);
+      const opened = await C.openVault(vaultFile, pass);
+      if (opened.epoch < Auth.knownEpoch()) throw new Error('rolled_back');
+      S.dek = opened.dek;
+      Auth.rememberEpoch(opened.epoch);
       p1.value = '';
       S.vaultFile = vaultFile;
       await afterUnlock(fresh, pass);
@@ -698,17 +706,38 @@ async function afterUnlock(fresh, pass = null) {
       const remote = await Vault.fetchVaultFile(S.repo);
       if (remote) {
         // If the passphrase was changed or the key rotated on another device, it opens with the new vault.json.
+        // A lower epoch than this device has opened (or the same one with a different key) is a rollback: it is
+        // not used, and the notes stay with the key this device trusts.
+        let use = true;
         if (pass && JSON.stringify(remote.keys.passphrase) !== JSON.stringify(S.vaultFile.keys.passphrase)) {
+          let opened = null;
           try {
-            S.dek = await C.unlockVault(remote, pass);
-          } catch {
-            S.dek = null;
-            Auth.cacheVault(remote);
-            return showUnlock(remote, { message: 'The passphrase was changed on another device: use the new one.' });
+            opened = await C.openVault(remote, pass);
+          } catch (e) {
+            if (e.message === 'bad_vault') {
+              use = false;
+              notice(errText(e), 'error');
+            } else {
+              S.dek = null;
+              Auth.cacheVault(remote);
+              return showUnlock(remote, { message: 'The passphrase was changed on another device: use the new one.' });
+            }
+          }
+          if (opened) {
+            const known = Auth.knownEpoch();
+            if (opened.epoch < known || (opened.epoch === known && known > 0)) {
+              use = false;
+              notice(errText(new Error('rolled_back')), 'error');
+            } else {
+              S.dek = opened.dek;
+              Auth.rememberEpoch(opened.epoch);
+            }
           }
         }
-        Auth.cacheVault(remote);
-        S.vaultFile = remote;
+        if (use) {
+          Auth.cacheVault(remote);
+          S.vaultFile = remote;
+        }
       }
     } catch { /* carry on with the local copy */ }
   } else {
@@ -734,7 +763,8 @@ function showRecover(vaultFile, fresh) {
     if (p1.value !== p2.value) return showError(err, 'The two passphrases do not match.');
     const done = busy(btn, 'Recovering…');
     try {
-      const { vault: updated, dek } = await C.recoverVault(vaultFile, code.value, p1.value);
+      const { vault: updated, dek, epoch } = await C.recoverVault(vaultFile, code.value, p1.value, { iterations: CONFIG.kdfIterations, knownEpoch: Auth.knownEpoch() });
+      Auth.rememberEpoch(epoch);
       S.dek = dek;
       if (!fresh) {
         S.cred = await Auth.loadCred(dek);
@@ -816,9 +846,27 @@ function wipe() {
   S.indexReady = null;
 }
 
+// How long locking waits for a save in progress. GitHub requests have no timeout of their own: a stalled
+// connection must not keep the key and the notes in memory past the lock.
+const LOCK_SAVE_WAIT = 15000;
+
 async function lock(message = '') {
   if (!S.vault) return;
-  if (!message) await saveNow();
+  if (!message) {
+    const id = S.current;
+    const text = id ? $('editor').value : null;
+    const vault = S.vault;
+    const done = await Promise.race([
+      saveNow().then(() => true, () => true),
+      new Promise((r) => setTimeout(() => r(false), LOCK_SAVE_WAIT)),
+    ]);
+    // Not saved in time: the text waits, encrypted, in this device's outbox, and goes up after the next unlock.
+    if (!done && id && text != null) {
+      try {
+        await Promise.race([vault.queue(id, text), new Promise((r) => setTimeout(r, 2000))]);
+      } catch { /* the lock goes ahead anyway */ }
+    }
+  }
   if (D.editor) {
     D.editor.destroy();
     Object.assign(D, { id: null, editor: null, dirty: false });
@@ -2902,6 +2950,14 @@ function showNewRecoveryCode(code, title = 'Your new recovery code') {
   });
 }
 
+// The vault.json to change: GitHub's, if it still holds the key this device opened; if another device (or someone
+// else) changed it meanwhile, nothing is changed and the user unlocks again first.
+async function currentVaultFile() {
+  const remote = await Vault.fetchVaultFile(S.repo);
+  if (remote && JSON.stringify(remote.keys.passphrase) !== JSON.stringify(S.vaultFile.keys.passphrase)) throw new Error('key_changed');
+  return remote || S.vaultFile;
+}
+
 // Rotate the key: everything is encrypted again with a new key. For when someone may have learned the
 // old passphrase: from now on, neither that passphrase nor the old key open what is written.
 async function rotateKeyModal() {
@@ -2913,7 +2969,7 @@ async function rotateKeyModal() {
       await saveNow();
       const st = $('st-sync');
       try {
-        const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
+        const current = await currentVaultFile();
         const res = await S.vault.rotate(current, pass, CONFIG.kdfIterations, (d, t) => {
           S.lastActivity = Date.now();
           st.textContent = `Re-encrypting ${d}/${t}…`;
@@ -2928,6 +2984,7 @@ async function rotateKeyModal() {
   S.dek = S.vault.dek;
   S.vaultFile = result.vaultFile;
   Auth.cacheVault(result.vaultFile);
+  Auth.rememberEpoch(C.epochHint(result.vaultFile)); // made here, so its epoch is the authenticated one
   await Auth.saveCred(S.dek, S.cred);
   await saveExpanded();
   await showNewRecoveryCode(result.recoveryCode);
@@ -2966,11 +3023,12 @@ async function changePassphraseModal() {
       if (p1.length < 12) throw new Error('Use at least 12 characters.');
       if (p1 !== p2) throw new Error('The two passphrases do not match.');
       if (p1 === old) throw new Error('The new passphrase is the same as the current one.');
-      const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
+      const current = await currentVaultFile();
       const updated = await C.changePassphrase(current, old, p1, CONFIG.kdfIterations);
       await S.vault.writeVaultFile(updated, 'change passphrase');
       S.vaultFile = updated;
       Auth.cacheVault(updated);
+      Auth.rememberEpoch(C.epochHint(updated));
       return true;
     });
   if (ok) notice('Passphrase changed.');
@@ -2982,7 +3040,7 @@ async function renewRecoveryModal() {
     [passField('sr0', 'Current passphrase')],
     'Generate code',
     async ([pass]) => {
-      const current = (await Vault.fetchVaultFile(S.repo)) || S.vaultFile;
+      const current = await currentVaultFile();
       const { vault: updated, recoveryCode } = await C.renewRecoveryCode(current, pass, CONFIG.kdfIterations);
       await S.vault.writeVaultFile(updated, 'new recovery code');
       S.vaultFile = updated;

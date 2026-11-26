@@ -6,6 +6,20 @@ and versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- **The key file can no longer weaken or roll back the encryption** (independent review, [P02](docs/phases/P02-security-review.md)):
+  the passphrase's key-derivation work is checked before use (a changed `vault.json` can't make a new passphrase cheap
+  to crack, nor hang unlocking), and each key slot carries a sealed counter so a device refuses an older `vault.json`
+  put back in the repository (for example the one from before a key rotation).
+- A note with an unusual code fence (```` ```js title ````, ```` ```` ````) no longer freezes the app.
+- A note whose file was deleted in the repository shows an error instead of an empty note.
+- Locking no longer waits for a stalled save; the text waits encrypted on the device.
+- The agent server tells AI clients which tools change notes, and locks 8 hours after unlocking at most.
+
+### Changed
+- **License:** all rights reserved, with no use by AI or automated tools ([LICENSE](LICENSE),
+  [ADR 0007](docs/decisions/0007-proprietary-license.md)); every source file carries the notice.
+
+### Security
 - **bsketch's drawing engine after its pre-2.0 audits** (serbenda/bsketch `0a573ca`). A hostile drawing in a vault can
   no longer use up the page's memory or freeze it: hachure and elbow routing have a budget per drawing, presentations
   and PDFs are capped at 500 slides, libraries share their pictures, and text to diagram parses in linear time.

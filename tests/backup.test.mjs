@@ -1,10 +1,15 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as C from '../public/js/crypto.js';
 import { makeBackup, openBackup, parseBackup } from '../public/js/backup.js';
 import { makeZip, readZip } from '../public/js/zip.js';
+import { KDF_LIMITS as KDF } from '../public/js/crypto.js';
 
 const ITER = 1000;
+// Below the app's floor of 600,000 only so the tests are fast.
+KDF.min = 1000;
 
 test('readZip reads what makeZip writes and detects corruption', () => {
   const files = [{ path: 'Daily/2026-11-13.md', text: '# Friday ñ' }, { path: 'Attachments/photo.png', data: new Uint8Array([1, 2, 3]) }];

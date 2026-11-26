@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Agent and script access to the vault (agent/): local git repository, session, operations and MCP server.
 // Everything runs against a test vault in a temporary folder: a bare remote and clones that act as
 // devices.
@@ -16,8 +18,11 @@ import { createServer } from '../agent/mcp.js';
 import { askPassphrase } from '../agent/askpass.js';
 import { Vault } from '../public/js/vault.js';
 import * as C from '../public/js/crypto.js';
+import { KDF_LIMITS as KDF } from '../public/js/crypto.js';
 
 const ITER = 1000;
+// Below the app's floor of 600,000 only so the tests are fast.
+KDF.min = 1000;
 const SECRET = 'very secret test passphrase';
 let root;
 let remote;
@@ -235,6 +240,11 @@ test('MCP server: protocol, tools and errors without secrets', async () => {
   const byId = Object.fromEntries(out.map((m) => [m.id, m]));
   assert.equal(byId[1].result.serverInfo.name, 'snowlog');
   assert.ok(byId[2].result.tools.some((t) => t.name === 'backlinks'));
+  // Clients are told which tools change notes, and which replaces a whole one.
+  const ann = Object.fromEntries(byId[2].result.tools.map((t) => [t.name, t.annotations]));
+  assert.equal(ann.read_note.readOnlyHint, true);
+  assert.equal(ann.write_note.destructiveHint, true);
+  assert.equal(ann.append_note.readOnlyHint, false);
   assert.match(JSON.parse(byId[3].result.content[0].text).text, /from the agent/);
   assert.equal(byId[4].result.isError, true);
   assert.equal(byId[5].error.code, -32601);
@@ -253,7 +263,10 @@ test('SNOWLOG_ASKPASS and the server as a process', async () => {
     delete process.env.SNOWLOG_ASKPASS;
   }
 
-  const p = spawn(process.execPath, [new URL('../agent/mcp.js', import.meta.url).pathname, '--dir', agentDir], {
+  // The test vault uses fewer PBKDF2 iterations than the app accepts: the server process lowers its floor the same
+  // way this file does, through a module loaded before it.
+  const lowKdf = `data:text/javascript,import { KDF_LIMITS } from ${JSON.stringify(new URL('../public/js/crypto.js', import.meta.url).href)}; KDF_LIMITS.min = ${ITER};`;
+  const p = spawn(process.execPath, ['--import', lowKdf, new URL('../agent/mcp.js', import.meta.url).pathname, '--dir', agentDir], {
     env: { ...process.env, SNOWLOG_ASKPASS: askpass },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -271,4 +284,15 @@ test('SNOWLOG_ASKPASS and the server as a process', async () => {
   const res = JSON.parse(msgs.find((m) => m.id === 2).result.content[0].text);
   assert.deepEqual(res.backlinks.map((b) => b.path), ['Projects/Idea']);
   assert.ok(!stdout.includes(SECRET) && !stderr.includes(SECRET));
+});
+
+test('however busy the agent keeps it, the vault locks after the maximum unlocked time', async () => {
+  const { session } = newSession(agentDir, { answers: [SECRET], lockAfterMs: 10000, maxUnlockedMs: 60 });
+  await ops.unlock(session);
+  for (let i = 0; i < 6; i++) {
+    session.touch(); // the agent keeps using it
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  assert.equal(session.unlocked, false);
+  assert.equal(session.lockedReason, 'max_time');
 });

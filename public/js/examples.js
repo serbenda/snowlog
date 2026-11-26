@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Example project: shows how to organize a project with stories, meetings, knowledge pills
 // and daily notes that link to each other and show up on the dashboard.
 // Dates are relative to the day they are loaded.

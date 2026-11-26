@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Minimal Chrome driver over the DevTools protocol, with no dependencies (Node 22: global WebSocket).
 // Just enough for the tests/e2e flows: open pages, run JS, type, intercept the network.
 

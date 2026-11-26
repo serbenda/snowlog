@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Local cache of encrypted files (IndexedDB). It stores the same thing the repo holds: ciphertext,
 // never plaintext. It avoids downloading notes that have not changed again, and allows working
 // offline. If IndexedDB is not available, it stores nothing and everything still works.

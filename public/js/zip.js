@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Minimal ZIP without compression ("store" method), enough to export text notes.
 // readZip only reads uncompressed zips, like the ones makeZip writes.
 // No dependencies: it is built in the browser and downloaded, without going through the network.

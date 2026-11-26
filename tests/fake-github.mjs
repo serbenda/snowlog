@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Fake in-memory GitHub to test the vault without a network.
 // It implements only the endpoints that js/github.js uses.
 
@@ -105,6 +107,12 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
     externalWrite(path, content) {
       const files = new Map(commits.get(head).files);
       files.set(path, content);
+      head = commitFiles(files, head);
+    },
+    // Simulates someone deleting a file in the repository.
+    externalDelete(path) {
+      const files = new Map(commits.get(head).files);
+      files.delete(path);
       head = commitFiles(files, head);
     },
   };

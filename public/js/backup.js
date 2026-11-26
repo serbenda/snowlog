@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Encrypted backup (.snowlog): a single file that opens without GitHub and without Snowlog
 // installed, with just the passphrase or the recovery code.
 //

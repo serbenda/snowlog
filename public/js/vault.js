@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // The vault: an encrypted index + encrypted notes in the private repository.
 //
 // Layout of the notes repository:
@@ -309,6 +311,9 @@ export class Vault {
   async read(id) {
     if (this.cache.has(id)) return this.cache.get(id);
     let { content, cached } = await this.readEncrypted(notePath(id), id);
+    // A note the index lists but whose encrypted file is gone (deleted in the repository) is an error, not an empty
+    // note: typing over it would hide that something removed it.
+    if (content == null && this.index.notes[id] && !this.outbox.has(id)) throw new Error('missing_note');
     let plain;
     try {
       plain = content ? await C.decryptText(this.dek, content, id) : '';

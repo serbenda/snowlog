@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Snowlog MCP server (JSON-RPC 2.0 over stdio, no dependencies).
 //
 //   node agent/mcp.js --dir ~/path/to/the/snowlog-notes/clone [--remote origin] [--branch main]
@@ -30,66 +32,79 @@ const str = (description) => ({ type: 'string', description });
 const tools = [
   {
     name: 'vault_status', fn: ops.status,
+    annotations: { readOnlyHint: true },
     description: 'Vault status: whether it is unlocked, the number of notes and folders, and the daily and templates folders. Does not ask for the passphrase.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'unlock', fn: ops.unlock,
+    annotations: { readOnlyHint: true },
     description: 'Unlocks the vault: shows the user a system dialog to type the passphrase. The passphrase never reaches this tool.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'lock', fn: ops.lock,
+    annotations: { readOnlyHint: true },
     description: 'Locks the vault and wipes the key and the decrypted notes from memory.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'list_notes', fn: ops.listNotes,
+    annotations: { readOnlyHint: true },
     description: 'Lists notes and folders, optionally inside a folder.',
     inputSchema: { type: 'object', properties: { folder: str('Folder, e.g. “Projects”. Empty = the whole vault.'), recursive: { type: 'boolean', description: 'Include subfolders (yes by default).' } } },
   },
   {
     name: 'read_note', fn: ops.readNote,
+    annotations: { readOnlyHint: true },
     description: 'Reads a note (Markdown with its frontmatter).',
     inputSchema: { type: 'object', properties: { path: str('Path or name of the note, without .md.') }, required: ['path'] },
   },
   {
     name: 'search', fn: ops.search,
+    annotations: { readOnlyHint: true },
     description: 'Full-text search, ignoring case and accents. Syntax: words (all of them), "exact phrase", -exclude, tag:#tag, path:Folder.',
     inputSchema: { type: 'object', properties: { query: str('Query.'), limit: { type: 'integer', description: 'Maximum number of notes (20 by default).' } }, required: ['query'] },
   },
   {
     name: 'list_tags', fn: ops.listTags,
+    annotations: { readOnlyHint: true },
     description: 'Tags in the vault with the number of notes that use them.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'links', fn: ops.links,
+    annotations: { readOnlyHint: true },
     description: 'Outgoing [[…]] links of a note, with the note they point to, or null if it does not exist.',
     inputSchema: { type: 'object', properties: { path: str('Path or name of the note.') }, required: ['path'] },
   },
   {
     name: 'backlinks', fn: ops.backlinks,
+    annotations: { readOnlyHint: true },
     description: 'Notes that link to this note (backlinks), with the lines where they link to it.',
     inputSchema: { type: 'object', properties: { path: str('Path or name of the note.') }, required: ['path'] },
   },
   {
     name: 'create_note', fn: ops.createNote,
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Creates a new note. With template, it starts from that template ({{title}}, {{date}}…) and appends text after it.',
     inputSchema: { type: 'object', properties: { path: str('Path of the new note, e.g. “Projects/Idea”.'), text: str('Markdown content.'), template: str('Template (path, or name inside the templates folder).') }, required: ['path'] },
   },
   {
     name: 'write_note', fn: ops.writeNote,
+    annotations: { readOnlyHint: false, destructiveHint: true },
     description: 'Replaces the whole content of a note. If it changed on another device, the changes are combined or a copy is saved.',
     inputSchema: { type: 'object', properties: { path: str('Path or name of the note.'), text: str('The complete new content.'), create: { type: 'boolean', description: 'Create it if it does not exist.' } }, required: ['path', 'text'] },
   },
   {
     name: 'append_note', fn: ops.appendNote,
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Appends text at the end of a note, or at the end of a section if heading is given.',
     inputSchema: { type: 'object', properties: { path: str('Path or name of the note.'), text: str('Markdown text to append.'), heading: str('Heading of the section, without #.'), create: { type: 'boolean', description: 'Create it if it does not exist (without heading).' } }, required: ['path', 'text'] },
   },
   {
     name: 'daily_note', fn: ops.dailyNote,
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Daily note (daily folder, YYYY-MM-DD). Returns its text; if it does not exist, creates it from the daily template.',
     inputSchema: { type: 'object', properties: { date: str('Date YYYY-MM-DD (today by default).'), create: { type: 'boolean', description: 'Create it if it does not exist (yes by default).' } } },
   },
@@ -146,7 +161,9 @@ export function createServer(session, write) {
     } else if (method === 'ping') {
       if (isRequest) reply(id, {});
     } else if (method === 'tools/list') {
-      reply(id, { tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
+      // The annotations tell the client which tools change notes, so it can ask the user before running them
+      // (a note the agent reads may try to steer it).
+      reply(id, { tools: tools.map(({ name, description, inputSchema, annotations }) => ({ name, description, inputSchema, annotations })) });
     } else if (method === 'tools/call') {
       // One at a time: each write starts from the index the previous one left.
       queue = queue.then(() => call(params?.name, params?.arguments)).then((r) => reply(id, r));

@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Three-way line merge (as git does): from the common version (`base`), it combines the
 // changes in `mine` and in `theirs`. If both changed the same lines differently, it is a clash
 // and nothing is merged (the app then keeps the other version as a copy, as before).

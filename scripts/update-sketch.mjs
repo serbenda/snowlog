@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Copies the drawing editor from a local copy of the bsketch repository (serbenda/bsketch) to public/:
 // js/sketch-*.js, css/sketch.css and the handwriting font (fonts/). Imports are renamed so the
 // portable build's bundler (which only understands './x.js' in public/js) finds them.

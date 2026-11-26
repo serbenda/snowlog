@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Minimal client of the GitHub REST API for a single repository.
 // Every save is ONE atomic commit (Git Data API), with several files if needed.
 
