@@ -1,0 +1,8 @@
+{
+  "name": "devcontainer-claude-code",
+  "private": true,
+  "description": "Claude Code for the dev container, installed by npm ci from package-lock.json (each package pinned by its integrity hash). Dependabot proposes updates.",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.319"
+  }
+}

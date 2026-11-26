@@ -16,6 +16,22 @@
 - **Pending:**
 -->
 
+## 2026-11-26 — Dev container: Claude Code pinned by a lockfile
+- **Phase / issue:** —
+- **What:** `.devcontainer/claude-code/package.json` and `package-lock.json` (Claude Code 2.1.319 and its platform
+  packages, each with its integrity hash); the Dockerfile installs them with `npm ci` into `/opt/claude-code` and
+  links `claude` into `/usr/local/bin`, instead of `npm install -g` by version; Dependabot gets an npm entry for that
+  folder (weekly, 7-day cooldown); SECURITY_GUIDE updated.
+- **Why:** Scorecard's Pinned-Dependencies flagged the `npm install -g` (only the top package's version was fixed;
+  nothing checked what was downloaded).
+- **Rejected:** Claude Code's native installer (a script from the network, harder to pin); leaving the alert.
+- **Files:** .devcontainer/Dockerfile, .devcontainer/claude-code/package.json, .devcontainer/claude-code/package-lock.json,
+  .github/dependabot.yml, docs/SECURITY_GUIDE.md, docs/WORKLOG.md
+- **Commits:** this one (guardrail files: committed by the owner with `GUARDRAILS_OWNER_CHANGE=1`).
+- **Tested:** the lockfile resolves 2.1.319 with glibc and musl variants told apart (`libc`), so `npm ci` on Ubuntu
+  installs the glibc one; OSV has no advisory for 2.1.319. The image is built by the `Devcontainer` workflow on the PR.
+- **Pending:** —
+
 ## 2026-11-24 — bsketch's engine after its pre-2.0 audits
 - **Phase / issue:** — (bsketch P25)
 - **What:** `scripts/update-sketch.mjs` copied bsketch `main` (`0a573ca`: 1.5.0 plus P25's fixes) into
