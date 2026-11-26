@@ -5,6 +5,10 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **The vault format is documented and kept** ([docs/FORMAT.md](docs/FORMAT.md)): every vault made by an earlier version
+  opens in later ones, tested with a vault made by each version that changed the vault code.
+
 ### Security
 - **The key file can no longer weaken or roll back the encryption** (independent review, [P02](docs/phases/P02-security-review.md)):
   the passphrase's key-derivation work is checked before use (a changed `vault.json` can't make a new passphrase cheap

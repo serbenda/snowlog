@@ -109,6 +109,10 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
       files.set(path, content);
       head = commitFiles(files, head);
     },
+    // Starts the repository with these files (path → content), as one commit.
+    seed(entries) {
+      head = commitFiles(new Map(Object.entries(entries)), head);
+    },
     // Simulates someone deleting a file in the repository.
     externalDelete(path) {
       const files = new Map(commits.get(head).files);

@@ -16,6 +16,21 @@
 - **Pending:**
 -->
 
+## 2026-11-26 — P05: the vault format written down and tested
+- **Phase / issue:** P05
+- **What:** `docs/FORMAT.md`; `scripts/make-vault-fixtures.mjs` makes `tests/fixtures/vaults/<version>.json` with
+  each version's own code (temporary worktrees of PRs #1, #4, #5, #6, #7, #9, #16); `tests/vault-compat.test.mjs`
+  opens, reads, writes and recovers each, and checks FORMAT.md documents every field; `seed()` in the fake GitHub;
+  ADR 0008.
+- **Why:** bsketch's format freeze (its P27) applied to Snowlog, where losing access to notes is worse.
+- **Rejected:** hand-made fixtures (not what each version wrote); a version 2 format before the first release.
+- **Files:** docs/FORMAT.md, scripts/make-vault-fixtures.mjs, tests/vault-compat.test.mjs, tests/fixtures/vaults/*,
+  tests/fake-github.mjs, docs/phases/P05-vault-format.md, docs/decisions/*, docs/ROADMAP.md, docs/STATE.md,
+  CHANGELOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` passes.
+- **Pending:** —
+
 ## 2026-11-26 — P02: independent security review, findings fixed (agent part)
 - **Phase / issue:** P02
 - **What:** an independent review (a read-only sub-agent) found 1 High, 2 Medium, 4 Low and 2 Info; fixed: PBKDF2

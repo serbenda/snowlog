@@ -1,0 +1,43 @@
+{
+ "made_by": {
+  "name": "2026-11-13-pr4",
+  "commit": "c0b497c"
+ },
+ "steps": [
+  "notes",
+  "attachments"
+ ],
+ "passphrase": "compatibility test passphrase",
+ "recoveryCode": "ETTUA-BLTLB-4HCZL-9KVLZ-8RMKJ",
+ "files": {
+  ".snowlog/index.enc": "TOKnsKZk36KKqXpbuAnj80dle+cysWA+VbcaCIyplpTc0Yso+z+9qkxGJcc84TxYxJsh5BS7YIw1iLuCjxfEPDSdmv49LNyVRdU0VFc39VL/SECAVI1yYcREm+YJ/JUyEIw9tj29ZZpDLZOLqnBGwlUvYAjDsEodQB3KCzrAtybMXPG6Um0k/i0mYNnBMpxuOIpLd1kIQh7UC2ooV1kYrXdOAiYGkYqenH5V6crEjAqyUzineu7o6BoS8UptlE61CNIaRRxqodFXdrXOCiIMnrpzwzPKov7eyoNvHLIZ6vMi0tfFoZcw5E+ANVY3BOMFvnPTN9x5uvu71lWkQxV3cfMyWO/VI3f5RSLuD0/pQoLjNonlaTcMetHQJMlzSNDi8VdbhHv1cBvZ3Exw7ElyO0JMaX3598QDesFjE5MBik4J08cUWnPlknDIFDWaYwgq5i/c7koLK1BNWfR7OqB5ud005RZcmXFCDguSa7pjiBxM84Sx/TdrL95QBUBuihi+nr4WloLXnAKKCTK3fljWg4fkBLY3sSFpiTEQsTtVaRl4Re6iPt+7/p7MRu5BSjikOQoRYzvRA/PEj3tl4KWPjCa7ztHHhDuCk9kKO6TVtJMZgp/Q23NM2yPLN86mWAzNDJtrvvTs5tEAKlzWIXFFAyS7ttQMZ/JKfD7uT9QDe/dTSv9siryvmarmSeDgxm0uuTRDbwoPyglWD62VaDCUuraeFDAinqFO5QVcqJFvNfuxs7skjhY9xRzT2oAqmYzwrWFMxfi0E+x/",
+  ".snowlog/vault.json": "{\n  \"app\": \"snowlog\",\n  \"v\": 1,\n  \"created\": \"2026-11-26T11:31:34.616Z\",\n  \"keys\": {\n    \"passphrase\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"KXtC400j2/XUIzKWPET5NA==\"\n      },\n      \"wrapped\": \"XpooYhQB680GDXVNJVSnm62O2i+F33hG8V5frHq2L8fyae9L9J4OJWgkq3p/x+/v+Mi+8qa4bYdRngCQ\"\n    },\n    \"recovery\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"7eSJpFmy07+Tc0QdpQks2Q==\"\n      },\n      \"wrapped\": \"i8S2+UxgLU0bnZK+8hVmYJjxoQlN8rBBHd2F9yF1tkic/odw4rvgjKwSWRGUfxHEqNyty2Z0kfADUg0T\"\n    }\n  }\n}\n",
+  "a/87c8e6c0567d49b42a85f274.enc": "D5srcCpFGFlHi5zx8wtcrtbVayD7m0k7vXeKJRbplb61yw8yxogtvjX3rirH//LkQP7tw/a2lnUGmBCSgtHSdoH764sJHoq0/X/d9oRxteacYLMNtGC7JxCwVIbYS2Huf6A=",
+  "n/2845eb7e5e9a3e491143349b.enc": "UHVmUzU2r1zxGHZtkvOZwky8FzfRYNSRyIsCQhe2BDWQcNZiPz1fLVzlG5xkFhTCdkC0ZJtiPoi2zhw6+MgJu7fIgickGNmuPzzGaruxsToG/r6oDAyaEuEsNyNS+sJzNkTsBrtHG2qIx1Uw6v0=",
+  "n/5486cab4c8e392fe597f4499.enc": "oOzmhqg3BR2nkRYtjylgt2MUcAmMrwWNJ7XzgSdjYJThnipM04PZufNvDPzcCTU+dlpQvTSDbdBFAqJeoromm+fwfB9B3MTAH/BWQJJzqSawigwS2XTuxmCoULAShwbBiPZC3Cgi+RudIE2wR0aaFPMQcFiVOTvDG/mp2sKcnqiVjPOI7i7L410rj055ATvpUH8gtkI+9IpLOIkBPR0jufNZ4JPjNMVZmbVqTWghuMjWHggJm3CoMkhx9c8muMioJUb6U8AarL9+PyKw10ihNQl8LXmTkImg2HUon4Oiy45nm9tYST1e1vGO1RGwG8xCSnBz3TnKlpzzWdsjAH360xQhRmyXZbz8mjLVP/WDnC9ipMAT44NgRrrgoXw575Gz9FINdJ89NkzXPZVRtlkupAcV6RiXu4hVOg+bwAWEU1Hd1IsYjOAekzNJkGtG8o9blP2kxfpbZFqansrw1SJ1WEeZetbsrDGzTJDg9WSrfI03nQpae4+gMOurtp7aywtX8stvJea1pb1HWbHG6SoBM1uU9/yG4/YZXktxrVeFOT6mwdIwJZKxSwuhHESnSg92Duz9DUECAzYu9nbIYWlVpCzbAibj8ggHRGTslzqWlqhSqxHht3z5BvAYpkR0HOCXOXnVsSIxUotJ1C+GekGoDhwecftRm3eUBHjmK0tbSgOfpO41ewx+W9xbYSKFaeNnnnhhuq0CaSbjFQpQZ/hu1hIT+tsfkO7R9eAQ3KIHzEPxPIatKaSkTwqF+G80oCzkyxFm18i3JGQ5IjSV0qj1qg6zkJf2vFiYepPhG4xyCHsCV39jl/gW8G84z9xBH5P33TH8ToyuuWRTSNCphj9wcCi9IgcPFwiTqNOnbJmXV02NGwg7bRYZRLuJRBwg7T11dknvoHtjkCePBVCEvLhKzrd9ZtQZR/T35J4vFomeKHeSJQhGTHBl1Q7vRMn6bGlCIELsYaUMr1fgZV9r5cP28jjZsk7ZSLa5UeZTLgZTnpmJLgdaTOunB8qCPrPsKQM0C+8Ua5QkwaOMRWp85XiTGze4USbGX7MMBbvEddDAf+fXYJLJo13rMoUMifMRKUe3tat1QsejgZKt78Cw9pi2h3ZCGQtqjA==",
+  "n/812c311caa7eee272ac67443.enc": "i5CntWmT6NzzZibHqU8nUbYp1+2+AyXErSg5eY97Mb6C6b3ngA=="
+ },
+ "expect": {
+  "notes": [
+   {
+    "path": "Bienvenido",
+    "text": "Tu cuaderno personal, cifrado de extremo a extremo.\n\n## Lo básico\n- Las notas se guardan solas al dejar de escribir.\n- **Ctrl+E** cambia entre editar y leer.\n- **Ctrl+O** abre el selector rápido de notas.\n- **Ctrl+N** crea una nota nueva.\n- Enlaza notas con [[Otra nota]]: si no existe, se crea al pulsarla.\n\n## Formato\n- [x] Listas de tareas\n- **Negrita**, *cursiva*, ~~tachado~~ y ==resaltado==\n- `código en línea` y bloques de código\n\n| Formato | Cómo se escribe |\n| --- | --- |\n| Tabla | `| a | b |` y debajo `|---|---|` |\n| Callout | `> [!tip] Título` |\n| Etiqueta | #idea |\n\n> [!tip] Callouts\n> Usa [!note], [!info], [!warning], [!danger], [!example]… y añade - para plegarlos.\n\n> [!info] Privado de verdad\n> En el repo solo hay ficheros ilegibles. Sin tu frase de paso, nadie puede leer esto.\n"
+   },
+   {
+    "path": "Diary/Monday",
+    "text": "it rained"
+   },
+   {
+    "path": "Projects/Plan",
+    "text": "# Plan\n\nÑandú, café, 😀 — and a [[Diary/Monday]] link.\n\n- [ ] a task #idea\n"
+   }
+  ],
+  "attachments": [
+   [
+    "Projects/picture.png",
+    "c414cd0e204de974f73753c7e28d7638e7b3691bb8b1a2bab6b25bb7fed7ce77"
+   ]
+  ],
+  "library": null
+ }
+}

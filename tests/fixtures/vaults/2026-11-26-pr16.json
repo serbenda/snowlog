@@ -1,0 +1,57 @@
+{
+ "made_by": {
+  "name": "2026-11-26-pr16",
+  "commit": "cb22268"
+ },
+ "steps": [
+  "notes",
+  "attachments",
+  "library",
+  "rotation"
+ ],
+ "passphrase": "compatibility test passphrase",
+ "recoveryCode": "EVSVP-G2GGR-AMWU2-LY4G6-JMJ4V",
+ "files": {
+  ".snowlog/index.enc": "X3NdiNQWW8SUiWjx+nLZIKeYdZ8hNQs+tJF1APisMXJgaqHtAmuxDHNPrxuIdTfzHR0OFYHIYTMnXdrM5ZbQ9KCuT0YgKbSOxk5ht5CaBCMhOtXKphlvwRcamj9MyjEFJM4e30wbP550YQ6O3LswqT782rNqvpm/L0ouGA6UkTpX5xFGI0oBTmOQr/f+6e5D8VI5bu+u9z0bbVWDYl3GClEdfaqIMBOEhRAptCLnTREOTDLo7wDP5TZLyY4EXXrK3A2K/kq/53ey3Bt7b6H5ufo3OD7YCjz8RuTRU+gVjftqQqVzASzfbA/BNGaOkyGCN0HtE00eBSoXntIvz6ZGMZUyHX4xhLAAx+7lUAY+vaZ27OGrzFPkqlF+bB8udo/x8Ytj1F298JhpxZRQ8BW+9z8laJgfYHjnPJwWQDnNyDl9IqLLebK5JRy07ToSc5ybJdy1aUf30VvOY32apguRa+//I18qhcVsC3LdWYs3yYZCxEQo8R68N/cONgpfmcb8Hg45Bv2TOoq9suwe2KP7/qBKj9Nf6ixiFlYoDTd4fc9ikSalpkdiX6TM3EHTSvgolG4BQpQEarM4hrKE3q4EzJvb1WBaYux9WsbYcXiMiw4h4spTS4/q9MmNGXLESz8ajsh+AJC60pva9jroGEHddFjvwcIwwEer/86MiU5tkL8DBXbsWZeQ8cx+We77vvA/vdZ47Csc84c9ysOomaSGGNxMF5QZBJ63Nf+OkoMEZPugwowFyV7iiplbwp/Pi6CAhr+UedDJYz0V7bQAj3sQJTpxRZdBjw4PnfeOZZtLHu0R7B1Vq0ZrPLme1g0YlJvvJsmjUJ8a/OfLBFheyv+/c/M7aT/LmWKnozHcsEHJc1HODCTEyJ6/sIybXh6MuqMDyW2z1VDdSiVGQxrUD6xMwRdquB+3Q0CC0xFr7UWEsOqivZsJwaZ1MB+7Uvh8LGNmEhAuEJ+MWd8NSsfZZYwSxHvxRvN5KNpDex+fukrdoRhfkJEi8zFj1D2jVC15PiOFYn2VzwsF16peCV0MUU3R9Vgkn43KKxe2g03qWO1VmISXAmU77hCKa1cNRyvc8NuLLwcotYqevrqCa9uJtmmhCx91scR0Vtyd/uGagLb0V8tDOrx2Vmc1eZ7ElWSS2RCu0FsXHjVM1ThFHBjYd81qiXpTZCSoIzBixtyCl2zD95gy0iu1p6jd8UaA0SNOv7s2dXYB5WRIg3mqxbhc2kWNg2lPsheT+awktp/1Qr8M2zfIE559n9qBEkf5sIpZEzkJxCAPvFd/lYMEF7wNwN96/aDs9YQfY5dmxalHAit2gvufPXBl3uLy2+4pFwj50Hjdiv+uYgj2nYT3+GuMusH5LjbgivmDRNWiUz5uPQr7HfFa5Hy6C19UrcoMBGMthazzUaM6IKOTA+CK0b2uF57GyQg4Q3LgDM5jr8vkLzp0EcI=",
+  ".snowlog/keyring.enc": "u/ZM4RkBKkrI7SWXBqUTmrGeviW0TtQXVrqCCgMFD1riIT690eLBXZabqFBkMofiXRMdyxba7Jt0C5vjYWqXcUzr12EEiOnrdnHnnzOUCofNPQ2ZFj3PxfJo6E89100TuIB761z+kZPMDKepEC2vZBTyEuwqxsk=",
+  ".snowlog/library.enc": "HiYXtYLnZ9xGB3fY00IrRfj9vLIu3LY7PkV560SqSaI5r44gTtsHAupH4PezHQeuLf4bvAkcr0xx/celCNLK9RYCdg4esg3Z",
+  ".snowlog/vault.json": "{\n  \"app\": \"snowlog\",\n  \"v\": 1,\n  \"created\": \"2026-11-26T11:31:35.747Z\",\n  \"epoch\": 2,\n  \"keys\": {\n    \"passphrase\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"hwtftvPBlibmfbUVHERo0w==\"\n      },\n      \"wrapped\": \"DxcnM/IA+Tcjw/a4SicvSbxgUXl6JSogEm4s5oN93NYuvQcANmBAYqnJXKqPMg+QjV5TsTLKLl9EatZN\",\n      \"seal\": \"mxY4oSW6niDWSt5qTMvnfomvNI6YCJ/3xmbYUXo=\"\n    },\n    \"recovery\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"/PkR6aGKullyiWvIMlpP+w==\"\n      },\n      \"wrapped\": \"iLG8W7F/TgPbqHh/B1YJKgFaU2PulBzI1VoL0PBIdUeaFmXll6BKkFN0cqeSOgnV7lTRFUvg4ykpGWEo\",\n      \"seal\": \"8WdCXvw3PIe+XIdcdptWPgBbZd5QUHXEWJckzTk=\"\n    }\n  },\n  \"rotated\": \"2026-11-26T11:31:35.883Z\"\n}\n",
+  "a/56bf00101c42690726ec59da.enc": "hyHqi6zSKtB4Y7NQXQeXT/xRji1O3Zc4dbVTY2pzvuy/RsH83yiEDx62WmlwkWlnSO3alcflOYma7rvST10gZYrZ+s06n2Re8Sf4NSnwEhlz7C5BYPC+2Mk2ZcxefHAsmBU=",
+  "a/aac2288a0d2b6a4f3571472c.enc": "Lj7MD2kYEVJ8yxmjfzPLZ3TYyLf+I5wnIjzv8YuQoDaC/2cXFaRp45nlRj7oZwcEJAChB2xicFivspisSAVw1NLh0Fohg44R1JNiXT4aOQPRgI8XVgGwHFIUZr6woWR3QmzB5hRu4LzQOkdy2cjv5/N3PoT37aYpEjY4PC0Ytck6BUTP54CGjGzVsy1CoZ8bF8+LsQfkBwXXXiwxshdW",
+  "n/7c5b61a27e3dc9e611cf6dbb.enc": "1Q64dPdA7l0J3JyBXUn5qrCJB6OgbCRl6MXOzPsB89KzNHVkpDQ6i0i7ygC1gIcjN++DHEyCU8v6vlr1nq8jNXb8951Rzi62/PH+gPsxN8qaViGjJbpF19E9/QiB5cDOr/anZeskHLpehxqm0Ns=",
+  "n/8b2b2985abf2d28f763f2cf8.enc": "ansiVRcyGzQTP3v2ZTZhRze4EFqfKlgHSYu0v/Amoi3H7NA/kUABG+i/hUogyva2nnZvzRq2LyOvTQJMw8jfxvmS98c+AFEy2E27QjzLdPOgMBgGw1mrjU+SUcGMfZGtaGwn+Vpxq3oa+vWSluGiYSc0/ea3rBM+GJ23TKP15Qov8WcCYLOV4aakAXBOGjYBDMkF3Dt0cIKK00/WAx0AYwCiwhmHqu5mTNnPGbuNb8Bw78o9tDa0cCipZACvg3F35xLB0xqn2U/GvzZigpHgtZ5Pdem9IuVyZMP9z1kM7tzewB/OagV9MeB0t6g6mrE5sPHx7VzQGQyI0oo4SHlKtb6MWHt+YeIgzXhsUTj2SPkmmaiEL48uV6rLZYZDRw9yHj4AQ7Tjr6cgZUrMnFwENPrv2ajlNMKbk0trjXKBXVIqd/4j21EnMhkEl9B72DVflErMfXlBq9RUST8HOoojmjLn9YCAf0SCiODil2CXu+3WSa4tYz1siZyI+Mjn4lf+GSL4GMUSpRZ+JMT+LZogtcGXnm9jIY2spHdVvTKTs1/VA2NMQUDrlYXlZ5Biqg1arrO16FezlNmzNnfGrEBBhCARcFhFTeJAT+PXR8cDAX1yyynPOA1rkGJDOXWt0oQFTVQwb+K+r+34xmHJEAlxAqMmnl2xCuGe5Af1dmm3p8ZQc8+cgfjtbZSfDHbdRyFe9DFA1H0Qk7K5Uk59xUCdO+Lq7ddvpoEG+e7QRZqldGgpsyRpUPd09svNaPQxrvJby+q9TD5FBcmmyCreKSDfsUI8NreBOOuGZ5t9/rfvLmJIBDzP8muEi1OecJMg6W1JcVpaQot8JlRBIzPR3MdjjNdEtS1JoZqqQb2is78RgB8KTyTCA0LNB59Vn54caJAAQ/Fqy0SGnrvOF6Yf3LgPExutbYDv6kz77l307lKAv08Yq6u0KqsyB/DlLol8YGWsV0uJi0teLLyzBBcqUjoAn7+nIZIrw9WdPXeBedsKiVka4mMKrYrXBTLLN3YkUayV+H1NSPxUHUoy5KM2jMxRl9A+AzsyTZEDtQUyDV1Kd6ZsDNHRRHtEHc0gHQISzIJ78jWyWjM+nSdil4vpSDPhXCvWyvEEDA==",
+  "n/c413237087e2e2c70222e72a.enc": "Mcdz6wvA9E92qEpQu0KHGppucYlWzr1PaCVmnrZ0BfC+dnvsZA==",
+  "n/f42698ecb7981a220357edde.enc": "gBcwPAjs04rtU3EYad5cnOu4xvk0VwK9luYyzS89xXZC/6m0OTOCKyZKxKAUcNETF2+90w=="
+ },
+ "expect": {
+  "notes": [
+   {
+    "path": "After rotation",
+    "text": "written with the new key"
+   },
+   {
+    "path": "Diary/Monday",
+    "text": "it rained"
+   },
+   {
+    "path": "Projects/Plan",
+    "text": "# Plan\n\nÑandú, café, 😀 — and a [[Diary/Monday]] link.\n\n- [ ] a task #idea\n"
+   },
+   {
+    "path": "Welcome",
+    "text": "Your personal notebook, end-to-end encrypted.\n\n## The basics\n- Notes save themselves when you stop typing.\n- **Ctrl+E** switches between editing and reading.\n- **Ctrl+O** opens the quick note switcher.\n- **Ctrl+N** creates a new note.\n- Link notes with [[Another note]]: if it does not exist, it is created when you click it.\n\n## Formatting\n- [x] Task lists\n- **Bold**, *italic*, ~~strikethrough~~ and ==highlight==\n- `inline code` and code blocks\n\n| Format | How to write it |\n| --- | --- |\n| Table | `| a | b |` and below it `|---|---|` |\n| Callout | `> [!tip] Title` |\n| Tag | #idea |\n\n> [!tip] Callouts\n> Use [!note], [!info], [!warning], [!danger], [!example]… and add - to fold them.\n\n> [!info] Truly private\n> The repository only holds unreadable files. Without your passphrase, nobody can read this.\n"
+   }
+  ],
+  "attachments": [
+   [
+    "Projects/picture.png",
+    "c414cd0e204de974f73753c7e28d7638e7b3691bb8b1a2bab6b25bb7fed7ce77"
+   ],
+   [
+    "Projects/board.sketch",
+    "16b690335cce49c4788195a1903498dcb088da54d5958d51f2623071eb139215"
+   ]
+  ],
+  "library": "{\"type\":\"bsketchlib\",\"version\":1,\"items\":[]}"
+ }
+}
