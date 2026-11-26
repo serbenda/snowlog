@@ -30,7 +30,7 @@ Last updated: 2026-11-26
 - The day-to-day features, the portable file and the earlier three-phase plan (PR #4). Details in the CHANGELOG.
 
 ## Next
-1. P02 (agent part now; the owner tests on real devices).
+1. P02: the agent's part is done (PR #16); the owner tests on real devices (R-004, R-009) to close it.
 2. P03: agent access, phase 2 ([AGENT_ACCESS.md](AGENT_ACCESS.md) → Next).
 3. P04: the first release (`v1.0.0`).
 4. Ideas for later: PKCE in the sign-in ([R-003](RISKS.md)) and a signed index to detect replayed versions ([R-002](RISKS.md)).
