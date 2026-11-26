@@ -14,3 +14,4 @@ One record per decision that is costly to undo or that someone (you or Claude) m
 | [0004](0004-distribution-web-portable-desktop.md) | Distribution: the web app, a portable HTML file and a desktop app | accepted |
 | [0005](0005-agent-access-through-a-local-clone.md) | Agent and script access through a local clone and an MCP server | accepted |
 | [0006](0006-adopt-project-template-in-english.md) | Adopt project-template 1.0.0 in full mode, everything in English | accepted |
+| [0007](0007-proprietary-license.md) | The license: all rights reserved, no use by AI | accepted |

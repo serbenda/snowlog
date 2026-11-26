@@ -3,32 +3,36 @@
 > **Single source of truth for status.** Claude reads it at the start of every session (`/status`) and updates it when closing a phase (`/close-phase`).
 > At most **150 lines**: replace what is outdated instead of piling up, and **link** documents instead of copying them.
 
-Last updated: 2026-11-17
+Last updated: 2026-11-26
 
 ## Where we are
 - **Mode:** full
 - **Current stage:** S3 — Release (see [ROADMAP](ROADMAP.md))
-- **Phase in progress:** [P01 — Adopt project-template 1.0.0, everything in English](phases/P01-adopt-project-template.md)
+- **Phase in progress:** [P02 — Independent security review](phases/P02-security-review.md) (tests on real devices: the owner)
 - **Environment:** https://snowlog.bendi.dev/ (GitHub Pages from `main`), the portable file, desktop builds as CI
   artifacts; notes in the private `serbenda/snowlog-notes` ([DEPLOYMENT.md](DEPLOYMENT.md))
-- **Working branch:** `development` (PR #6 open to `main`)
+- **Working branch:** `development`
 
 ## Current work
-- [P01](phases/P01-adopt-project-template.md): code, interface and docs in English, with existing vaults kept working;
-  the template's docs filled in; the guardrails committed (`014aacd`). Waiting for CI and the owner's review on PR #6.
+- [P02](phases/P02-security-review.md): an independent security review of the code (the agent), every finding fixed
+  with a test; tests on real Firefox, Safari, phones, macOS and Windows (the owner, [R-004](RISKS.md)).
+- The license, as bsketch's: all rights reserved, no use by AI ([ADR 0007](decisions/0007-proprietary-license.md)).
 
 ## Recently done
+- [P01](phases/P01-adopt-project-template.md) closed: the template adopted, everything in English (PR #6).
+- bsketch's drawing engine after its pre-2.0 audits; Claude Code pinned by a lockfile in the dev container; Pages
+  built and deployed in separate jobs (PRs #11, #12, #15).
+- The drawing library and templates; saves in the same millisecond no longer clash (PRs #8, #9).
 - Agent and script access: an MCP server over a clone of the notes repository ([AGENT_ACCESS.md](AGENT_ACCESS.md)).
 - Tauri desktop builds for Windows, macOS and Linux, with a WebDriver smoke test (PR #6, open).
 - Faster first load (GraphQL), line merging between devices, key rotation, drawings from sketch (PR #5).
 - The day-to-day features, the portable file and the earlier three-phase plan (PR #4). Details in the CHANGELOG.
 
 ## Next
-1. Owner: fix GitHub Actions billing (jobs are not starting), then review and merge PR #6.
-2. Owner: run `./scripts/setup-repo.sh` so the new checks are required on `main`.
-3. P02: an independent security review ([R-001](RISKS.md)) and tests on real Firefox, Safari, phones, macOS and
-   Windows ([R-004](RISKS.md)).
-4. P03: agent access, phase 2 ([AGENT_ACCESS.md](AGENT_ACCESS.md) → Next).
+1. Owner: run `./scripts/setup-repo.sh` so the CI checks are required on `main` (no ruleset yet).
+2. P02 (agent part now; the owner tests on real devices).
+3. P03: agent access, phase 2 ([AGENT_ACCESS.md](AGENT_ACCESS.md) → Next).
+4. P04: the first release (`v1.0.0`).
 5. Ideas for later: PKCE in the sign-in ([R-003](RISKS.md)) and a signed index to detect replayed versions ([R-002](RISKS.md)).
 
 ## Blocked / awaiting decision

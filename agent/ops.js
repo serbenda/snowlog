@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Vault operations for agents and scripts: list, read, search, follow links and write.
 // They reuse the app's modules, so they behave the same as the web app.
 // Every write is a commit with the same message the app uses (no titles or paths).

@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // A small, safe Markdown renderer.
 // All text is escaped BEFORE formatting is applied, so no HTML from a note
 // ever runs. Links only allow http(s), mailto and anchors.

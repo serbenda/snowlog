@@ -16,6 +16,23 @@
 - **Pending:**
 -->
 
+## 2026-11-26 — License: all rights reserved, no use by AI; P01 closed in the docs
+- **Phase / issue:** P01 (closed), ADR 0007
+- **What:** `LICENSE` (bsketch's proprietary license adapted to Snowlog); the notice with the marker
+  `snowlog-b50d2624` at the top of 62 source files (JS, CSS, Rust; after the shebang where there is one; not the
+  editor copied from bsketch, which keeps bsketch's); `noai, noimageai` robots meta and a notice in
+  `public/index.html`; `"license": "UNLICENSED"`, `license-file` in `Cargo.toml` and the copyright in
+  `tauri.conf.json`; README, CHANGELOG. P01 marked done (PR #6 merged on 2026-11-17) and STATE brought up to date.
+- **Why:** the owner's decision for bsketch (its ADR 0006) applied to Snowlog, which embeds its editor; STATE still
+  said "waiting for PR #6".
+- **Rejected:** a private repository (Actions and Pages would cost money).
+- **Files:** LICENSE, README.md, CHANGELOG.md, package.json, desktop/src-tauri/Cargo.toml,
+  desktop/src-tauri/tauri.conf.json, public/index.html, public/js/*.js, public/css/*.css, public/sw.js, worker/src/*,
+  agent/*, scripts/*.mjs, tests/*, desktop/*, docs/*
+- **Commits:** this one.
+- **Tested:** `npm test` 166 pass; `npm run test:e2e` pass; the portable build carries the notices.
+- **Pending:** the owner: `./scripts/setup-repo.sh` (no ruleset on `main` yet).
+
 ## 2026-11-26 — Pages: build and deploy in separate jobs
 - **Phase / issue:** —
 - **What:** `.github/workflows/pages.yml` has a `build` job (checkout, the site, the portable file, the Pages artifact)

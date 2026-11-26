@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Main flows in a real (headless) Chrome, against a fake in-memory GitHub.
 // They run with `npm run test:e2e` and in the CI. Without Chrome, they are skipped.
 

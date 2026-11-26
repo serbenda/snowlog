@@ -5,6 +5,10 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **License:** all rights reserved, with no use by AI or automated tools ([LICENSE](LICENSE),
+  [ADR 0007](docs/decisions/0007-proprietary-license.md)); every source file carries the notice.
+
 ### Security
 - **bsketch's drawing engine after its pre-2.0 audits** (serbenda/bsketch `0a573ca`). A hostile drawing in a vault can
   no longer use up the page's memory or freeze it: hachure and elbow routing have a budget per drawing, presentations

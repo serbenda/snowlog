@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // In-memory index of every decrypted note: frontmatter, tags, tasks and links.
 // It lives only in memory and is wiped on lock. Queries, backlinks and the calendar
 // use it.

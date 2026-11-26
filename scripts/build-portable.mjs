@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Builds the portable version: a single HTML file with everything inside (code, styles and icon)
 // that opens with a double click, with nothing to install and no connection. Its notes are stored in
 // a folder on the computer or in the browser. The CSP forbids any network connection.

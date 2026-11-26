@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Snowlog auth: a Cloudflare Worker that exchanges the GitHub sign-in code for a token.
 // It holds the GitHub App client secret (as a Worker secret) and nothing else:
 // it does not store tokens or log the content of requests.

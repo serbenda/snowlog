@@ -5,6 +5,7 @@ name = "snowlog"
 version = "0.2.0"
 description = "Encrypted notebook"
 authors = ["Sergio Santiago Bendaña Quesada"]
+license-file = "../../LICENSE"
 edition = "2021"
 rust-version = "1.77"
 publish = false

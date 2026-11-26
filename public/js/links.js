@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Rewrite [[…]] links when a note is renamed or moved to another folder.
 // It respects the alias ([[Note|text]]), the heading ([[Note#Section]]), embeds (![[…]])
 // and touches nothing inside code blocks or `inline code`.

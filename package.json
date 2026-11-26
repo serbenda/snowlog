@@ -1,6 +1,7 @@
 {
   "name": "snowlog",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "description": "Snowlog: a personal notebook, end-to-end encrypted, on GitHub and GitHub Pages.",
   "scripts": {

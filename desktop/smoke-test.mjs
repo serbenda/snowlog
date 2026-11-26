@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Smoke test of the desktop app over WebDriver (tauri-driver on 127.0.0.1:4444): opens the app,
 // waits until the web app inside meets a condition, and closes it. No dependencies.
 // Usage: node desktop/smoke-test.mjs <executable> "<JS expression that must be true>"

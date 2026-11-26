@@ -1,9 +1,9 @@
 # P01 — Adopt project-template 1.0.0, everything in English
 
 - **Stage:** S3
-- **Status:** ⏳ in progress
+- **Status:** ✅ done
 - **Issue:** —
-- **Dates:** 2026-11-17 → —
+- **Dates:** 2026-11-17 → 2026-11-17 (closed in the docs on 2026-11-26)
 - **Owner approvals:** 2026-11-17 "I'd like both projects to use project-template"; 2026-11-17 "everything in English"; 2026-11-17 "continue" (Snowlog after sketch); 2026-11-17 "yes, apply it yourself" (the agent applies, commits and pushes the guardrails patch)
 
 ## Goal
@@ -37,7 +37,8 @@ the interface included, is in English, without breaking existing vaults.
   `test-githooks.sh`, actionlint (as in CI), `check-records.sh` on the PR range and `npm test` pass; the commit is
   refused without `GUARDRAILS_OWNER_CHANGE=1` and accepted with it.
 - [x] The guardrails commit is on `development` (`014aacd`; applied by the agent at the owner's explicit request).
-- [ ] CI is green on the PR: Secrets, Authorship, Hook, Hook (macOS bash 3.2), SAST, Dependencies, Records, Tests.
+- [x] CI is green on the PR: Secrets, Authorship, Hook, Hook (macOS bash 3.2), SAST, Dependencies, Records, Tests
+  (PR #6 merged on 2026-11-17; every PR since, #7 to #15, green on the same jobs).
 
 ## Plan
 1. Agent: translate the code, interface and tests, with the data compatibility and its tests; commit on `development`.
@@ -68,3 +69,12 @@ the interface included, is in English, without breaking existing vaults.
 - **What was left out and why:**
 - **Lessons learned:**
 - **PR:** #6
+
+---
+
+## Result
+- **What was done:** everything in scope; PR #6 merged on 2026-11-17.
+- **How it was tested:** as in the acceptance criteria; CI green on every later PR (#7–#15).
+- **What was left out and why:** the rules of `main` (`./scripts/setup-repo.sh`): the owner's, still to run.
+- **Lessons learned:** the docs must be closed with the PR: STATE kept saying "waiting for PR #6" for nine days.
+- **PR:** #6.

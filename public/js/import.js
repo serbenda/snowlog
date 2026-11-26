@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Import a folder of Markdown (for example, an existing vault from another notes app).
 // Everything happens in the browser: the chosen files are read, encrypted with the vault
 // key and uploaded. Nothing leaves the device in plaintext.

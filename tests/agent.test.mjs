@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Agent and script access to the vault (agent/): local git repository, session, operations and MCP server.
 // Everything runs against a test vault in a temporary folder: a bare remote and clones that act as
 // devices.

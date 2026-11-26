@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // A session with the vault: the DEK lives only in this process's memory and is forgotten on lock
 // (by hand or after `lockAfterMs` without use). The passphrase is asked for with `askPassphrase` and
 // discarded as soon as the key is derived: it is never returned, stored or included in errors.

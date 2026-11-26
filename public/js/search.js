@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Full-text search over the in-memory index (notes already decrypted).
 // Ignores case and accents. Syntax:
 //   words               all must appear in the note (in the text or the name)

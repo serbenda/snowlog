@@ -21,7 +21,7 @@ the PRs (#1–#6) and the worklog's first entry, not in phase files.
 
 | Phase | What | Status |
 |---|---|---|
-| P01 | Adopt project-template 1.0.0, everything in English | ⏳ |
-| P02 | Independent security review and fixes; tests on real Firefox, Safari, phones, macOS and Windows | ⬜ |
+| P01 | [Adopt project-template 1.0.0, everything in English](phases/P01-adopt-project-template.md) | ✅ |
+| P02 | [Independent security review and fixes; tests on real Firefox, Safari, phones, macOS and Windows](phases/P02-security-review.md) | ⏳ |
 | P03 | Agent access, phase 2: edit by section, move, delete, tasks, queries, orphans and a CLI | ⬜ |
 | P04 | First release (`v1.0.0`) | ⬜ |

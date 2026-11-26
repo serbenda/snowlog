@@ -1,3 +1,5 @@
+// © 2026 Sergio Santiago Bendaña Quesada. All rights reserved: no use, copy or reuse without written permission,
+// and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Ask for the passphrase without it passing through the agent that uses the server.
 //
 // - By default (macOS), a system dialog with hidden input. The passphrase goes from the dialog
