@@ -16,6 +16,19 @@
 - **Pending:**
 -->
 
+## 2026-11-26 — Pages: build and deploy in separate jobs
+- **Phase / issue:** —
+- **What:** `.github/workflows/pages.yml` has a `build` job (checkout, the site, the portable file, the Pages artifact)
+  and a `publish` job (`needs: build`) that only deploys; the `github-pages` environment is on the deploy job only.
+- **Why:** "Publish to GitHub Pages" failed on `main` with "No artifacts named github-pages": in one job the deploy
+  listed the run's artifacts about 0.1 s after the upload and found none (eventual consistency); reruns failed the
+  same way. Two jobs is GitHub's own pattern and gives the artifact time to be listed.
+- **Rejected:** a `sleep` before the deploy (still a race, only less likely).
+- **Files:** .github/workflows/pages.yml, docs/WORKLOG.md
+- **Commits:** this one (a guardrail file: committed by the owner with `GUARDRAILS_OWNER_CHANGE=1`).
+- **Tested:** actionlint-style review of the YAML; the next push to `main` runs it.
+- **Pending:** —
+
 ## 2026-11-26 — Dev container: Claude Code pinned by a lockfile
 - **Phase / issue:** —
 - **What:** `.devcontainer/claude-code/package.json` and `package-lock.json` (Claude Code 2.1.319 and its platform
