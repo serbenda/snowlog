@@ -1,12 +1,12 @@
 # Dev container for working with Claude Code away from your Mac: the agent sees only this project, not your
 # home folder, SSH keys, keychain or other repos. Pinned: the base image by digest, Gitleaks and Node.js by
-# release and SHA-256, Claude Code by version (a release at least a week old, like Dependabot's cooldown). Not pinned: the
-# Ubuntu packages (from the pinned image's release) and Claude Code's npm dependencies, resolved at build time.
+# release and SHA-256, Claude Code and its npm packages by claude-code/package-lock.json (integrity hashes, installed
+# with npm ci; Dependabot proposes new versions after a week). Not pinned: the Ubuntu packages (from the pinned
+# image's release).
 # Dependabot (devcontainers and docker ecosystems) proposes updates to the base image.
 FROM mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae
 
 ARG GITLEAKS_VERSION=8.30.1
-ARG CLAUDE_CODE_VERSION=2.1.319
 # Claude Code needs Node.js 22 or newer; Ubuntu 24.04's package is 18. A 22 LTS release at least a week old.
 ARG NODE_VERSION=22.23.4
 
@@ -41,7 +41,12 @@ RUN set -eu; \
     tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --no-same-owner; \
     rm /tmp/node.tar.xz
 
-RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+# Claude Code from claude-code/package-lock.json: npm ci installs exactly those packages and checks each one's
+# integrity hash (no version is resolved at build time).
+COPY claude-code/package.json claude-code/package-lock.json /opt/claude-code/
+RUN cd /opt/claude-code \
+ && npm ci --no-audit --no-fund \
+ && ln -s /opt/claude-code/node_modules/.bin/claude /usr/local/bin/claude
 
 # The volume for Claude Code's settings is mounted here; created now so it belongs to vscode, not root.
 RUN mkdir -p /home/vscode/.claude && chown vscode:vscode /home/vscode/.claude
