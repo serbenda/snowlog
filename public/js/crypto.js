@@ -96,27 +96,80 @@ export function normalizeRecoveryCode(code) {
   return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-// Creates the vault: a new DEK wrapped with the passphrase and with the recovery code.
+// --- Key slots ---
+// A slot is the DEK wrapped with a key derived from a secret (the passphrase or the recovery code). Its `seal` is the
+// vault's epoch encrypted with that same derived key: it goes up with every change of key or passphrase, and no one
+// can raise or forge it without the secret. A device remembers the highest epoch it has opened and refuses a
+// vault.json from GitHub with a lower one (a rollback to an earlier key). Slots without a seal (vaults made before
+// 2026-11-26) count as epoch 0 and get one on their next change.
+//
+// The PBKDF2 work a slot asks for is checked before anything is derived: never below KDF_LIMITS.min (a changed file
+// can't make a new passphrase cheap to crack) nor above KDF_LIMITS.max (it can't make unlocking hang). Tests lower
+// `min` to run fast.
+export const KDF_LIMITS = { min: 600000, max: 10000000 };
+const MAX_EPOCH = 1e9;
+
+function iterationsOf(slot) {
+  const n = slot?.kdf?.iterations;
+  if (!Number.isInteger(n) || n < KDF_LIMITS.min || n > KDF_LIMITS.max) throw new Error('bad_vault');
+  return n;
+}
+
+const epochFrom = (text) => {
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < 0 || n > MAX_EPOCH) throw new Error('bad_vault');
+  return n;
+};
+
+// The plaintext hint of the epoch (unauthenticated: only used to pick a higher number, never to trust one).
+export function epochHint(vault) {
+  const n = vault?.epoch;
+  return Number.isInteger(n) && n >= 0 && n <= MAX_EPOCH ? n : 0;
+}
+
+async function wrapSlot(raw, secret, iterations, epoch) {
+  const salt = randomBytes(16);
+  const kek = await deriveKek(secret, salt, iterations);
+  return {
+    kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations, salt: toB64(salt) },
+    wrapped: toB64(await encryptBytes(kek, raw, 'dek')),
+    seal: await encryptText(kek, String(epoch), 'epoch'),
+  };
+}
+
+// Opens a slot: { raw, epoch }. Throws bad_vault if the slot is malformed or its seal doesn't open (changed), and
+// bad_secret if the secret is wrong.
+async function openSlot(slot, secret) {
+  const iterations = iterationsOf(slot);
+  let kek;
+  let raw;
+  try {
+    kek = await deriveKek(secret, fromB64(slot.kdf.salt), iterations);
+    raw = await decryptBytes(kek, fromB64(slot.wrapped), 'dek');
+  } catch {
+    throw new Error('bad_secret');
+  }
+  if (slot.seal === undefined) return { raw, epoch: 0 };
+  try {
+    return { raw, epoch: epochFrom(await decryptText(kek, slot.seal, 'epoch')) };
+  } catch {
+    raw.fill(0);
+    throw new Error('bad_vault');
+  }
+}
+
+// Creates the vault: a new DEK wrapped with the passphrase and with the recovery code, at epoch 1.
 export async function createVault(passphrase, iterations) {
   const rawDek = randomBytes(32);
   const recoveryCode = newRecoveryCode();
-  const pSalt = randomBytes(16);
-  const rSalt = randomBytes(16);
-  const pKek = await deriveKek(passphrase, pSalt, iterations);
-  const rKek = await deriveKek(normalizeRecoveryCode(recoveryCode), rSalt, iterations);
   const vault = {
     app: 'snowlog',
     v: 1,
     created: new Date().toISOString(),
+    epoch: 1,
     keys: {
-      passphrase: {
-        kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations, salt: toB64(pSalt) },
-        wrapped: toB64(await encryptBytes(pKek, rawDek, 'dek')),
-      },
-      recovery: {
-        kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations, salt: toB64(rSalt) },
-        wrapped: toB64(await encryptBytes(rKek, rawDek, 'dek')),
-      },
+      passphrase: await wrapSlot(rawDek, passphrase, iterations, 1),
+      recovery: await wrapSlot(rawDek, normalizeRecoveryCode(recoveryCode), iterations, 1),
     },
   };
   const dek = await importDek(rawDek);
@@ -124,86 +177,61 @@ export async function createVault(passphrase, iterations) {
   return { vault, dek, recoveryCode };
 }
 
-async function wrapSlot(raw, secret, iterations) {
-  const salt = randomBytes(16);
-  const kek = await deriveKek(secret, salt, iterations);
-  return {
-    kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations, salt: toB64(salt) },
-    wrapped: toB64(await encryptBytes(kek, raw, 'dek')),
-  };
-}
-
 // Changes the passphrase: checks the current one and wraps the same DEK again with the new one
 // (notes are not re-encrypted). Raises the iterations if `iterations` is higher than the stored ones.
 export async function changePassphrase(vault, oldPassphrase, newPassphrase, iterations = 0) {
-  let raw;
-  try {
-    raw = await unwrapWith(vault.keys.passphrase, oldPassphrase);
-  } catch {
-    throw new Error('bad_secret');
-  }
+  const { raw, epoch } = await openSlot(vault.keys.passphrase, oldPassphrase);
+  const next = Math.max(epoch, epochHint(vault)) + 1;
   const updated = structuredClone(vault);
-  updated.keys.passphrase = await wrapSlot(raw, newPassphrase, Math.max(iterations, vault.keys.passphrase.kdf.iterations));
+  updated.epoch = next;
+  updated.keys.passphrase = await wrapSlot(raw, newPassphrase, Math.max(iterations, vault.keys.passphrase.kdf.iterations), next);
   raw.fill(0);
   return updated;
 }
 
 // Generates a new recovery code (the previous one stops working). Asks for the current passphrase.
 export async function renewRecoveryCode(vault, passphrase, iterations = 0) {
-  let raw;
-  try {
-    raw = await unwrapWith(vault.keys.passphrase, passphrase);
-  } catch {
-    throw new Error('bad_secret');
-  }
+  const { raw, epoch } = await openSlot(vault.keys.passphrase, passphrase);
   const recoveryCode = newRecoveryCode();
   const updated = structuredClone(vault);
-  updated.keys.recovery = await wrapSlot(raw, normalizeRecoveryCode(recoveryCode), Math.max(iterations, vault.keys.recovery.kdf.iterations));
+  updated.keys.recovery = await wrapSlot(raw, normalizeRecoveryCode(recoveryCode), Math.max(iterations, iterationsOf(vault.keys.recovery)), epoch);
   raw.fill(0);
   return { vault: updated, recoveryCode };
 }
 
-async function unwrapWith(slot, secret) {
-  const kek = await deriveKek(secret, fromB64(slot.kdf.salt), slot.kdf.iterations);
-  return decryptBytes(kek, fromB64(slot.wrapped), 'dek');
+// Returns the DEK, or throws bad_secret if the passphrase is wrong (bad_vault if vault.json is malformed or changed).
+export async function unlockVault(vault, passphrase) {
+  return (await openVault(vault, passphrase)).dek;
 }
 
-// Returns the DEK, or throws Error('bad_secret') if the passphrase is wrong.
-export async function unlockVault(vault, passphrase) {
-  let raw;
-  try {
-    raw = await unwrapWith(vault.keys.passphrase, passphrase);
-  } catch {
-    throw new Error('bad_secret');
-  }
+// The DEK and the vault's authenticated epoch.
+export async function openVault(vault, passphrase) {
+  const { raw, epoch } = await openSlot(vault.keys.passphrase, passphrase);
   const dek = await importDek(raw);
   raw.fill(0);
-  return dek;
+  return { dek, epoch };
 }
 
 // Rotates the key: a new random DEK, wrapped with the passphrase (which is checked) and with a new
-// recovery code. Also returns the old DEK in base64 (`oldKey`) to store it encrypted with the new one
-// in the keyring, so the history can still be read.
+// recovery code, at the next epoch. Also returns the old DEK in base64 (`oldKey`) to store it encrypted with the new
+// one in the keyring, so the history can still be read.
 export async function rotateVault(vault, passphrase, iterations = 0) {
-  let raw;
-  try {
-    raw = await unwrapWith(vault.keys.passphrase, passphrase);
-  } catch {
-    throw new Error('bad_secret');
-  }
+  const { raw, epoch } = await openSlot(vault.keys.passphrase, passphrase);
+  const next = Math.max(epoch, epochHint(vault)) + 1;
   const fresh = randomBytes(32);
   const recoveryCode = newRecoveryCode();
   const updated = structuredClone(vault);
   updated.rotated = new Date().toISOString();
+  updated.epoch = next;
   updated.keys = {
-    passphrase: await wrapSlot(fresh, passphrase, Math.max(iterations, vault.keys.passphrase.kdf.iterations)),
-    recovery: await wrapSlot(fresh, normalizeRecoveryCode(recoveryCode), Math.max(iterations, vault.keys.recovery.kdf.iterations)),
+    passphrase: await wrapSlot(fresh, passphrase, Math.max(iterations, vault.keys.passphrase.kdf.iterations), next),
+    recovery: await wrapSlot(fresh, normalizeRecoveryCode(recoveryCode), Math.max(iterations, iterationsOf(vault.keys.recovery)), next),
   };
   const dek = await importDek(fresh);
   const oldKey = toB64(raw);
   fresh.fill(0);
   raw.fill(0);
-  return { vault: updated, dek, recoveryCode, oldKey };
+  return { vault: updated, dek, recoveryCode, oldKey, epoch: next };
 }
 
 export async function importKey(b64) {
@@ -217,33 +245,28 @@ export async function importKey(b64) {
 export async function unlockWithAny(vault, secret) {
   for (const [slot, value] of [[vault.keys.passphrase, secret], [vault.keys.recovery, normalizeRecoveryCode(secret)]]) {
     try {
-      const raw = await unwrapWith(slot, value);
+      const { raw } = await openSlot(slot, value);
       const dek = await importDek(raw);
       raw.fill(0);
       return dek;
-    } catch { /* try the next one */ }
+    } catch (e) {
+      if (e.message === 'bad_vault') throw e;
+    }
   }
   throw new Error('bad_secret');
 }
 
-// With the recovery code, a new passphrase is set.
-// Returns the updated vault and the DEK.
-export async function recoverVault(vault, recoveryCode, newPassphrase) {
-  let raw;
-  try {
-    raw = await unwrapWith(vault.keys.recovery, normalizeRecoveryCode(recoveryCode));
-  } catch {
-    throw new Error('bad_secret');
-  }
-  const iterations = vault.keys.passphrase.kdf.iterations;
-  const salt = randomBytes(16);
-  const kek = await deriveKek(newPassphrase, salt, iterations);
+// With the recovery code, a new passphrase is set, at an epoch above every one known (`knownEpoch`: the highest this
+// device has opened). The new slot uses at least `iterations` and never fewer than KDF_LIMITS.min.
+// Returns the updated vault, the DEK and the new epoch.
+export async function recoverVault(vault, recoveryCode, newPassphrase, { iterations = 0, knownEpoch = 0 } = {}) {
+  const { raw, epoch } = await openSlot(vault.keys.recovery, normalizeRecoveryCode(recoveryCode));
+  iterationsOf(vault.keys.passphrase); // a malformed slot is refused, not copied
+  const next = Math.max(epoch, epochHint(vault), knownEpoch) + 1;
   const updated = structuredClone(vault);
-  updated.keys.passphrase = {
-    kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations, salt: toB64(salt) },
-    wrapped: toB64(await encryptBytes(kek, raw, 'dek')),
-  };
+  updated.epoch = next;
+  updated.keys.passphrase = await wrapSlot(raw, newPassphrase, Math.max(iterations, KDF_LIMITS.min, vault.keys.passphrase.kdf.iterations), next);
   const dek = await importDek(raw);
   raw.fill(0);
-  return { vault: updated, dek };
+  return { vault: updated, dek, epoch: next };
 }

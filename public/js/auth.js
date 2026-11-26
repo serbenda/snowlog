@@ -8,6 +8,8 @@ import * as C from './crypto.js';
 
 const LS_VAULT = 'snowlog.vault';
 const LS_CRED = 'snowlog.cred';
+// The highest vault epoch this device has opened (see crypto.js → Key slots): a lower one is a rollback.
+const LS_EPOCH = 'snowlog.epoch';
 const SS_STATE = 'snowlog.oauthState';
 
 export const oauthAvailable = () => Boolean(CONFIG.githubClientId && CONFIG.authWorker);
@@ -92,6 +94,21 @@ export function cacheVault(vaultFile) {
   } catch { /* almacenamiento no disponible */ }
 }
 
+export function knownEpoch() {
+  try {
+    const n = Number(localStorage.getItem(LS_EPOCH) || 0);
+    return Number.isInteger(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function rememberEpoch(epoch) {
+  try {
+    if (Number.isInteger(epoch) && epoch > knownEpoch()) localStorage.setItem(LS_EPOCH, String(epoch));
+  } catch { /* storage not available */ }
+}
+
 export async function saveCred(dek, cred) {
   try {
     localStorage.setItem(LS_CRED, await C.encryptText(dek, JSON.stringify(cred), 'cred'));
@@ -111,6 +128,7 @@ export function forgetDevice() {
   try {
     localStorage.removeItem(LS_VAULT);
     localStorage.removeItem(LS_CRED);
+    localStorage.removeItem(LS_EPOCH);
     localStorage.removeItem('snowlog.last');
   } catch { /* nothing to delete */ }
 }

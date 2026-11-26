@@ -311,6 +311,9 @@ export class Vault {
   async read(id) {
     if (this.cache.has(id)) return this.cache.get(id);
     let { content, cached } = await this.readEncrypted(notePath(id), id);
+    // A note the index lists but whose encrypted file is gone (deleted in the repository) is an error, not an empty
+    // note: typing over it would hide that something removed it.
+    if (content == null && this.index.notes[id] && !this.outbox.has(id)) throw new Error('missing_note');
     let plain;
     try {
       plain = content ? await C.decryptText(this.dek, content, id) : '';

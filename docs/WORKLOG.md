@@ -16,6 +16,24 @@
 - **Pending:**
 -->
 
+## 2026-11-26 — P02: independent security review, findings fixed (agent part)
+- **Phase / issue:** P02
+- **What:** an independent review (a read-only sub-agent) found 1 High, 2 Medium, 4 Low and 2 Info; fixed: PBKDF2
+  iteration limits and sealed epochs in `public/js/crypto.js` (`KDF_LIMITS`, `openVault`, `epochHint`, slot `seal`),
+  the device's highest epoch (`auth.js`), rollback checks and `currentVaultFile()` in `app.js`; the fence loop in
+  `markdown.js`; `missing_note` in `vault.js`; a bounded wait in `lock()`; MCP annotations and a maximum unlocked
+  time (`agent/`); the offline shell limited to the app page (`sw.js`, `snowlog-v8`); the sign-in card as `main`.
+  Threat model, R-001 (MITIGATED), R-002, new R-009, PORTABLE.md, CHANGELOG.
+- **Why:** S3's exit criterion (no High findings open) before the first release.
+- **Rejected:** a MAC over `vault.json` with a key from the DEK (an attacker holding an old DEK could forge it; the
+  seal under each slot's own key can't be forged without the secret); prefixing AADs by type (a format change for no
+  practical gain: ids are random).
+- **Files:** public/js/crypto.js, public/js/auth.js, public/js/app.js, public/js/markdown.js, public/js/vault.js,
+  public/sw.js, public/index.html, agent/mcp.js, agent/session.js, tests/*.mjs, docs/*, CHANGELOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 172 pass (twice); `npm run test:e2e` 5 pass; the reviewer's scripts; axe-core.
+- **Pending:** the owner's tests on real devices (R-004, R-009).
+
 ## 2026-11-26 — License: all rights reserved, no use by AI; P01 closed in the docs
 - **Phase / issue:** P01 (closed), ADR 0007
 - **What:** `LICENSE` (bsketch's proprietary license adapted to Snowlog); the notice with the marker

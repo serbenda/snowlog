@@ -18,8 +18,13 @@ export class SessionError extends Error {
 }
 
 export class Session {
-  constructor({ repo, askPassphrase, lockAfterMs = CONFIG.lockAfterMinutes * 60000, refreshMs = 10000, attempts = 3 }) {
+  // maxUnlockedMs: however busy the agent keeps it, the vault locks this long after it was unlocked (the user types
+  // the passphrase again), so a looping agent can't keep it open for ever.
+  constructor({ repo, askPassphrase, lockAfterMs = CONFIG.lockAfterMinutes * 60000, maxUnlockedMs = 8 * 3600000, refreshMs = 10000, attempts = 3 }) {
     this.repo = repo;
+    this.maxUnlockedMs = maxUnlockedMs;
+    this.unlockedAt = 0;
+    this.maxTimer = null;
     this.askPassphrase = askPassphrase;
     this.lockAfterMs = lockAfterMs;
     this.refreshMs = refreshMs;
@@ -55,7 +60,11 @@ export class Session {
     await vault.loadIndex();
     this.vault = vault;
     this.freshAt = Date.now();
+    this.unlockedAt = Date.now();
     this.lockedReason = null;
+    if (this.maxTimer) clearTimeout(this.maxTimer);
+    this.maxTimer = setTimeout(() => this.lock('max_time'), this.maxUnlockedMs);
+    this.maxTimer.unref?.();
     this.touch();
     return vault;
   }
@@ -66,6 +75,8 @@ export class Session {
     this.lockedReason = reason;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    if (this.maxTimer) clearTimeout(this.maxTimer);
+    this.maxTimer = null;
   }
 
   touch() {

@@ -42,6 +42,9 @@ These browsers don't let a page pick folders on disk. Snowlog offers **Store ins
 kept in the browser's storage on that computer and are still there the next time you open the file. Keep in mind:
 
 - If you clear the browser data (or use a private window), the notes are cleared too.
+- Some browsers keep one storage area for **every** HTML file opened from disk: another downloaded `.html` file
+  opened in the same browser might be able to read what is stored there. Don't open untrusted HTML files in that
+  browser, or use a folder (Chrome, Edge) or the online version instead.
 - Make a **Backup (.zip)** from time to time; Snowlog reminds you.
 - To move them to a folder or to the online version, use that backup (see *Moving notes* below).
 

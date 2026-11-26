@@ -109,5 +109,11 @@ export function createFakeGitHub({ owner = 'u', repo = 'notes' } = {}) {
       files.set(path, content);
       head = commitFiles(files, head);
     },
+    // Simulates someone deleting a file in the repository.
+    externalDelete(path) {
+      const files = new Map(commits.get(head).files);
+      files.delete(path);
+      head = commitFiles(files, head);
+    },
   };
 }

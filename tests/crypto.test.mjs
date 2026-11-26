@@ -3,8 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as C from '../public/js/crypto.js';
+import { KDF_LIMITS as KDF } from '../public/js/crypto.js';
 
 const ITER = 1000; // low only so the tests are fast
+// Below the app's floor of 600,000 only so the tests are fast.
+KDF.min = 1000;
 
 test('encrypt and decrypt text round trip', async () => {
   const { dek } = await C.createVault('a long passphrase', ITER);
@@ -94,4 +97,57 @@ test('rotate: new DEK, same passphrase, new code, and the old key comes out for 
   assert.ok((await C.recoverVault(r.vault, r.recoveryCode, 'another new passphrase')).dek);
   assert.ok(r.vault.rotated);
   assert.ok(!JSON.stringify(r.vault).includes(r.oldKey));
+});
+
+test('vault.json can\'t make the PBKDF2 work cheaper or endless', async () => {
+  const { vault, recoveryCode } = await C.createVault('a long passphrase', ITER);
+  // Iterations below the floor or above the ceiling are refused before anything is derived.
+  for (const n of [1, ITER - 1, 2 ** 31, 1.5, '1000']) {
+    const bad = structuredClone(vault);
+    bad.keys.passphrase.kdf.iterations = n;
+    await assert.rejects(C.unlockVault(bad, 'a long passphrase'), /bad_vault/, String(n));
+  }
+  // Recovery on a vault.json whose passphrase slot was changed to 1 iteration: refused, never copied.
+  const tampered = structuredClone(vault);
+  tampered.keys.passphrase.kdf.iterations = 1;
+  await assert.rejects(C.recoverVault(tampered, recoveryCode, 'a new passphrase'), /bad_vault/);
+  // A normal recovery keeps at least the floor and the requested iterations.
+  const { vault: recovered } = await C.recoverVault(vault, recoveryCode, 'a new passphrase', { iterations: ITER * 3 });
+  assert.equal(recovered.keys.passphrase.kdf.iterations, ITER * 3);
+});
+
+test('epochs: sealed in each slot, raised by every key change, and a changed seal is refused', async () => {
+  const { vault, recoveryCode } = await C.createVault('a long passphrase', ITER);
+  assert.equal((await C.openVault(vault, 'a long passphrase')).epoch, 1);
+  const changed = await C.changePassphrase(vault, 'a long passphrase', 'another passphrase');
+  assert.equal((await C.openVault(changed, 'another passphrase')).epoch, 2);
+  const rotated = await C.rotateVault(changed, 'another passphrase');
+  assert.equal(rotated.epoch, 3);
+  assert.equal((await C.openVault(rotated.vault, 'another passphrase')).epoch, 3);
+  // Recovery goes above every epoch it knows of, even with an older recovery slot.
+  const { epoch } = await C.recoverVault(changed, recoveryCode, 'recovered passphrase', { knownEpoch: 7 });
+  assert.equal(epoch, 8);
+  // The plaintext hint can be raised by anyone, but it is never what is trusted: the seal is.
+  const hinted = structuredClone(vault);
+  hinted.epoch = 999;
+  assert.equal((await C.openVault(hinted, 'a long passphrase')).epoch, 1);
+  // A seal copied from another slot, or garbled, doesn't open: bad_vault.
+  const swapped = structuredClone(rotated.vault);
+  swapped.keys.passphrase.seal = vault.keys.passphrase.seal;
+  await assert.rejects(C.openVault(swapped, 'another passphrase'), /bad_vault/);
+  // The old vault.json, put back after the rotation, opens with the same passphrase but at a lower epoch: that is
+  // what the app compares with the highest epoch the device has opened, and refuses.
+  assert.ok((await C.openVault(changed, 'another passphrase')).epoch < rotated.epoch);
+});
+
+test('vaults made before epochs still open (epoch 0) and get a seal on their next change', async () => {
+  const { vault } = await C.createVault('a long passphrase', ITER);
+  const legacy = structuredClone(vault);
+  delete legacy.epoch;
+  delete legacy.keys.passphrase.seal;
+  delete legacy.keys.recovery.seal;
+  assert.equal((await C.openVault(legacy, 'a long passphrase')).epoch, 0);
+  const changed = await C.changePassphrase(legacy, 'a long passphrase', 'another passphrase');
+  assert.equal((await C.openVault(changed, 'another passphrase')).epoch, 1);
+  assert.ok(changed.keys.passphrase.seal);
 });

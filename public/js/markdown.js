@@ -231,7 +231,10 @@ export function render(md, { frontmatter = false } = {}) {
     const line = lines[i];
 
     // Code block
-    const fence = line.match(/^\s*(```|~~~)\s*([\w+-]*)\s*$/);
+    // Any line that starts with ``` or ~~~ opens a block (```js title, ```{r}, ````…); the language is the info
+    // string's first word. The same test as the one that ends a paragraph, so no line is left that neither takes.
+    const open = line.match(/^\s*(```|~~~)(.*)$/);
+    const fence = open && [open[0], open[1], (open[2].replace(/^[`~]+/, '').trim().match(/^[\w+-]*/) || [''])[0]];
     if (fence) {
       const body = [];
       i += 1;
@@ -301,6 +304,11 @@ export function render(md, { frontmatter = false } = {}) {
       && !LIST_RE.test(lines[i])
       && !isTableStart(lines, i)
     ) {
+      para.push(inline(lines[i]));
+      i += 1;
+    }
+    // Every turn of the loop must use up at least one line (a line no rule takes is shown as text).
+    if (!para.length) {
       para.push(inline(lines[i]));
       i += 1;
     }

@@ -123,3 +123,13 @@ test('![[attachment]] leaves a safe placeholder for the image or PDF', () => {
 test('![[drawing.sketch]] leaves a placeholder for the drawing', () => {
   assert.ok(render('![[plan.sketch]]').includes('<span class="embed" data-embed="plan.sketch">'));
 });
+
+test('fences with an info string, more backticks or in a quote never hang the renderer', () => {
+  for (const text of ['```js title\ncode\n```', '````\nx\n````', '```{r}\nplot()\n```', '~~~ a b\nx\n~~~', '> ```js x\n> y', '```js title', 'a\n```js x\nb']) {
+    const t0 = Date.now();
+    const html = render(text, { frontmatter: true });
+    assert.ok(Date.now() - t0 < 200, `${JSON.stringify(text)}: ${Date.now() - t0} ms`);
+    assert.ok(html.length < 1000, JSON.stringify(text));
+  }
+  assert.match(render('```js title\nlet a = 1;\n```'), /<pre><code class="language-js">/);
+});

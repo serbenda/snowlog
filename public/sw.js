@@ -4,7 +4,7 @@
 // It never stores anything from GitHub or the sign-in: offline notes come from the app's encrypted
 // cache (IndexedDB), not from here.
 
-const VERSION = 'snowlog-v7';
+const VERSION = 'snowlog-v8';
 const SHELL = [
   './',
   'index.html',
@@ -67,7 +67,10 @@ self.addEventListener('fetch', (ev) => {
         fetch(req),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
       ]);
-      if (res.ok && res.type === 'basic') cache.put(req.mode === 'navigate' ? 'index.html' : req, res.clone());
+      // Only the app's own page is kept as the offline shell: another page on the same host never replaces it.
+      const scope = new URL(self.registration.scope).pathname;
+      const isApp = url.pathname === scope || url.pathname === `${scope}index.html`;
+      if (res.ok && res.type === 'basic' && (req.mode !== 'navigate' || isApp)) cache.put(req.mode === 'navigate' ? 'index.html' : req, res.clone());
       return res;
     } catch (e) {
       const hit = await cache.match(req.mode === 'navigate' ? 'index.html' : req, { ignoreSearch: true });
