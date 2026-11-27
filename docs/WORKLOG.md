@@ -16,6 +16,20 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — After a key change, this device keeps GitHub's copy of vault.json; the 2,000-note e2e fills the switcher
+- **Phase / issue:** — (PR #17)
+- **What:** `keepVaultFile()`: after changing the passphrase, the recovery code or the key (or recovering), the app
+  reads back the `vault.json` it just wrote and keeps that copy and its epoch, only if its key slots are the ones it
+  wrote. The 2,000-note e2e fills the switcher's field instead of typing into the focused element.
+- **Why:** CodeQL still saw the cached vault file as "sensitive data returned by changePassphrase" (`auth.js:93`,
+  `:108`); the copy is the same, but now it is what the repository holds. On CI, the page doesn't always get the
+  focus, so typing into the switcher timed out.
+- **Rejected:** moving the cache to IndexedDB (every unlock path would turn asynchronous, for a false positive).
+- **Files:** public/js/app.js, tests/e2e/flows.e2e.mjs, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 193 pass; `npm run test:e2e` 14 pass; the 2,000-note test three times in a row.
+- **Pending:** confirm the two CodeQL alerts close.
+
 ## 2026-11-27 — CodeQL's first findings: the editor's highlight and caret built from nodes
 - **Phase / issue:** — (PR #17)
 - **What:** the editor's highlight layer is built from `highlight()`'s output with `spansToNodes()` (its `<span

@@ -784,8 +784,7 @@ function showRecover(vaultFile, fresh) {
       }
       S.vault = new Vault(S.repo, dek, { store: noteCache() });
       await S.vault.writeVaultFile(updated);
-      S.vaultFile = updated;
-      Auth.cacheVault(updated);
+      await keepVaultFile(updated);
       await Auth.saveCred(dek, S.cred);
       await S.vault.loadIndex();
       notice(tr('Passphrase changed.'));
@@ -3049,6 +3048,18 @@ function showNewRecoveryCode(code, title = 'Your new recovery code') {
   });
 }
 
+// After this device changed vault.json (passphrase, recovery code, key): this device keeps GitHub's copy of it, the
+// one it just wrote, and its epoch (made here, so it is the right one). Only when GitHub's copy holds the same key
+// slots as what was written: otherwise someone changed it meanwhile, and the next unlock checks it.
+async function keepVaultFile(written) {
+  S.vaultFile = written;
+  let stored = null;
+  try { stored = await Vault.fetchVaultFile(S.repo); } catch { /* offline: kept on the next unlock */ }
+  if (!stored || JSON.stringify(stored.keys) !== JSON.stringify(written.keys)) return;
+  Auth.cacheVault(stored);
+  Auth.rememberEpoch(C.epochHint(stored));
+}
+
 // The vault.json to change: GitHub's, if it still holds the key this device opened; if another device (or someone
 // else) changed it meanwhile, nothing is changed and the user unlocks again first.
 async function currentVaultFile() {
@@ -3081,9 +3092,7 @@ async function rotateKeyModal() {
     });
   if (!result) return;
   S.dek = S.vault.dek;
-  S.vaultFile = result.vaultFile;
-  Auth.cacheVault(result.vaultFile);
-  Auth.rememberEpoch(C.epochHint(result.vaultFile)); // made here, so its epoch is the authenticated one
+  await keepVaultFile(result.vaultFile);
   await Auth.saveCred(S.dek, S.cred);
   await saveExpanded();
   await showNewRecoveryCode(result.recoveryCode);
@@ -3125,9 +3134,7 @@ async function changePassphraseModal() {
       const current = await currentVaultFile();
       const updated = await C.changePassphrase(current, old, p1, CONFIG.kdfIterations);
       await S.vault.writeVaultFile(updated, 'change passphrase');
-      S.vaultFile = updated;
-      Auth.cacheVault(updated);
-      Auth.rememberEpoch(C.epochHint(updated));
+      await keepVaultFile(updated);
       return true;
     });
   if (ok) notice(tr('Passphrase changed.'));
@@ -3142,8 +3149,7 @@ async function renewRecoveryModal() {
       const current = await currentVaultFile();
       const { vault: updated, recoveryCode } = await C.renewRecoveryCode(current, pass, CONFIG.kdfIterations);
       await S.vault.writeVaultFile(updated, 'new recovery code');
-      S.vaultFile = updated;
-      Auth.cacheVault(updated);
+      await keepVaultFile(updated);
       return recoveryCode;
     });
   if (!code) return;
