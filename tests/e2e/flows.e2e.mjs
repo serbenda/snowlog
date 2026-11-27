@@ -323,9 +323,11 @@ test('a vault with 2,000 notes opens and the switcher finds a note quickly', { s
   await b.waitFor('!document.querySelector("#app").hidden && document.querySelectorAll(".tree-row").length > 10', 120000);
   const open = Date.now() - t0;
   await b.click('.ribbon [data-action=switcher]');
+  // Typed once the switcher's field has the focus (on a slow machine it opens a moment later).
+  await b.waitFor('document.activeElement?.closest?.("#modal-root") && document.activeElement.tagName === "INPUT"', 15000);
   const t1 = Date.now();
   await b.type('Note 1999');
-  await b.waitFor('[...document.querySelectorAll(".switcher-list *")].some((n) => n.textContent.includes("Note 1999"))', 15000);
+  await b.waitFor('[...document.querySelectorAll(".switcher-list *")].some((n) => n.textContent.includes("Note 1999"))', 30000);
   const find = Date.now() - t1;
   console.log(`2,000 notes: unlocked and shown in ${open} ms; switcher found one in ${find} ms`);
   assert.ok(open < 60000, `open: ${open} ms`);

@@ -16,6 +16,16 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — e2e: the 2,000-note test types once the switcher has the focus
+- **Phase / issue:** —
+- **What:** the test waits for the switcher's field to have the focus before typing, and gives the result 30 s.
+- **Why:** on CI it typed before the field was focused and timed out (it passed locally and on the PR's other run).
+- **Rejected:** —
+- **Files:** tests/e2e/flows.e2e.mjs, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** the test three times in a row.
+- **Pending:** —
+
 ## 2026-11-27 — The interface in five languages
 - **Phase / issue:** — (the review of Snowlog after bsketch's; bsketch's P20)
 - **What:** `public/js/i18n.js` (`pickLang`, `translator`, `fill`) and one dictionary per language
