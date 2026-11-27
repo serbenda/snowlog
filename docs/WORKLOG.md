@@ -16,6 +16,27 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — The interface in five languages
+- **Phase / issue:** — (the review of Snowlog after bsketch's; bsketch's P20)
+- **What:** `public/js/i18n.js` (`pickLang`, `translator`, `fill`) and one dictionary per language
+  (`i18n-es.js`, `i18n-ca.js`, `i18n-fr.js`, `i18n-pt.js`, 466 strings each); every interface string in `app.js`
+  goes through `tr()`, `trf()` (holes) or `trn()` (singular and plural): 344 wrapped with an AST script (acorn, run
+  locally, not a dependency) and 69 template literals by hand; error texts, save statuses, the help and the settings
+  labels too; `index.html`'s own text translated at start; a Language choice in Settings (this device); the welcome
+  note of a new vault in the chosen language (`welcome.js`). The suffix imports add stays the literal "(imported)" in
+  every language (a vault is shared by devices in different languages). The e2e Chrome starts in English. Cache
+  `snowlog-v11`.
+- **Why:** bsketch speaks five languages; Snowlog only English, though it began in Spanish.
+- **Rejected:** translating at render time inside `h()` (a note titled like an interface word would be translated
+  too); translating the example notes (2,000 words of content, not interface).
+- **Files:** public/js/i18n*.js, public/js/welcome.js, public/js/app.js, public/js/vault.js, public/sw.js,
+  tests/i18n.test.mjs, tests/e2e/flows.e2e.mjs, tests/e2e/cdp.mjs, CHANGELOG.md, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 193 pass (every dictionary has the same strings with the same {holes}, and only strings the
+  code shows); `npm run test:e2e` 13 pass, among them one per language that unlocks, opens the palette, settings,
+  the switcher and help and finds no English left.
+- **Pending:** the example notes stay in English; query error messages (from the query parser) are English.
+
 ## 2026-11-27 — Help inside the app
 - **Phase / issue:** — (the review of Snowlog after bsketch's; bsketch's P26)
 - **What:** `helpModal()` in `public/js/app.js`: a short guide and every keyboard shortcut, in tables; from the

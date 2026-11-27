@@ -4,7 +4,7 @@
 // It never stores anything from GitHub or the sign-in: offline notes come from the app's encrypted
 // cache (IndexedDB), not from here.
 
-const VERSION = 'snowlog-v10';
+const VERSION = 'snowlog-v11';
 const SHELL = [
   './',
   'index.html',
@@ -23,6 +23,11 @@ const SHELL = [
   'js/examples.js',
   'js/github.js',
   'js/graph.js',
+  'js/i18n.js',
+  'js/i18n-ca.js',
+  'js/i18n-es.js',
+  'js/i18n-fr.js',
+  'js/i18n-pt.js',
   'js/import.js',
   'js/kanban.js',
   'js/kvdir.js',
@@ -41,6 +46,7 @@ const SHELL = [
   'js/sketch-textdiagram.js',
   'js/templates.js',
   'js/vault.js',
+  'js/welcome.js',
   'js/zip.js',
 ];
 

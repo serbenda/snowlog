@@ -18,6 +18,8 @@ export function findChrome() {
 function startChrome(chrome, timeoutMs) {
   const profile = mkdtempSync(join(tmpdir(), 'snowlog-e2e-'));
   const proc = spawn(chrome, [
+    // English whatever the machine's language: the walkthroughs find buttons by their English names.
+    '--lang=en-US', '--accept-lang=en-US',
     '--headless=new', '--no-sandbox', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
     // /dev/shm is small on CI machines and containers; without this Chrome can stall while starting.
     '--disable-dev-shm-usage',

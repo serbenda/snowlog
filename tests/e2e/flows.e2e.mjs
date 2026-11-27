@@ -358,3 +358,42 @@ test('help: "?" or the palette open a short guide and every shortcut; not while 
   assert.deepEqual(realErrors(page), []);
   await page.close();
 });
+
+// The interface in each language: nothing of it is left in English (the notes are the user's, not the interface's).
+for (const [lang, unlockWord] of [['es', 'Desbloquear'], ['ca', 'Desbloqueja'], ['fr', 'Déverrouiller'], ['pt', 'Desbloquear']]) {
+  test(`the interface in ${lang}: unlock, the app, the palette, settings and help, with no English left`, { skip, timeout: 180000 }, async () => {
+    const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+    const page = await browser.newPage({ intercept: fake.fetch });
+    await newVault(page);
+    await page.eval(`localStorage.setItem('snowlog.lang', '${lang}')`);
+    await page.goto(base);
+    await page.waitFor('!!document.querySelector("#pp")');
+    assert.equal(await page.eval('document.documentElement.lang'), lang);
+    assert.ok(await page.eval(`document.querySelector('.lock-card').textContent.includes(${JSON.stringify(unlockWord)})`), 'the unlock screen');
+    await page.fill('#pp', PASS);
+    await page.eval('document.querySelector(".lock-card form").requestSubmit()');
+    await page.waitFor('!document.querySelector("#app").hidden && !document.querySelector("#note").hidden', 60000);
+    // Words that only English has (case-sensitive, whole words), in the interface's own text.
+    // (Whole words only: "Cancel·la" is Catalan; "Notes" and "Note" are words in French and Catalan too.)
+    const ENGLISH = /(?<![\p{L}·'])(the|and|with|Search|Settings|Open|Save|Delete|Unlock|Folder|Backup|Help|Today|Close|Cancel|Rename|Graph|reminder|every)(?![\p{L}·'])/u;
+    const scan = () => page.eval(`[...document.querySelectorAll('button, label, h1, h2, h3, caption, th, td, li, p, option, small, [aria-label], [title], [placeholder]')]
+      .filter((n) => !n.closest('#editor, #reading, .tree, .switcher-item .switcher-path, .breadcrumb, .bookmarks, #title, datalist, .search-results') && n.offsetParent !== null)
+      .flatMap((n) => [n.getAttribute('aria-label'), n.getAttribute('title'), n.getAttribute('placeholder'), n.children.length ? '' : n.textContent])
+      .map((x) => (x || '').trim()).filter((x) => ${ENGLISH}.test(x))`);
+    const found = new Set(await scan());
+    for (const [action, then] of [['palette', null], ['settings', null], ['switcher', null]]) {
+      await page.click(`.ribbon [data-action=${action}]`);
+      await page.waitFor('!!document.querySelector("#modal-root").childElementCount');
+      for (const x of await scan()) found.add(`${action}: ${x}`);
+      await page.press('Escape');
+      void then;
+    }
+    await page.eval('document.activeElement.blur(); document.body.focus()');
+    await page.press('?', { shift: true });
+    await page.waitFor('!!document.querySelector(".help-modal")');
+    for (const x of await scan()) found.add(`help: ${x}`);
+    assert.deepEqual([...found], [], `still in English: ${[...found].join(' | ')}`);
+    assert.deepEqual(realErrors(page), []);
+    await page.close();
+  });
+}

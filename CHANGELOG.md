@@ -6,6 +6,10 @@ and versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Catalan, French, Portuguese and Spanish**, chosen in Settings (on each device) or taken from the browser: the whole
+  interface, the help, and the welcome note of a new vault. As in bsketch.
+
+### Added
 - **Help inside the app** (press **?** or "Help" in the command palette): a short guide (encryption, the recovery
   code, offline, links and tasks, backups) and every keyboard shortcut.
 
