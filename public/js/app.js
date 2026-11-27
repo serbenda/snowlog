@@ -2729,6 +2729,7 @@ function commands() {
     cur && ['history', 'Version history', '', () => historyModal(cur)],
     cur && ['delete', 'Delete note', '', () => deleteNote(cur)],
     ['graph', 'Graph view', 'Ctrl+G', () => graphView()],
+    ['help', 'Help and keyboard shortcuts', '?', () => helpModal()],
     cur && ['graph-local', 'Graph of this note', '', () => graphView(cur)],
     ['board', 'New Kanban board', '', () => newBoard()],
     ['drawing', 'New drawing', '', () => newDrawing()],
@@ -2758,6 +2759,46 @@ function commands() {
 
 function recentCommands() {
   try { return JSON.parse(localStorage.getItem('snowlog.recentCommands') || '[]'); } catch { return []; }
+}
+
+// --- Help: a short guide and every keyboard shortcut (from the palette, or with "?") ---
+const HELP_GUIDE = [
+  'Your notes are encrypted on this device before they go to GitHub: the repository only holds files nobody can read without your passphrase or your recovery code.',
+  'Keep the recovery code somewhere safe: it is the only way back in if you forget the passphrase. Nobody, not even Snowlog, can recover your notes without one of them.',
+  'Notes save themselves while you write. Offline, they are kept on this device and go up when the network is back.',
+  'Link notes with [[Another note]]; tags are #words; a line starting with - [ ] is a task. Queries, Kanban boards and drawings live in notes too.',
+  'Make an encrypted backup from time to time (palette → Encrypted backup): it opens with your passphrase or your recovery code.',
+  'On a Mac, use Cmd where it says Ctrl.',
+];
+const HELP_KEYS = [
+  ['Notes', [
+    ['Open a note', ['Ctrl', 'O']], ['Search all notes', ['Ctrl', 'Shift', 'F']], ['New note', ['Ctrl', 'N']],
+    ['Today\'s note', ['Ctrl', 'D']], ['Switch between editing and reading', ['Ctrl', 'E']], ['Save now', ['Ctrl', 'S']],
+    ['Command palette', ['Ctrl', 'P']], ['Graph view', ['Ctrl', 'G']], ['This help', ['?']],
+  ]],
+  ['Writing', [
+    ['Bold', ['Ctrl', 'B']], ['Italic', ['Ctrl', 'I']], ['Link', ['Ctrl', 'K']], ['Tick or untick a task', ['Ctrl', 'Enter']],
+    ['Continue a list', ['Enter']], ['Indent or outdent', ['Tab'], ['Shift', 'Tab']], ['Pick a suggestion ([[ or #)', ['Enter'], ['Tab']],
+  ]],
+  ['Lists and dialogs', [['Move through results', ['↑'], ['↓']], ['Open the selected one', ['Enter']], ['Close', ['Esc']]]],
+];
+
+function helpModal() {
+  return modal((close) => {
+    const keys = (combos) => combos.flatMap((combo, i) => [
+      ...(i ? [' / '] : []),
+      ...combo.flatMap((k, j) => [...(j ? ['+'] : []), h('kbd', {}, k)]),
+    ]);
+    const box = h('div', { class: 'modal help-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Help' },
+      h('h2', {}, 'Help'),
+      h('ul', { class: 'help-guide' }, ...HELP_GUIDE.map((t) => h('li', {}, t))),
+      h('h3', {}, 'Keyboard shortcuts'),
+      ...HELP_KEYS.map(([title, rows]) => h('table', { class: 'help-keys' },
+        h('caption', {}, title),
+        h('tbody', {}, ...rows.map(([what, ...combos]) => h('tr', {}, h('td', {}, what), h('td', {}, ...keys(combos))))))),
+      h('div', { class: 'modal-actions' }, h('button', { class: 'btn primary', type: 'button', onclick: () => close(null) }, 'Close')));
+    return box;
+  });
 }
 
 function commandPalette() {
@@ -3751,6 +3792,11 @@ function setupUi() {
   document.addEventListener('keydown', (ev) => {
     if (!$('menu').hidden && (ev.key === 'Escape' || ((ev.ctrlKey || ev.metaKey) && !ev.target.closest?.('#menu')))) closeMenu();
     if (!S.vault || $('app').hidden || $('modal-root').childElementCount) return;
+    if (ev.key === '?' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !(ev.target.closest?.('input, textarea, select, [contenteditable="true"]'))) {
+      ev.preventDefault();
+      helpModal();
+      return;
+    }
     const mod = ev.ctrlKey || ev.metaKey;
     if (!mod || ev.altKey) return;
     const k = ev.key.toLowerCase();

@@ -16,6 +16,20 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — Help inside the app
+- **Phase / issue:** — (the review of Snowlog after bsketch's; bsketch's P26)
+- **What:** `helpModal()` in `public/js/app.js`: a short guide and every keyboard shortcut, in tables; from the
+  command palette ("Help and keyboard shortcuts") or with "?" outside text fields; styles in `app.css`; e2e test;
+  cache `snowlog-v10`.
+- **Why:** the shortcuts were only listed in the palette, and nothing explained the recovery code or offline use
+  inside the app.
+- **Rejected:** —
+- **Files:** public/js/app.js, public/css/app.css, public/sw.js, tests/e2e/flows.e2e.mjs, CHANGELOG.md,
+  docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 190 pass; `npm run test:e2e` 9 pass.
+- **Pending:** the interface in other languages.
+
 ## 2026-11-27 — Desktop: Cargo.lock committed; known Tauri advisories recorded
 - **Phase / issue:** — (the review of Snowlog after bsketch's)
 - **What:** `desktop/src-tauri/Cargo.lock` from the Desktop run on `640f634` (the `cargo-lock` artifact: 432 crates,

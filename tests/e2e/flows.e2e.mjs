@@ -333,3 +333,28 @@ test('a vault with 2,000 notes opens and the switcher finds a note quickly', { s
   assert.deepEqual(realErrors(b), []);
   await b.close();
 });
+
+test('help: "?" or the palette open a short guide and every shortcut; not while typing', { skip, timeout: 120000 }, async () => {
+  const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+  const page = await browser.newPage({ intercept: fake.fetch });
+  await newVault(page);
+  // In the editor, "?" is just a character.
+  await page.eval('document.getElementById("editor").focus()');
+  await page.type('?');
+  assert.equal(await page.eval('document.querySelector(".help-modal")'), null);
+  // Outside a field, it opens the help.
+  await page.eval('document.activeElement.blur(); document.body.focus()');
+  await page.press('?', { shift: true });
+  await page.waitFor('!!document.querySelector(".help-modal")');
+  assert.ok(await page.eval('document.querySelectorAll(".help-modal tbody tr").length') >= 15);
+  assert.equal(await page.eval('document.querySelector(".help-modal").getAttribute("role")'), 'dialog');
+  await page.press('Escape');
+  await page.waitFor('!document.querySelector(".help-modal")');
+  // From the palette.
+  await page.press('P', { ctrl: true });
+  await page.type('help');
+  await page.press('Enter');
+  await page.waitFor('!!document.querySelector(".help-modal")');
+  assert.deepEqual(realErrors(page), []);
+  await page.close();
+});

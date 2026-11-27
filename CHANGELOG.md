@@ -5,6 +5,10 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Help inside the app** (press **?** or "Help" in the command palette): a short guide (encryption, the recovery
+  code, offline, links and tasks, backups) and every keyboard shortcut.
+
 ### Fixed
 - Accessibility (axe-core on the unlocked app): the calendar is a labelled group of day buttons instead of an
   incomplete ARIA grid; the switcher and palette lists have a name; dialogs keep the form's own role; faint text meets

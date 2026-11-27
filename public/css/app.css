@@ -839,3 +839,14 @@ select.input { appearance: auto; }
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Help: the guide and the keyboard shortcuts. */
+.help-modal { max-width: 640px; max-height: calc(100vh - 48px); overflow: auto; }
+.help-guide { margin: 0 0 12px; padding-left: 18px; font-size: 14px; line-height: 1.5; }
+.help-guide li + li { margin-top: 4px; }
+.help-modal h3 { margin: 12px 0 6px; font-size: 15px; }
+.help-keys { width: 100%; margin-bottom: 8px; border-collapse: collapse; font-size: 13px; }
+.help-keys caption { padding: 4px 0; font-weight: 600; text-align: left; color: var(--text-muted); }
+.help-keys td { padding: 4px 0; border-top: 1px solid var(--border); vertical-align: top; }
+.help-keys td + td { padding-left: 12px; text-align: right; white-space: nowrap; }
+.help-keys kbd { padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; font: inherit; font-size: 12px; }
