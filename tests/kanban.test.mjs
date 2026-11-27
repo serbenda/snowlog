@@ -74,3 +74,13 @@ test('move, add, edit, tick and delete cards and columns', () => {
   assert.equal(b.lanes.length, 3);
   assert.equal(K.parseBoard(BOARD).lanes[0].cards.length, 2, 'the original does not change');
 });
+
+test('a column title with any character (\\r, U+2028) is still a column', () => {
+  for (const title of ['A\r', 'B C', 'D ']) {
+    const src = `## ${title}\n- [ ] card\n`;
+    const board = K.parseBoard(src);
+    assert.equal(board.lanes.length, 1);
+    assert.equal(board.lanes[0].cards.length, 1);
+    assert.equal(K.serializeBoard(K.parseBoard(K.serializeBoard(board))), K.serializeBoard(board));
+  }
+});

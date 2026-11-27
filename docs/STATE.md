@@ -19,6 +19,7 @@ Last updated: 2026-11-26
 - The license, as bsketch's: all rights reserved, no use by AI ([ADR 0007](decisions/0007-proprietary-license.md)).
 
 ## Recently done
+- [P06](phases/P06-fuzz-and-performance.md): fuzzing (one Kanban crash fixed) and a 5,000-note vault within budget.
 - [P05](phases/P05-vault-format.md): the vault format written down ([FORMAT.md](FORMAT.md)) and tested with a vault made by each version.
 - `main` protected (2026-11-26, `setup-repo.sh`): PR required with the six CI checks, no force-push or deletion; `development` and tags protected too.
 - [P01](phases/P01-adopt-project-template.md) closed: the template adopted, everything in English (PR #6).

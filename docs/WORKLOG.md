@@ -16,6 +16,19 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — P06: fuzzing and a big vault
+- **Phase / issue:** P06
+- **What:** `tests/fuzz.test.mjs` (7 properties over the renderer, queries, search, Kanban, zips, merging, links,
+  notes, templates, backups and the graph) and `tests/perf.test.mjs` (5,000 notes); the Kanban parser takes a column
+  heading with the same test that ends the text before it (`s` flag) and never pushes to a missing column.
+- **Why:** bsketch's audits applied to Snowlog.
+- **Rejected:** —
+- **Files:** public/js/kanban.js, tests/fuzz.test.mjs, tests/perf.test.mjs, tests/kanban.test.mjs,
+  docs/phases/P06-fuzz-and-performance.md, docs/ROADMAP.md, docs/STATE.md, CHANGELOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 189+ pass; fuzz 12 seeds × 5,000 runs; the perf times above.
+- **Pending:** the interface with a big vault (with the e2e work).
+
 ## 2026-11-26 — P05: the vault format written down and tested
 - **Phase / issue:** P05
 - **What:** `docs/FORMAT.md`; `scripts/make-vault-fixtures.mjs` makes `tests/fixtures/vaults/<version>.json` with

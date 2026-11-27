@@ -5,6 +5,9 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- A Kanban board whose column title held a carriage return or a line separator could no longer be opened.
+
 ### Added
 - **The vault format is documented and kept** ([docs/FORMAT.md](docs/FORMAT.md)): every vault made by an earlier version
   opens in later ones, tested with a vault made by each version that changed the vault code.
