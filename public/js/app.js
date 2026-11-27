@@ -3052,10 +3052,12 @@ function showNewRecoveryCode(code, title = 'Your new recovery code') {
 // one it just wrote, and its epoch (made here, so it is the right one). Only when GitHub's copy holds the same key
 // slots as what was written: otherwise someone changed it meanwhile, and the next unlock checks it.
 async function keepVaultFile(written) {
-  S.vaultFile = written;
   let stored = null;
   try { stored = await Vault.fetchVaultFile(S.repo); } catch { /* offline: kept on the next unlock */ }
+  // Not readable back, or not what was written: this device's copy stays as it was, so the next key change (or
+  // unlock) compares with GitHub's and asks before going on.
   if (!stored || JSON.stringify(stored.keys) !== JSON.stringify(written.keys)) return;
+  S.vaultFile = stored;
   Auth.cacheVault(stored);
   Auth.rememberEpoch(C.epochHint(stored));
 }

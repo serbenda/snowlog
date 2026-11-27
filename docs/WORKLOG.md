@@ -28,7 +28,8 @@
 - **Files:** public/js/app.js, tests/e2e/flows.e2e.mjs, docs/WORKLOG.md
 - **Commits:** this one.
 - **Tested:** `npm test` 193 pass; `npm run test:e2e` 14 pass; the 2,000-note test three times in a row.
-- **Pending:** confirm the two CodeQL alerts close.
+- **Pending:** confirm the two CodeQL alerts close. (Follow-up: `S.vaultFile` takes GitHub's copy too; the object
+  written stayed there and reached the cache through the unlock path, keeping one alert open.)
 
 ## 2026-11-27 — CodeQL's first findings: the editor's highlight and caret built from nodes
 - **Phase / issue:** — (PR #17)
