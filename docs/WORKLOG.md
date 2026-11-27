@@ -16,6 +16,20 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — Desktop: Cargo.lock committed; known Tauri advisories recorded
+- **Phase / issue:** — (the review of Snowlog after bsketch's)
+- **What:** `desktop/src-tauri/Cargo.lock` from the Desktop run on `640f634` (the `cargo-lock` artifact: 432 crates,
+  all from crates.io); from now on the build is `--locked`. `desktop/src-tauri/osv-scanner.toml` as bsketch's: glib
+  0.18 (RUSTSEC-2024-0429), proc-macro-error (RUSTSEC-2024-0370) and chrono (RUSTSEC-2026-0543) come with Tauri 2,
+  each with its reason and an expiry date.
+- **Why:** the desktop build resolved crate versions on the day; with a lockfile it builds what was reviewed, and
+  OSV-Scanner now reads it.
+- **Rejected:** —
+- **Files:** desktop/src-tauri/Cargo.lock, desktop/src-tauri/osv-scanner.toml, docs/WORKLOG.md
+- **Commits:** this one (`osv-scanner.toml` is a guardrail file: committed by the owner with `GUARDRAILS_OWNER_CHANGE=1`).
+- **Tested:** an OSV query of every locked crate leaves only those three.
+- **Pending:** —
+
 ## 2026-11-27 — Three more e2e flows; accessibility of the unlocked app
 - **Phase / issue:** — (the review of Snowlog after bsketch's)
 - **What:** e2e: recovering with the code on another device (and the first device then asking for the new
