@@ -5,6 +5,24 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Catalan, French, Portuguese and Spanish**, chosen in Settings (on each device) or taken from the browser: the whole
+  interface, the help, and the welcome note of a new vault. As in bsketch.
+
+### Added
+- **Help inside the app** (press **?** or "Help" in the command palette): a short guide (encryption, the recovery
+  code, offline, links and tasks, backups) and every keyboard shortcut.
+
+### Fixed
+- Accessibility (axe-core on the unlocked app): the calendar is a labelled group of day buttons instead of an
+  incomplete ARIA grid; the switcher and palette lists have a name; dialogs keep the form's own role; faint text meets
+  4.5:1 contrast; the app has a level-one heading.
+- A Kanban board whose column title held a carriage return or a line separator could no longer be opened.
+
+### Added
+- **The vault format is documented and kept** ([docs/FORMAT.md](docs/FORMAT.md)): every vault made by an earlier version
+  opens in later ones, tested with a vault made by each version that changed the vault code.
+
 ### Security
 - **The key file can no longer weaken or roll back the encryption** (independent review, [P02](docs/phases/P02-security-review.md)):
   the passphrase's key-derivation work is checked before use (a changed `vault.json` can't make a new passphrase cheap

@@ -1,0 +1,55 @@
+{
+ "made_by": {
+  "name": "2026-11-19-pr7",
+  "commit": "085dc07"
+ },
+ "steps": [
+  "notes",
+  "attachments",
+  "rotation"
+ ],
+ "passphrase": "compatibility test passphrase",
+ "recoveryCode": "P6VFE-KA4MT-5GHDN-L3TQ8-JYMNG",
+ "files": {
+  ".snowlog/index.enc": "jWnxqMu1iq9ZOfAeKAEnq4ahW6QfAWBdhfL5cXUMojLKs4StthbeqtjxqJTva9ad7sGwDzEhQM1L7JSaWNDAoq31KYfPwIerA/enzY0XEShIXPsO754zTYT+bGhZ2Fk5HmN3uNfM+bq8IioCtwHgF74Jr7Zk6gJ68GXWVFa5UZDBasjNPFNuQUOn2mqRIDvRj8ypkwKKHb62DpEZTZGhzNTRsniSMn8xvXAQyuDWAPlAJ6C8WqB656yPYW5I51ZX1t0ir8yvz8+J128IcUS9TmXNBjLxs5eQh9mx9t82unn/D+nAn9RbHm7UdNoe13zVMQ1899CoKKoxOyQQGOEz3bC0ixXPRfctKVrs0QulJjtEtqZliEDYdECXPSljVvK7c4EYZNOz4koETl/1dBiUbVS1/bIA7ZuLo4mwMFgKMYrDgyMw2HJmCeXY+leZWWzxeUsFfUcsWBKYzgcgkeiH/+jJp7D565dzpkUW/Vh1u7uoAO7COPX4VYyZvq8HG9k1HrOEHqXNTaJTcX+fKPYgUQcm2E0S04PtTcikSZC/WLUw1xsiIWNrSuHS/N0gf1n/jDBvi2QKO4m2YuyUHyLy9B0u7ysCYIwX2Ogu9P2wxSFom6rihJcF/DbrHnzXYys1Xo9xfmO87dylCUWAlymPrkKevKRxWUy6Nj1QhqxQSctGj9054057I7T2dlSNiF2dEocYgOQlthy78u9uMfZynRuwT3qAPjhW8l2nTXfGTn1/GbnhrCUDPhtw3KaCUkgsxXf1mDypMhZINUw7j49WDwd1HpnSLBUMSOjC1gMDDP12qTkpazzE6ZnzRXp+cXlC5pe388L1/jhBg7WIsfHGbgiv3oODJ4W3m/rPJwINlj3l34KMkNvQrUZBchkag7llXZjFjawipjw1iMjT6soWxwyoYRD/4tgfS3R2mfth5y/4FHJCkoFTGk+CmP5hnuquzurYvOMCKyDDIhED3hm6kYfOtkyVlN22+P/lwpILE0g1r0koE5K5RPN3laV6u0WnHAAE0pXe+O4UkOfq8wA16Zq3JZzAa72WfkgXELv4rAJ9I8Cgus7F09U/VMZJ+D+/VcHT8ezQ7siXkILTmqfKEKy5Ojfv7zl2L9vmmM1AJTHlQN5K9dJoXKiuoPyA0Io9bKPUrf8rqYI=",
+  ".snowlog/keyring.enc": "0Eoh4Qfhka8+zqeqHCEhSbtYLvKEMNfoA0CXDxIv/4pFntOKz9EZi1T+H9weh8wmQagPlPo6A/g5kMq+TyFAa3fOapjzSU06waY1h0EcfV+SKMd9N21njKEs0ktdZgWCvTQha3esdWIFvnOLTDBM7FAoKAsaBcw=",
+  ".snowlog/vault.json": "{\n  \"app\": \"snowlog\",\n  \"v\": 1,\n  \"created\": \"2026-11-26T11:31:35.284Z\",\n  \"keys\": {\n    \"passphrase\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"Cko09iC0rHDssGhO41+zzQ==\"\n      },\n      \"wrapped\": \"9/ZAbIS/V2SIjnXGKJ42rbj8GXi93y0tRZn/zY5tIsq3JSsCk2RaY1xylxHJTZUso6ylFrMvvcIu8xP9\"\n    },\n    \"recovery\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"/XMyqPkb/C0AvzWvUeI6Yw==\"\n      },\n      \"wrapped\": \"BvwSRgColvP2XcAm4jXZv8+IJ9gYD3oBbMn9CVpt/DLz0LgE12tqX/XlHW1VDIiMwNcr2CoY+jc9VRzm\"\n    }\n  },\n  \"rotated\": \"2026-11-26T11:31:35.331Z\"\n}\n",
+  "a/4bfd23f032a179d5a8b9edd3.enc": "tjgkdjpIws11T9qJAyRQvgMkLTzWelLxNWBp8djsQi1XT2YNfDA8wG2BvV/FAI0w6l0gT8B6cVJsa8l4EcTgGiLjNuRPXJAJmlCjhqaa9GGcMslBP2PesEkE3G6SnMsGMpUuYGcvQqzL278b+cOaIBXHAtJUW5m1bO8stl6B9NDnjclt5Vqd97edV7KhE6pFANghgjNILBTO08Aqxado",
+  "a/5c4ca05592eb18bfd17b8059.enc": "xIjQNEyzYUP57aP3sVabHIr7kW2ojYPkvbOofu+0GfMmtkAuDP2t3QE7W1RWZrC+yWjRyks7tYsrwfwj3wxBVbK4qf8JmA0TXRqpADAwP/DPUXHKxjSrnYo6PVbESN5bFKA=",
+  "n/bd9dff2ac86c25404a62a29b.enc": "BVYlbq4EvJthY8OMTsDClzoMDe1s5uQtnNCHYDJKQHvuFqEgJK3W229HyZo+PRcX4FO8WQ==",
+  "n/cff03991c61b015953ae6847.enc": "HMDgAO1i5/xmeO23zLc314+m937Xoi+twxaUOdSkJRl2rCXG69DIu4fWoPj3OvUAinHMwwClqhFpLgoFGA6KtQNPgzVbZMKE/XEbeP6vkjTVJzc9LNeNw/+bs6hQwWmYIm7lD2tMnpgNRDQbj+xuUjyi2NCtfGotv4on21c9ggIYJi48VEsZvEF/sL/MJxbw7dm8ifaLifJFgOnrYNc/Ca9fs+P6asNmoLlHY0ZPz7uOa3FKlMBEmRuHyyktMj/ZGfvlYF/ubdJ2n/j70lAUEnOjI8Q+6VQrNC9ZaWT2zFfHJ/LnP15f3TDMKOqkRrukvBRr+jTG+aSYfZaJIGwBGx+I3Q4GZzVNNgPc6mHYAgeW8IA7y4krYMT7/+NgmJpsy5BuQQxQVkemjUmujGDvSgdFSMa5K37WG2gg124iY3nqWvB2EZZbfsbzCq9Np3TQrwT85/gadjzL5ctS7NA2EYD2tzHsihYUIoa6wtTkQv/nns5OcWn5k0iSc8CZeqZ5rAzxnDuTisQtiGCDyqhzkMNqSHQokbV++TCDmWGhYDh3RpjgNviElVDWVStoVHJwMiTR2ZqUf0HPyogLFB6LEle3saFh4yzYkGLjKgvsWg/8pO6qiCqoQB6aL/+BB//peZoJ9KujX4iHPfxq9RqwKPc86Yyh7qNoklIh6A+hZma9GqccUcgaXnDLe2df3r6tWKK6f2l1BY8RqM6u4XLXOMsJSNsKNmSMIwB93yCIJ28OhLxVODSa7x5ixD4phnu1fS7RSaOfvrnLLkp/S6yVVJ7Xxm83oaIX49eH+InKmrLFjHl/x+3QSPv4nuJNAXUbbUae0yCR5B8KgOZbsrMYC8A2ItBxRA72cSt34Xu5tW/iU8TTbFIaqcYTQdXcoi4hSUVzTqU50YEyf7oisWPu5B0OXA02GjA5NRksOEGY2HrzaLxkKF91xcS4M5idbxHwxA++pMG/ZEtJkkUBNh+coN5Jv0u2q9QAnFm+kAFxI18/lF09TFmyqIhGEDU6XuTx9XZWRUCneQJAvXxLbYNAsBQM/KOAj+ewFHj6zrkcm1sQWTHG6qMPEURdDJoeoJv8jPN82B/4jeTKVA+YMgrOM8aLspXRpw==",
+  "n/d3085f86142baca0d648a6df.enc": "YT+nIpvAmyexlI3ns1tcfo/f67QzvewAUEYO9ZXPp9neqljv3y1DG94VLCass8zKd7kWL5o3TwmIkupTDYyPYnvhb5abLaP3rNvLr3HP0lmgzVVeAvmHPD0kuuDkkpF0ElQArd9vHEcOOVhmye4=",
+  "n/d810695b0ce0e81f5feb6f68.enc": "dnR//m6MnsKvHF5XyxnxZO+cKhmyx+ZS1SPRZAXMHKJsMgp5QA=="
+ },
+ "expect": {
+  "notes": [
+   {
+    "path": "After rotation",
+    "text": "written with the new key"
+   },
+   {
+    "path": "Diary/Monday",
+    "text": "it rained"
+   },
+   {
+    "path": "Projects/Plan",
+    "text": "# Plan\n\nÑandú, café, 😀 — and a [[Diary/Monday]] link.\n\n- [ ] a task #idea\n"
+   },
+   {
+    "path": "Welcome",
+    "text": "Your personal notebook, end-to-end encrypted.\n\n## The basics\n- Notes save themselves when you stop typing.\n- **Ctrl+E** switches between editing and reading.\n- **Ctrl+O** opens the quick note switcher.\n- **Ctrl+N** creates a new note.\n- Link notes with [[Another note]]: if it does not exist, it is created when you click it.\n\n## Formatting\n- [x] Task lists\n- **Bold**, *italic*, ~~strikethrough~~ and ==highlight==\n- `inline code` and code blocks\n\n| Format | How to write it |\n| --- | --- |\n| Table | `| a | b |` and below it `|---|---|` |\n| Callout | `> [!tip] Title` |\n| Tag | #idea |\n\n> [!tip] Callouts\n> Use [!note], [!info], [!warning], [!danger], [!example]… and add - to fold them.\n\n> [!info] Truly private\n> The repository only holds unreadable files. Without your passphrase, nobody can read this.\n"
+   }
+  ],
+  "attachments": [
+   [
+    "Projects/picture.png",
+    "c414cd0e204de974f73753c7e28d7638e7b3691bb8b1a2bab6b25bb7fed7ce77"
+   ],
+   [
+    "Projects/board.sketch",
+    "16b690335cce49c4788195a1903498dcb088da54d5958d51f2623071eb139215"
+   ]
+  ],
+  "library": null
+ }
+}

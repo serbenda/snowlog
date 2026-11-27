@@ -15,3 +15,4 @@ One record per decision that is costly to undo or that someone (you or Claude) m
 | [0005](0005-agent-access-through-a-local-clone.md) | Agent and script access through a local clone and an MCP server | accepted |
 | [0006](0006-adopt-project-template-in-english.md) | Adopt project-template 1.0.0 in full mode, everything in English | accepted |
 | [0007](0007-proprietary-license.md) | The license: all rights reserved, no use by AI | accepted |
+| [0008](0008-vault-format-version-1.md) | The vault format version 1, and the promise to keep reading it | accepted |

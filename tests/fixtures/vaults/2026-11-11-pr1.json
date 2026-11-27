@@ -1,0 +1,36 @@
+{
+ "made_by": {
+  "name": "2026-11-11-pr1",
+  "commit": "fb63a22"
+ },
+ "steps": [
+  "notes"
+ ],
+ "passphrase": "compatibility test passphrase",
+ "recoveryCode": "MMKNA-GL7CM-ZBBR7-73VRY-S464D",
+ "files": {
+  ".snowlog/index.enc": "+SDS6NzlsrV4ufsHGMu2ISJol22G4oDDM+T+5f9YYYEMBLUGUpn48ATwJVZgadcTWY3UjHjkUuv7k01BqJcX5cY2/0vL7Y9wqOxWWQmyJJIaajLu0cgFNTIGEolEySSc3QwAF1XU7hKZob2Cn0x51LBqLlSrHpBv6FZkv+bMNBI+Yd4ndZGwf6EhP5EiaSnG2E+gSwh9cmqB4yqSdDQdDCuyV6S8paCZ/ARM3iuErc/189WF9Rxv3obMU/1vpmcE+xHrj8RCEIOOKFfZIcw4o5FfRblaLG7BGOzNr1Szj14AdonwWHvUQoWdjTZTxmnZ+IuwI6Mf3XVl+YfMp3jGGQkIbvSbu6t2vI9hMNswRAMRrgH7hIB/2XqD4Gq7/+wdvlcQ5AU2YbYE7lyJizojbjoxKn83H6CIWwDzh1r01+an/oqZPPCM9guHTXgovfN9jTgs68lsX/U35878un84RWWmYn5LoTJN1x8rhmE0iwu2QMe06zUS18zADgB2wTFWKSpYvL4QS9Ry0EqKk1sLwNR9u/vi7kTbfGW85oN4vZLF/xiL8nfCLvJdNYaU+VSw5hLU57xMOaH6Z6guqIzLmu9F",
+  ".snowlog/vault.json": "{\n  \"app\": \"snowlog\",\n  \"v\": 1,\n  \"created\": \"2026-11-26T11:31:34.489Z\",\n  \"keys\": {\n    \"passphrase\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"RGnIsINWhZSokUd9ayLTYQ==\"\n      },\n      \"wrapped\": \"Fj1X/K99Ha0gwr3ZzjIE6ycxx2+rvE5iwUDqzSkZYKJswFaGdplyuNSt/NShUW2BW/j+4rxhUh9Qwcc/\"\n    },\n    \"recovery\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"VMUBlyQorEsXI9QjU0mnLg==\"\n      },\n      \"wrapped\": \"zL6k3jwisDe/FIyuEQzBvQosO419B7PWCAH8/rT1UqcJ53VV4Fz1SO7bQi9W1TJC4oZnowSWuCiWcfGg\"\n    }\n  }\n}\n",
+  "n/06be065b849cf76aef68d71f.enc": "lq/7F0paT/c3jNM1kYPJ5bAyfUnM2oIzznGXTg8E9sgMCFq1rQ==",
+  "n/095b824f1671dd21a043c9d7.enc": "ZXbd+PIkosG0j3FTomGxD80NLbdJLrZm5956jpvB/7gwICSkSVYHQHCEJ1KPZfjzv+YjJl/oE5GIOwqZAn9jDwaktfbekbgDSQAxoFNQ8AGnswr390X6DTmpBpadQF1jnHDloRhyqeWsGSETkPaDtE0/H57dvN5UdewmzbZac0ZtZPQj28Sn54I6sMZYNcvE0h3iMAdTXvoh63LPVzaJeo9CKBOixmSMWVVsB6Tia/FvOtp+p6bBaCuBAVaXfKtKuiEYKfK1dj45D4hz/9Dfvbn86vAJ6Zz2RmlPApxBv7Xst/VbkCV+j4ruVkyCgSP8CJk8gjmh/lR2dHgxS6UNWMWAgs1YEbNEKJwpsZmlWkIQ+spz0cNrxh+OGK2KYDAH3kKOAJZiemAM7kezbVNcAqLCfwsjDTuYlYQ6Jse/5nQiodMDt+sXTDRZSszB/+dbfC5OYvLhNysYMVlhBQgfhCCPyJ1pG/pMXpmjmOX+Z3jV1VVJZDjjpmA0kavX1ljc4jcoNxRHSGKUi1In9DKm8yYZ0A8c6P3f12B0uUi2bWGy53DGP2QokZObF0sYwhn9hVrvmtjRVnbFAU+2LiiykORyEfg3UrXS80KoAyS36LiQig7eUyEQYbvDRhbRUEKbLUntB9k8Gef7MaBXJ5NWBdLATOP1YwGZtqC45b6lE9nU8rbGJAuMzEYCcBp0UVvI6AA6hxylJC2SqeCuP5KJKgNakTqu425Y7cK8eD5ypvnCxrTZtBtoQSVnmsK2E7GyRAnvN9j/bhTiNdJOjbaavOxNG8BICicAjGYu3q9CYXf1JZnEdsfagQkq2oKiOQeHJn5TvYpOVIdewaUEq8Q4NeZb50oqfaWDlkGzG7lbT74T9d4bc94Mgd9p7pYirb2285Wua6bC3y7zdkpen6j8S13UI8cVyBTZH273ga6BJdz2+iOhNUWoTrCxEfdBZixb0YRCMgEwyIX5Oppjgw7RbIbUt2CwwOzATVzcULb7RkiD0Ab3q6nVAGQOeecc+kQKOrkjoEdTMGfBjynSbGCObA1fae7gLJWJWZcVixpCAmCStYWNydMaIVjThtzaC2BZxEEJ4QCypFP7tRLAmMFgyZTB2H4x7g==",
+  "n/7b226aa8b37748c8ecbb81ae.enc": "j5eSWTQmH5lD8zGgeAbsH24lmGo/Fx8Pkfw/PI62Ggn1SPtU6/0LZltqoQLl46M/gEkMpClDgPUTj8IqOwIwIb4cCu6woJbZ2V4MEJZcXVrskxpIVaMMyO6nGXh+qWgtrh9gbD7SpCpffXtnUXk="
+ },
+ "expect": {
+  "notes": [
+   {
+    "path": "Bienvenido",
+    "text": "Tu cuaderno personal, cifrado de extremo a extremo.\n\n## Lo básico\n- Las notas se guardan solas al dejar de escribir.\n- **Ctrl+E** cambia entre editar y leer.\n- **Ctrl+O** abre el selector rápido de notas.\n- **Ctrl+N** crea una nota nueva.\n- Enlaza notas con [[Otra nota]]: si no existe, se crea al pulsarla.\n\n## Formato\n- [x] Listas de tareas\n- **Negrita**, *cursiva*, ~~tachado~~ y ==resaltado==\n- `código en línea` y bloques de código\n\n| Formato | Cómo se escribe |\n| --- | --- |\n| Tabla | `| a | b |` y debajo `|---|---|` |\n| Callout | `> [!tip] Título` |\n| Etiqueta | #idea |\n\n> [!tip] Callouts\n> Usa [!note], [!info], [!warning], [!danger], [!example]… y añade - para plegarlos.\n\n> [!info] Privado de verdad\n> En el repo solo hay ficheros ilegibles. Sin tu frase de paso, nadie puede leer esto.\n"
+   },
+   {
+    "path": "Diary/Monday",
+    "text": "it rained"
+   },
+   {
+    "path": "Projects/Plan",
+    "text": "# Plan\n\nÑandú, café, 😀 — and a [[Diary/Monday]] link.\n\n- [ ] a task #idea\n"
+   }
+  ],
+  "attachments": [],
+  "library": null
+ }
+}

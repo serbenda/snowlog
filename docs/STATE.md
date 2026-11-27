@@ -19,6 +19,10 @@ Last updated: 2026-11-26
 - The license, as bsketch's: all rights reserved, no use by AI ([ADR 0007](decisions/0007-proprietary-license.md)).
 
 ## Recently done
+- The review after bsketch's: vault format (P05), fuzzing and a big vault (P06), CodeQL and Scorecard, the desktop build pinned (`Cargo.lock`) and attested, more e2e, accessibility of the unlocked app, help inside the app, and the interface in five languages.
+- [P06](phases/P06-fuzz-and-performance.md): fuzzing (one Kanban crash fixed) and a 5,000-note vault within budget.
+- [P05](phases/P05-vault-format.md): the vault format written down ([FORMAT.md](FORMAT.md)) and tested with a vault made by each version.
+- `main` protected (2026-11-26, `setup-repo.sh`): PR required with the six CI checks, no force-push or deletion; `development` and tags protected too.
 - [P01](phases/P01-adopt-project-template.md) closed: the template adopted, everything in English (PR #6).
 - bsketch's drawing engine after its pre-2.0 audits; Claude Code pinned by a lockfile in the dev container; Pages
   built and deployed in separate jobs (PRs #11, #12, #15).
@@ -29,11 +33,10 @@ Last updated: 2026-11-26
 - The day-to-day features, the portable file and the earlier three-phase plan (PR #4). Details in the CHANGELOG.
 
 ## Next
-1. Owner: run `./scripts/setup-repo.sh` so the CI checks are required on `main` (no ruleset yet).
-2. P02 (agent part now; the owner tests on real devices).
-3. P03: agent access, phase 2 ([AGENT_ACCESS.md](AGENT_ACCESS.md) → Next).
-4. P04: the first release (`v1.0.0`).
-5. Ideas for later: PKCE in the sign-in ([R-003](RISKS.md)) and a signed index to detect replayed versions ([R-002](RISKS.md)).
+1. P02: the agent's part is done (PR #16); the owner tests on real devices (R-004, R-009) to close it.
+2. P03: agent access, phase 2 ([AGENT_ACCESS.md](AGENT_ACCESS.md) → Next).
+3. P04: the first release (`v1.0.0`).
+4. Ideas for later: PKCE in the sign-in ([R-003](RISKS.md)) and a signed index to detect replayed versions ([R-002](RISKS.md)).
 
 ## Blocked / awaiting decision
 - GitHub Actions doesn't start jobs: "recent account payments have failed or your spending limit needs to be

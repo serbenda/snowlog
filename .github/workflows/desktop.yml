@@ -35,6 +35,10 @@ jobs:
             args: --bundles appimage
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write      # to sign the provenance attestation
+      attestations: write  # to store it in the repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -53,13 +57,34 @@ jobs:
         if: runner.os == 'macOS'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
+      # The Tauri CLI, at the versions in desktop/package-lock.json (checked against their hashes), with no
+      # install scripts.
+      - name: Tauri CLI
+        working-directory: desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Icons
         working-directory: desktop
-        run: npx --yes @tauri-apps/cli@2.12.4 icon icon.png
+        run: npx --no-install tauri icon icon.png
 
+      # With desktop/src-tauri/Cargo.lock in the repository, the Rust crates are the ones it pins (--locked).
+      # Without it (the first time), the build resolves them and the Linux job leaves the lockfile as an artifact
+      # ("cargo-lock") to commit.
       - name: Build
+        id: build
         working-directory: desktop
-        run: npx --yes @tauri-apps/cli@2.12.4 build ${{ matrix.args }}
+        shell: bash
+        run: |
+          if [ -f src-tauri/Cargo.lock ]; then locked=--locked; echo "generated=no" >> "$GITHUB_OUTPUT"
+          else locked=; echo "generated=yes" >> "$GITHUB_OUTPUT"; fi
+          npx --no-install tauri build ${{ matrix.args }} -- $locked
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: runner.os == 'Linux' && steps.build.outputs.generated == 'yes'
+        with:
+          name: cargo-lock
+          path: desktop/src-tauri/Cargo.lock
+          retention-days: 7
 
       - name: Prepare the executable
         shell: bash
@@ -85,6 +110,11 @@ jobs:
             tauri-driver > driver.log 2>&1 &
             node desktop/smoke-test.mjs "$PWD/desktop/src-tauri/target/release/snowlog" "$0" || { cat driver.log; exit 1; }' \
             '!document.getElementById("lock").hidden || !document.getElementById("app").hidden'
+
+      # Signed provenance for each executable (gh attestation verify <file> -R serbenda/snowlog).
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: out/*
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:

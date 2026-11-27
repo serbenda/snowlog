@@ -1,0 +1,21 @@
+# Known vulnerabilities that OSV-Scanner may skip, each with its reason and an expiry date
+# (after it, the scan fails again and the entry must be reviewed). Changed only by the owner.
+
+# glib 0.18 (gtk-rs, Linux only) comes from Tauri 2 and WebKitGTK; the fix (0.20) needs Tauri to move on.
+# Snowlog never calls glib::VariantStrIter, the unsound code.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+ignoreUntil = 2027-05-18
+reason = "glib 0.18 is pulled in by Tauri 2 (gtk-rs 0.18); VariantStrIter is not used; no fix within Tauri 2.12"
+
+# proc-macro-error: unmaintained, a build-time macro of glib 0.18; nothing of it runs in the app.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2027-05-18
+reason = "Unmaintained build-time macro used by glib-macros 0.18 via Tauri 2; not in the shipped code"
+
+# chrono: unmaintained; an optional dependency of serde_with (tauri-utils) that is not compiled.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-05-18
+reason = "chrono is only an optional dependency of serde_with in Cargo.lock; cargo tree shows it is not built"

@@ -16,6 +16,167 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — The in-memory vault.json is GitHub's copy too
+- **Phase / issue:** — (PR #17)
+- **What:** `keepVaultFile()` sets `S.vaultFile` to the copy read back from GitHub (not the object written), and
+  leaves it unchanged when that copy can't be read or differs.
+- **Why:** the written object, kept in `S.vaultFile`, still reached the cache through the unlock path, so CodeQL kept
+  one "clear-text storage" alert open (`auth.js:93`).
+- **Rejected:** —
+- **Files:** public/js/app.js, docs/WORKLOG.md
+- **Commits:** `e4e7627` and this one.
+- **Tested:** `npm test` 193 pass; `npm run test:e2e` 14 pass.
+- **Pending:** —
+
+## 2026-11-27 — After a key change, this device keeps GitHub's copy of vault.json; the 2,000-note e2e fills the switcher
+- **Phase / issue:** — (PR #17)
+- **What:** `keepVaultFile()`: after changing the passphrase, the recovery code or the key (or recovering), the app
+  reads back the `vault.json` it just wrote and keeps that copy and its epoch, only if its key slots are the ones it
+  wrote. The 2,000-note e2e fills the switcher's field instead of typing into the focused element.
+- **Why:** CodeQL still saw the cached vault file as "sensitive data returned by changePassphrase" (`auth.js:93`,
+  `:108`); the copy is the same, but now it is what the repository holds. On CI, the page doesn't always get the
+  focus, so typing into the switcher timed out.
+- **Rejected:** moving the cache to IndexedDB (every unlock path would turn asynchronous, for a false positive).
+- **Files:** public/js/app.js, tests/e2e/flows.e2e.mjs, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 193 pass; `npm run test:e2e` 14 pass; the 2,000-note test three times in a row.
+- **Pending:** confirm the two CodeQL alerts close. (Follow-up: `S.vaultFile` takes GitHub's copy too; the object
+  written stayed there and reached the cache through the unlock path, keeping one alert open.)
+
+## 2026-11-27 — CodeQL's first findings: the editor's highlight and caret built from nodes
+- **Phase / issue:** — (PR #17)
+- **What:** the editor's highlight layer is built from `highlight()`'s output with `spansToNodes()` (its `<span
+  class>` tags become elements, the escaped text becomes text nodes) and the caret mirror from a text node and a
+  span: no `innerHTML` with text from the editor. `secretForm()` renamed `keyChangeForm()` (it returns the new
+  `vault.json`, which is public). e2e: HTML typed in a note stays text in the highlight. Cache `snowlog-v12`.
+- **Why:** CodeQL's first run on Snowlog flagged 4 alerts: XSS through DOM (`app.js:85`, `:1649`) and clear-text
+  storage (`auth.js:93`, `:108`). The text was already escaped and the stored data isn't secret, but building nodes
+  removes the HTML parser from the path, and the name was what made CodeQL take the vault file for a secret.
+- **Rejected:** dismissing the alerts (not allowed to the agent; fixing the code is better where it is cheap).
+- **Files:** public/js/app.js, public/sw.js, tests/e2e/flows.e2e.mjs, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 193 pass; `npm run test:e2e` 14 pass.
+- **Pending:** confirm on the PR that CodeQL closes the 4 alerts.
+
+## 2026-11-27 — e2e: the 2,000-note test types once the switcher has the focus
+- **Phase / issue:** —
+- **What:** the test waits for the switcher's field to have the focus before typing, and gives the result 30 s.
+- **Why:** on CI it typed before the field was focused and timed out (it passed locally and on the PR's other run).
+- **Rejected:** —
+- **Files:** tests/e2e/flows.e2e.mjs, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** the test three times in a row.
+- **Pending:** —
+
+## 2026-11-27 — The interface in five languages
+- **Phase / issue:** — (the review of Snowlog after bsketch's; bsketch's P20)
+- **What:** `public/js/i18n.js` (`pickLang`, `translator`, `fill`) and one dictionary per language
+  (`i18n-es.js`, `i18n-ca.js`, `i18n-fr.js`, `i18n-pt.js`, 465 strings each); every interface string in `app.js`
+  goes through `tr()`, `trf()` (holes) or `trn()` (singular and plural): 344 wrapped with an AST script (acorn, run
+  locally, not a dependency) and 69 template literals by hand; error texts, save statuses, the help and the settings
+  labels too; `index.html`'s own text translated at start; a Language choice in Settings (this device); the welcome
+  note of a new vault in the chosen language (`welcome.js`). The suffix imports add stays the literal "(imported)" in
+  every language (a vault is shared by devices in different languages). The e2e Chrome starts in English. Cache
+  `snowlog-v11`.
+- **Why:** bsketch speaks five languages; Snowlog only English, though it began in Spanish.
+- **Rejected:** translating at render time inside `h()` (a note titled like an interface word would be translated
+  too); translating the example notes (2,000 words of content, not interface).
+- **Files:** public/js/i18n*.js, public/js/welcome.js, public/js/app.js, public/js/vault.js, public/sw.js,
+  tests/i18n.test.mjs, tests/e2e/flows.e2e.mjs, tests/e2e/cdp.mjs, CHANGELOG.md, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 193 pass (every dictionary has the same strings with the same {holes}, and only strings the
+  code shows); `npm run test:e2e` 13 pass, among them one per language that unlocks, opens the palette, settings,
+  the switcher and help and finds no English left.
+- **Pending:** the example notes stay in English; query error messages (from the query parser) are English.
+
+## 2026-11-27 — Help inside the app
+- **Phase / issue:** — (the review of Snowlog after bsketch's; bsketch's P26)
+- **What:** `helpModal()` in `public/js/app.js`: a short guide and every keyboard shortcut, in tables; from the
+  command palette ("Help and keyboard shortcuts") or with "?" outside text fields; styles in `app.css`; e2e test;
+  cache `snowlog-v10`.
+- **Why:** the shortcuts were only listed in the palette, and nothing explained the recovery code or offline use
+  inside the app.
+- **Rejected:** —
+- **Files:** public/js/app.js, public/css/app.css, public/sw.js, tests/e2e/flows.e2e.mjs, CHANGELOG.md,
+  docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 190 pass; `npm run test:e2e` 9 pass.
+- **Pending:** the interface in other languages.
+
+## 2026-11-27 — Desktop: Cargo.lock committed; known Tauri advisories recorded
+- **Phase / issue:** — (the review of Snowlog after bsketch's)
+- **What:** `desktop/src-tauri/Cargo.lock` from the Desktop run on `640f634` (the `cargo-lock` artifact: 432 crates,
+  all from crates.io); from now on the build is `--locked`. `desktop/src-tauri/osv-scanner.toml` as bsketch's: glib
+  0.18 (RUSTSEC-2024-0429), proc-macro-error (RUSTSEC-2024-0370) and chrono (RUSTSEC-2026-0543) come with Tauri 2,
+  each with its reason and an expiry date.
+- **Why:** the desktop build resolved crate versions on the day; with a lockfile it builds what was reviewed, and
+  OSV-Scanner now reads it.
+- **Rejected:** —
+- **Files:** desktop/src-tauri/Cargo.lock, desktop/src-tauri/osv-scanner.toml, docs/WORKLOG.md
+- **Commits:** this one (`osv-scanner.toml` is a guardrail file: committed by the owner with `GUARDRAILS_OWNER_CHANGE=1`).
+- **Tested:** an OSV query of every locked crate leaves only those three.
+- **Pending:** —
+
+## 2026-11-27 — Three more e2e flows; accessibility of the unlocked app
+- **Phase / issue:** — (the review of Snowlog after bsketch's)
+- **What:** e2e: recovering with the code on another device (and the first device then asking for the new
+  passphrase); a `vault.json` from before a rotation, put back in the repository, refused in the interface; a
+  2,000-note vault (unlocked and shown in about 0.1 s, the switcher finds a note in 3 ms). axe-core on 8 states of the
+  unlocked app found 5 issues, all fixed: the calendar's role (`group` with the month as its name), names for the
+  switcher and palette lists, `role=dialog` moved from the forms to the modal layer, `--text-faint` raised to 4.5:1,
+  a hidden level-one heading in `main`. Cache `snowlog-v9`.
+- **Why:** the e2e covered 5 flows; accessibility had only been checked on the sign-in screens.
+- **Rejected:** —
+- **Files:** tests/e2e/flows.e2e.mjs, public/js/app.js, public/css/app.css, public/index.html, public/sw.js,
+  CHANGELOG.md, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 190 pass; `npm run test:e2e` 8 pass; axe-core: 0 violations in 8 states.
+- **Pending:** —
+
+## 2026-11-27 — Desktop build pinned and attested; CodeQL and Scorecard
+- **Phase / issue:** — (the review of Snowlog after bsketch's)
+- **What:** `desktop/package.json` and `package-lock.json` pin the Tauri CLI (2.12.6), installed with `npm ci` instead
+  of `npx --yes`; `desktop/src-tauri/Cargo.lock` no longer ignored: the Desktop workflow builds `--locked` when it is
+  committed and, the first time, leaves the one it resolved as the `cargo-lock` artifact to commit; signed provenance
+  for each executable (`attest-build-provenance`); Dependabot for `/desktop`; `codeql.yml` and `scorecard.yml` as
+  bsketch's.
+- **Why:** the desktop app was built with whatever crate versions were newest that day, and the CLI was fetched
+  unpinned; Snowlog had no code scanning or Scorecard.
+- **Rejected:** generating `Cargo.lock` on this Mac (no Rust toolchain here).
+- **Files:** desktop/package.json, desktop/package-lock.json, .gitignore, .github/workflows/desktop.yml,
+  .github/workflows/codeql.yml, .github/workflows/scorecard.yml, .github/dependabot.yml, docs/WORKLOG.md
+- **Commits:** this one (guardrail files: committed by the owner with `GUARDRAILS_OWNER_CHANGE=1`).
+- **Tested:** the workflows run on the push; the Desktop run makes the first `Cargo.lock`.
+- **Pending:** commit the `cargo-lock` artifact as `desktop/src-tauri/Cargo.lock`.
+
+## 2026-11-27 — P06: fuzzing and a big vault
+- **Phase / issue:** P06
+- **What:** `tests/fuzz.test.mjs` (7 properties over the renderer, queries, search, Kanban, zips, merging, links,
+  notes, templates, backups and the graph) and `tests/perf.test.mjs` (5,000 notes); the Kanban parser takes a column
+  heading with the same test that ends the text before it (`s` flag) and never pushes to a missing column.
+- **Why:** bsketch's audits applied to Snowlog.
+- **Rejected:** —
+- **Files:** public/js/kanban.js, tests/fuzz.test.mjs, tests/perf.test.mjs, tests/kanban.test.mjs,
+  docs/phases/P06-fuzz-and-performance.md, docs/ROADMAP.md, docs/STATE.md, CHANGELOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 189+ pass; fuzz 12 seeds × 5,000 runs; the perf times above.
+- **Pending:** the interface with a big vault (with the e2e work).
+
+## 2026-11-26 — P05: the vault format written down and tested
+- **Phase / issue:** P05
+- **What:** `docs/FORMAT.md`; `scripts/make-vault-fixtures.mjs` makes `tests/fixtures/vaults/<version>.json` with
+  each version's own code (temporary worktrees of PRs #1, #4, #5, #6, #7, #9, #16); `tests/vault-compat.test.mjs`
+  opens, reads, writes and recovers each, and checks FORMAT.md documents every field; `seed()` in the fake GitHub;
+  ADR 0008.
+- **Why:** bsketch's format freeze (its P27) applied to Snowlog, where losing access to notes is worse.
+- **Rejected:** hand-made fixtures (not what each version wrote); a version 2 format before the first release.
+- **Files:** docs/FORMAT.md, scripts/make-vault-fixtures.mjs, tests/vault-compat.test.mjs, tests/fixtures/vaults/*,
+  tests/fake-github.mjs, docs/phases/P05-vault-format.md, docs/decisions/*, docs/ROADMAP.md, docs/STATE.md,
+  CHANGELOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` passes.
+- **Pending:** —
+
 ## 2026-11-26 — P02: independent security review, findings fixed (agent part)
 - **Phase / issue:** P02
 - **What:** an independent review (a read-only sub-agent) found 1 High, 2 Medium, 4 Low and 2 Info; fixed: PBKDF2

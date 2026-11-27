@@ -225,3 +225,197 @@ test('rotating the key on one device: the other asks for the passphrase and does
   await a.close();
   await b.close();
 });
+
+// A second device: signed in with a personal token, on the unlock screen.
+async function otherDevice(fake) {
+  const b = await browser.newPage({ intercept: fake.fetch });
+  await b.goto(base);
+  await b.click('button.link-btn', 'Use a personal token');
+  await b.fill('#pat', 'github_pat_test');
+  await b.click('button', 'Continue');
+  await b.waitFor('!!document.querySelector("#pp")');
+  return b;
+}
+
+test('forgot the passphrase: the recovery code sets a new one, on another device', { skip, timeout: 180000 }, async () => {
+  const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+  const a = await browser.newPage({ intercept: fake.fetch });
+  await a.goto(base);
+  await a.click('button.link-btn', 'Use a personal token');
+  await a.fill('#pat', 'github_pat_test');
+  await a.click('button', 'Continue');
+  await a.waitFor('!!document.querySelector("#p1")');
+  await a.fill('#p1', PASS);
+  await a.fill('#p2', PASS);
+  await a.click('button', 'Create encrypted vault');
+  await a.waitFor('!!document.querySelector(".recovery-code")', 30000);
+  const code = await a.eval('document.querySelector(".recovery-code").textContent.trim()');
+  await a.click('#saved');
+  await a.click('button', 'Enter Snowlog');
+  await a.waitFor('!document.querySelector("#note").hidden');
+
+  const b = await otherDevice(fake);
+  await b.click('button.link-btn', 'I forgot the passphrase');
+  await b.fill('#rc', code);
+  await b.fill('#n1', 'a brand new passphrase');
+  await b.fill('#n2', 'a brand new passphrase');
+  await b.click('button', 'Change the passphrase and enter');
+  await b.waitFor('!document.querySelector("#app").hidden && !document.querySelector("#note").hidden', 60000);
+  // The new passphrase is the one in the repository: on the first device the old one no longer opens it.
+  await a.click('.ribbon [data-action=lock]');
+  await a.waitFor('!!document.querySelector("#pp")');
+  await a.fill('#pp', PASS);
+  await a.click('button', 'Unlock');
+  await a.waitFor('document.querySelector(".lock-card").textContent.includes("passphrase was changed on another device")', 60000);
+  await a.fill('#pp', 'a brand new passphrase');
+  await a.click('button', 'Unlock');
+  await a.waitFor('!document.querySelector("#app").hidden', 60000);
+  assert.deepEqual(realErrors(a), []);
+  assert.deepEqual(realErrors(b), []);
+  await a.close();
+  await b.close();
+});
+
+test('a vault.json from before a key rotation, put back in the repository, is refused', { skip, timeout: 180000 }, async () => {
+  const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+  const a = await browser.newPage({ intercept: fake.fetch });
+  await newVault(a);
+  const old = fake.files().get('.snowlog/vault.json');
+  await a.click('.view-actions [data-action=note-menu]');
+  await a.click('.menu-item', 'Passphrase and recovery');
+  await a.click('.modal button', 'Change the encryption key');
+  await a.fill('#rk0', PASS);
+  await a.click('.modal button', 'Re-encrypt everything');
+  await a.waitFor('!!document.querySelector(".modal .recovery-code")', 60000);
+  await a.click('#saved2');
+  await a.click('.modal button', 'Done');
+  const rotated = fake.files().get('.snowlog/vault.json');
+  // Someone with write access to the repository puts the old one back (it opens with the same passphrase).
+  fake.externalWrite('.snowlog/vault.json', old);
+  await a.click('.ribbon [data-action=lock]');
+  await unlock(a);
+  await a.waitFor('[...document.querySelectorAll(".notice")].some((n) => n.textContent.includes("older than the one this device last opened"))', 30000);
+  // The notes still open with the key this device trusts, and its copy of vault.json is still the rotated one.
+  await a.click('.tree-row', 'Welcome');
+  await a.waitFor('document.getElementById("editor").value.length > 0 || document.getElementById("reading").textContent.length > 0', 15000);
+  assert.equal(await a.eval('localStorage.getItem("snowlog.vault")'), JSON.stringify(JSON.parse(rotated)));
+  assert.deepEqual(realErrors(a).filter((e) => !e.includes('OperationError')), []);
+  await a.close();
+});
+
+test('a vault with 2,000 notes opens and the switcher finds a note quickly', { skip, timeout: 240000 }, async () => {
+  const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+  // Made in Node with the app's own code, through the same fake GitHub.
+  const prev = globalThis.fetch;
+  globalThis.fetch = fake.fetch;
+  const C = await import('../../public/js/crypto.js');
+  const { GitHubRepo } = await import('../../public/js/github.js');
+  const { Vault } = await import('../../public/js/vault.js');
+  const repo = new GitHubRepo({ owner: 'serbenda', repo: 'snowlog-notes', branch: 'main' }, async () => 'token');
+  const { vault } = await Vault.create(repo, PASS, C.KDF_LIMITS.min);
+  await vault.importNotes(Array.from({ length: 2000 }, (_, i) => ({ path: `Area ${i % 40}/Note ${i}`, text: `# Note ${i}\n[[Note ${(i + 1) % 2000}]] #t${i % 30}\n- [ ] task ${i}` })), { batchSize: 500 });
+  globalThis.fetch = prev;
+
+  const b = await otherDevice(fake);
+  const t0 = Date.now();
+  await b.fill('#pp', PASS);
+  await b.click('button', 'Unlock');
+  await b.waitFor('!document.querySelector("#app").hidden && document.querySelectorAll(".tree-row").length > 10', 120000);
+  const open = Date.now() - t0;
+  await b.click('.ribbon [data-action=switcher]');
+  // The switcher's field is filled directly once it is there (on a CI machine the page may not get the focus).
+  await b.waitFor('!!document.querySelector("#modal-root input")', 15000);
+  const t1 = Date.now();
+  await b.fill('#modal-root input', 'Note 1999');
+  await b.waitFor('[...document.querySelectorAll(".switcher-list *")].some((n) => n.textContent.includes("Note 1999"))', 30000);
+  const find = Date.now() - t1;
+  console.log(`2,000 notes: unlocked and shown in ${open} ms; switcher found one in ${find} ms`);
+  assert.ok(open < 60000, `open: ${open} ms`);
+  assert.ok(find < 5000, `switcher: ${find} ms`);
+  assert.deepEqual(realErrors(b), []);
+  await b.close();
+});
+
+test('help: "?" or the palette open a short guide and every shortcut; not while typing', { skip, timeout: 120000 }, async () => {
+  const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+  const page = await browser.newPage({ intercept: fake.fetch });
+  await newVault(page);
+  // In the editor, "?" is just a character.
+  await page.eval('document.getElementById("editor").focus()');
+  await page.type('?');
+  assert.equal(await page.eval('document.querySelector(".help-modal")'), null);
+  // Outside a field, it opens the help.
+  await page.eval('document.activeElement.blur(); document.body.focus()');
+  await page.press('?', { shift: true });
+  await page.waitFor('!!document.querySelector(".help-modal")');
+  assert.ok(await page.eval('document.querySelectorAll(".help-modal tbody tr").length') >= 15);
+  assert.equal(await page.eval('document.querySelector(".help-modal").getAttribute("role")'), 'dialog');
+  await page.press('Escape');
+  await page.waitFor('!document.querySelector(".help-modal")');
+  // From the palette.
+  await page.press('P', { ctrl: true });
+  await page.type('help');
+  await page.press('Enter');
+  await page.waitFor('!!document.querySelector(".help-modal")');
+  assert.deepEqual(realErrors(page), []);
+  await page.close();
+});
+
+// The interface in each language: nothing of it is left in English (the notes are the user's, not the interface's).
+for (const [lang, unlockWord] of [['es', 'Desbloquear'], ['ca', 'Desbloqueja'], ['fr', 'Déverrouiller'], ['pt', 'Desbloquear']]) {
+  test(`the interface in ${lang}: unlock, the app, the palette, settings and help, with no English left`, { skip, timeout: 180000 }, async () => {
+    const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+    const page = await browser.newPage({ intercept: fake.fetch });
+    await newVault(page);
+    await page.eval(`localStorage.setItem('snowlog.lang', '${lang}')`);
+    await page.goto(base);
+    await page.waitFor('!!document.querySelector("#pp")');
+    assert.equal(await page.eval('document.documentElement.lang'), lang);
+    assert.ok(await page.eval(`document.querySelector('.lock-card').textContent.includes(${JSON.stringify(unlockWord)})`), 'the unlock screen');
+    await page.fill('#pp', PASS);
+    await page.eval('document.querySelector(".lock-card form").requestSubmit()');
+    await page.waitFor('!document.querySelector("#app").hidden && !document.querySelector("#note").hidden', 60000);
+    // Words that only English has (case-sensitive, whole words), in the interface's own text.
+    // (Whole words only: "Cancel·la" is Catalan; "Notes" and "Note" are words in French and Catalan too.)
+    const ENGLISH = /(?<![\p{L}·'])(the|and|with|Search|Settings|Open|Save|Delete|Unlock|Folder|Backup|Help|Today|Close|Cancel|Rename|Graph|reminder|every)(?![\p{L}·'])/u;
+    const scan = () => page.eval(`[...document.querySelectorAll('button, label, h1, h2, h3, caption, th, td, li, p, option, small, [aria-label], [title], [placeholder]')]
+      .filter((n) => !n.closest('#editor, #reading, .tree, .switcher-item .switcher-path, .breadcrumb, .bookmarks, #title, datalist, .search-results') && n.offsetParent !== null)
+      .flatMap((n) => [n.getAttribute('aria-label'), n.getAttribute('title'), n.getAttribute('placeholder'), n.children.length ? '' : n.textContent])
+      .map((x) => (x || '').trim()).filter((x) => ${ENGLISH}.test(x))`);
+    const found = new Set(await scan());
+    for (const [action, then] of [['palette', null], ['settings', null], ['switcher', null]]) {
+      await page.click(`.ribbon [data-action=${action}]`);
+      await page.waitFor('!!document.querySelector("#modal-root").childElementCount');
+      for (const x of await scan()) found.add(`${action}: ${x}`);
+      await page.press('Escape');
+      void then;
+    }
+    await page.eval('document.activeElement.blur(); document.body.focus()');
+    await page.press('?', { shift: true });
+    await page.waitFor('!!document.querySelector(".help-modal")');
+    for (const x of await scan()) found.add(`help: ${x}`);
+    assert.deepEqual([...found], [], `still in English: ${[...found].join(' | ')}`);
+    assert.deepEqual(realErrors(page), []);
+    await page.close();
+  });
+}
+
+test('the editor highlights Markdown from nodes: HTML typed in a note stays text', { skip, timeout: 120000 }, async () => {
+  const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+  const page = await browser.newPage({ intercept: fake.fetch });
+  await newVault(page);
+  await page.press('N', { ctrl: true });
+  await page.waitFor('document.activeElement?.id === "title"');
+  await page.eval('document.getElementById("title").value = ""');
+  await page.type('Highlight\n');
+  await page.waitFor('document.activeElement?.id === "editor"');
+  await page.type('# Title\n<b onclick="x">not bold</b> **bold** & ==mark==');
+  await page.waitFor('!!document.querySelector("#editor-hl .hl-strong")');
+  assert.equal(await page.eval('document.querySelectorAll("#editor-hl b").length'), 0, 'no <b> element');
+  const shown = await page.eval('document.getElementById("editor-hl").textContent');
+  assert.ok(shown.includes('<b onclick="x">not bold</b>'), `the tag is shown as text: ${JSON.stringify(shown)}`);
+  assert.ok(await page.eval('!!document.querySelector("#editor-hl .hl-heading .hl-mark")'));
+  assert.ok(await page.eval('document.getElementById("editor-hl").textContent.includes("& ")'));
+  assert.deepEqual(realErrors(page), []);
+  await page.close();
+});

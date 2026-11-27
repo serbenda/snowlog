@@ -2,6 +2,8 @@
 // and no use by AI or automated tools (training, datasets, retrieval, code generation, scraping). See LICENSE. snowlog-b50d2624
 // Snowlog: main interface.
 import { CONFIG } from './config.js';
+import { pickLang, translator, fill, LANGS, LANG_NAMES } from './i18n.js';
+import { WELCOMES } from './welcome.js';
 import * as C from './crypto.js';
 import * as Auth from './auth.js';
 import { GitHubRepo } from './github.js';
@@ -27,6 +29,15 @@ import { buildGraph, localGraph, initLayout, step as graphStep } from './graph.j
 import { parseNote, toggleTaskLine, linksTo, contentLines, TASK_LINE_RE } from './noteindex.js';
 import { parseQuery, runQuery, renderResult } from './query.js';
 import { applyTemplate, dailyPath, isoDate, parseIsoDate, DAILY_TEMPLATE, starterSpace, formatDate, workspaceSettings } from './templates.js';
+
+// The interface's language: the one chosen in Settings (on this device), or the browser's (English if it isn't one
+// we have). tr('English text') gives it in that language.
+const LANG = pickLang((() => { try { return localStorage.getItem('snowlog.lang') || 'auto'; } catch { return 'auto'; } })(), navigator.languages || [navigator.language]);
+const tr = translator(LANG);
+// tr() with {holes} filled; trn() with the singular or plural text by n ({n} is filled too).
+const trf = (s, vars) => fill(tr(s), vars);
+const trn = (n, one, many, vars = {}) => fill(tr(n === 1 ? one : many), { n, ...vars });
+document.documentElement.lang = LANG;
 
 // ---------------------------------------------------------------------------
 // Icons (our own line strokes)
@@ -164,16 +175,16 @@ function errText(e) {
     bad_type: 'Only images (png, jpg, gif, webp, avif, bmp) and PDFs can be attached.',
     too_big: 'The attachment is too large (20 MB at most).',
   };
-  if (map[m]) return map[m];
-  if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') return 'The browser did not give permission to use the folder.';
-  if (e?.name === 'NotFoundError') return 'The file or folder cannot be found. Was it moved or deleted outside Snowlog?';
-  if (e?.name === 'QuotaExceededError') return 'There is no space left in the browser storage.';
-  if (e?.status === 401) return 'GitHub refused access: the session or the token has expired.';
-  if (e?.status === 403) return 'GitHub denies permission. Check that the access includes the notes repository with write permission.';
-  if (e?.status === 404) return `${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo} cannot be found. Check that it exists and that you have access.`;
-  if (e?.status === 409) return 'Another device saved at the same time. Try again.';
-  if (e instanceof TypeError) return 'No connection to GitHub.';
-  return m || 'Something went wrong.';
+  if (map[m]) return tr(map[m]);
+  if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') return tr('The browser did not give permission to use the folder.');
+  if (e?.name === 'NotFoundError') return tr('The file or folder cannot be found. Was it moved or deleted outside Snowlog?');
+  if (e?.name === 'QuotaExceededError') return tr('There is no space left in the browser storage.');
+  if (e?.status === 401) return tr('GitHub refused access: the session or the token has expired.');
+  if (e?.status === 403) return tr('GitHub denies permission. Check that the access includes the notes repository with write permission.');
+  if (e?.status === 404) return trf('{repo} cannot be found. Check that it exists and that you have access.', { repo: `${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}` });
+  if (e?.status === 409) return tr('Another device saved at the same time. Try again.');
+  if (e instanceof TypeError) return tr('No connection to GitHub.');
+  return m || tr('Something went wrong.');
 }
 
 function notice(text, kind = '') {
@@ -189,7 +200,7 @@ function lockScreen(...children) {
   $('lock').hidden = false;
   const card = $('lock-card');
   card.replaceChildren(
-    h('div', { class: 'lock-logo' }, h('img', { src: 'icon.svg', alt: '' }), h('span', {}, 'Snowlog')),
+    h('div', { class: 'lock-logo' }, h('img', { src: 'icon.svg', alt: '' }), h('span', {}, tr('Snowlog'))),
     ...children.filter((c) => c != null && c !== false),
   );
   const first = card.querySelector('input:not([type=checkbox])');
@@ -216,10 +227,10 @@ function showError(el, e) {
 
 function showLogin(message) {
   const err = errorLine();
-  const tokenInput = h('input', { class: 'input', type: 'password', id: 'pat', autocomplete: 'off', placeholder: 'github_pat_…' });
+  const tokenInput = h('input', { class: 'input', type: 'password', id: 'pat', autocomplete: 'off', placeholder: tr('github_pat_…') });
   const tokenForm = h('form', { hidden: true },
-    h('div', { class: 'field' }, h('label', { for: 'pat' }, 'Personal token (fine-grained, only the notes repository)'), tokenInput),
-    h('button', { class: 'btn primary', type: 'submit' }, 'Continue'));
+    h('div', { class: 'field' }, h('label', { for: 'pat' }, tr('Personal token (fine-grained, only the notes repository)')), tokenInput),
+    h('button', { class: 'btn primary', type: 'submit' }, tr('Continue')));
   tokenForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     if (!tokenInput.value.trim()) return;
@@ -228,20 +239,20 @@ function showLogin(message) {
     await afterAuth(err, tokenForm.querySelector('button'));
   });
 
-  const githubBtn = h('button', { class: 'btn primary', type: 'button', onclick: () => Auth.startOAuth() }, 'Sign in with GitHub');
+  const githubBtn = h('button', { class: 'btn primary', type: 'button', onclick: () => Auth.startOAuth() }, tr('Sign in with GitHub'));
   const oauthHint = Auth.oauthAvailable() ? null
-    : h('p', { class: 'hint' }, 'Sign-in with GitHub is not set up yet. For now, use a personal token.');
+    : h('p', { class: 'hint' }, tr('Sign-in with GitHub is not set up yet. For now, use a personal token.'));
   if (oauthHint) githubBtn.disabled = true;
 
   lockScreen(
-    h('h1', {}, 'Your encrypted notebook'),
-    h('p', {}, message || 'Sign in with your GitHub account to open your notes.'),
+    h('h1', {}, tr('Your encrypted notebook')),
+    h('p', {}, message || tr('Sign in with your GitHub account to open your notes.')),
     githubBtn,
     oauthHint,
     h('div', { class: 'lock-links' },
-      h('button', { class: 'link-btn', type: 'button', onclick: () => { tokenForm.hidden = false; tokenInput.focus(); } }, 'Use a personal token'),
-      h('button', { class: 'link-btn', type: 'button', onclick: () => showLocalStart() }, 'Use notes on this computer, without GitHub'),
-      h('a', { class: 'link-btn', href: 'snowlog-portable.html', download: 'snowlog-portable.html' }, 'Download the portable version')),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => { tokenForm.hidden = false; tokenInput.focus(); } }, tr('Use a personal token')),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => showLocalStart() }, tr('Use notes on this computer, without GitHub')),
+      h('a', { class: 'link-btn', href: 'snowlog-portable.html', download: 'snowlog-portable.html' }, tr('Download the portable version'))),
     tokenForm,
     err,
   );
@@ -290,7 +301,7 @@ async function showLocalStart(message) {
   // Firefox, Safari (and Chrome opening the file from disk): without folders or OPFS, notes can
   // still be stored inside the browser (IndexedDB or localStorage).
   const kv = browserOk ? null : await browserBackend();
-  const inside = kv && h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, 'Store inside the browser');
+  const inside = kv && h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, tr('Store inside the browser'));
   if (inside) {
     inside.addEventListener('click', async () => {
       try {
@@ -302,26 +313,26 @@ async function showLocalStart(message) {
   }
   if (!canPickFolder() && !browserOk && inside) {
     lockScreen(
-      h('h1', {}, 'Your notes, in this browser'),
-      h('p', {}, 'This browser does not let you pick folders on disk (only Chrome and Edge do). Notes are stored inside the browser, on this computer, and are still here the next time you open this file.'),
+      h('h1', {}, tr('Your notes, in this browser')),
+      h('p', {}, tr('This browser does not let you pick folders on disk (only Chrome and Edge do). Notes are stored inside the browser, on this computer, and are still here the next time you open this file.')),
       inside,
-      h('p', { class: 'hint' }, 'To take them elsewhere or keep a copy, use “Backup (.zip)” in the ⋯ menu. If you clear the browser data, the notes are cleared too.'),
+      h('p', { class: 'hint' }, tr('To take them elsewhere or keep a copy, use “Backup (.zip)” in the ⋯ menu. If you clear the browser data, the notes are cleared too.')),
       CONFIG.mode === 'portable' ? null
-        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Back to signing in with GitHub')),
+        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, tr('Back to signing in with GitHub'))),
       err,
     );
     return;
   }
   if (!canPickFolder() && !browserOk) {
     lockScreen(
-      h('h1', {}, 'Open Snowlog with Chrome or Edge'),
-      h('p', {}, 'This browser cannot store notes from a file opened from disk. Open snowlog-portable.html with Google Chrome or Microsoft Edge (right click → Open with).'),
+      h('h1', {}, tr('Open Snowlog with Chrome or Edge')),
+      h('p', {}, tr('This browser cannot store notes from a file opened from disk. Open snowlog-portable.html with Google Chrome or Microsoft Edge (right click → Open with).')),
       CONFIG.mode === 'portable' ? null
-        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Back to signing in with GitHub')),
+        : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, tr('Back to signing in with GitHub'))),
     );
     return;
   }
-  const pick = h('button', { class: 'btn primary', type: 'button' }, remembered ? 'Choose another folder' : 'Open a folder');
+  const pick = h('button', { class: 'btn primary', type: 'button' }, remembered ? tr('Choose another folder') : tr('Open a folder'));
   pick.addEventListener('click', async () => {
     try {
       const handle = await window.showDirectoryPicker({ id: 'snowlog', mode: 'readwrite' });
@@ -331,7 +342,7 @@ async function showLocalStart(message) {
       if (e?.name !== 'AbortError') showError(err, e);
     }
   });
-  const again = remembered && h('button', { class: 'btn primary', type: 'button' }, `Continue with “${remembered.name}”`);
+  const again = remembered && h('button', { class: 'btn primary', type: 'button' }, trf('Continue with “{name}”', { name: remembered.name }));
   if (again) {
     pick.classList.remove('primary');
     again.addEventListener('click', async () => {
@@ -344,7 +355,7 @@ async function showLocalStart(message) {
       }
     });
   }
-  const browser = h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, 'Store in this browser');
+  const browser = h('button', { class: `btn${canPickFolder() ? '' : ' primary'}`, type: 'button' }, tr('Store in this browser'));
   browser.addEventListener('click', async () => {
     try {
       await openLocal(await navigator.storage.getDirectory(), 'browser', browser);
@@ -353,22 +364,22 @@ async function showLocalStart(message) {
     }
   });
   lockScreen(
-    h('h1', {}, 'Your notes, on this computer'),
+    h('h1', {}, tr('Your notes, on this computer')),
     h('p', {}, canPickFolder()
-      ? 'Choose a folder: each note is a plain .md file. Nothing leaves your computer.'
-      : 'This browser does not let you pick folders (use Chrome or Edge for that). You can store notes inside the browser and export them as a .zip whenever you want.'),
+      ? tr('Choose a folder: each note is a plain .md file. Nothing leaves your computer.')
+      : tr('This browser does not let you pick folders (use Chrome or Edge for that). You can store notes inside the browser and export them as a .zip whenever you want.')),
     again || null,
     canPickFolder() ? pick : null,
     browserOk ? browser : inside,
-    h('p', { class: 'hint' }, 'No internet and nothing to install. Notes are not encrypted: they are protected by your computer account.'),
+    h('p', { class: 'hint' }, tr('No internet and nothing to install. Notes are not encrypted: they are protected by your computer account.')),
     CONFIG.mode === 'portable' ? null
-      : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, 'Back to signing in with GitHub')),
+      : h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showLogin() }, tr('Back to signing in with GitHub'))),
     err,
   );
 }
 
 async function openLocal(handle, kind, button) {
-  const done = button ? busy(button, 'Opening…') : () => {};
+  const done = button ? busy(button, tr('Opening…')) : () => {};
   try {
     const vault = await new LocalVault(handle, { kind, label: kind === 'folder' ? handle.name : 'this browser' }).load();
     S.local = true;
@@ -389,7 +400,7 @@ async function reloadLocal() {
   S.vault = await new LocalVault(root, { kind, label }).load();
   S.current = null;
   enterApp();
-  notice('Folder reloaded.');
+  notice(tr('Folder reloaded.'));
 }
 
 // Every note and attachment, to export or copy: [{ path, text }] and [{ path, data }].
@@ -431,10 +442,10 @@ function backupReminder() {
   const from = st.last || st.since || now;
   if (now - from < days * 86400000 || (st.snoozed && now - st.snoozed < 86400000)) return;
   const n = h('div', { class: 'notice' },
-    st.last ? `Your last backup was ${Math.floor((now - st.last) / 86400000)} days ago. ` : 'You have not made a backup yet. ',
-    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); backupNow(); } }, 'Back up now'),
+    st.last ? trf('Your last backup was {n} days ago. ', { n: Math.floor((now - st.last) / 86400000) }) : tr('You have not made a backup yet. '),
+    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); backupNow(); } }, tr('Back up now')),
     ' · ',
-    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); saveBackupState({ ...backupState(), snoozed: Date.now() }); } }, 'Tomorrow'));
+    h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); saveBackupState({ ...backupState(), snoozed: Date.now() }); } }, tr('Tomorrow')));
   $('notices').append(n);
   setTimeout(() => n.remove(), 30000);
 }
@@ -445,13 +456,13 @@ async function backupNow() {
   if (S.local) return exportZip();
   await saveNow();
   setStatus('');
-  $('st-sync').textContent = 'Preparing the encrypted backup…';
+  $('st-sync').textContent = tr('Preparing the encrypted backup…');
   try {
     const files = await collectFiles();
     const vaultFile = (await Vault.fetchVaultFile(S.repo).catch(() => null)) || S.vaultFile;
     download(await makeBackup(vaultFile, S.dek, files), `snowlog-backup-${isoDate(new Date())}.snowlog`, 'application/octet-stream');
     saveBackupState({ ...backupState(), last: Date.now() });
-    notice(`Encrypted backup downloaded: ${files.length} files. It opens with your passphrase or your recovery code.`);
+    notice(trf('Encrypted backup downloaded: {n} files. It opens with your passphrase or your recovery code.', { n: files.length }));
   } catch (e) {
     notice(errText(e), 'error');
   } finally {
@@ -482,21 +493,21 @@ async function restoreBackup(file) {
     }
     created = meta.created;
     const when = dateFmt.format(new Date(meta.created));
-    opened = await secretForm('Open backup',
-      `Backup from ${when} with ${meta.notes} note${meta.notes === 1 ? '' : 's'}. It opens with the passphrase you had then or with the recovery code.`,
-      [passField('bk0', 'Passphrase or recovery code')],
-      'Open',
+    opened = await keyChangeForm(tr('Open backup'),
+      trn(meta.notes, 'Backup from {when} with 1 note. It opens with the passphrase you had then or with the recovery code.', 'Backup from {when} with {n} notes. It opens with the passphrase you had then or with the recovery code.', { when }),
+      [passField('bk0', tr('Passphrase or recovery code'))],
+      tr('Open'),
       async ([secret]) => openBackup(bytes, secret));
     if (!opened) return;
   }
   const hiddenPath = (p) => p.split('/').some((part) => part.startsWith('.'));
   const count = opened.files.filter((f) => /\.md$/i.test(f.path) && !hiddenPath(f.path)).length;
-  if (!opened.files.length) return notice('The backup is empty.', 'error');
+  if (!opened.files.length) return notice(tr('The backup is empty.'), 'error');
   const folder = `Backup ${isoDate(new Date(created))}`;
-  const action = await pickModal(`${count} note${count === 1 ? '' : 's'} in the backup. What should we do?`, [
-    { label: `Import them into the “${folder}” folder`, sub: 'Your current notes are not touched', value: 'folder' },
-    { label: 'Import them as they are, with their folders', sub: 'To move everything from one version to the other. If a name already exists, “(imported)” is added', value: 'root' },
-    !isZip && { label: 'Download it as an unencrypted .zip', sub: 'To open it with any editor', value: 'zip' },
+  const action = await pickModal(trn(count, '1 note in the backup. What should we do?', '{n} notes in the backup. What should we do?'), [
+    { label: trf('Import them into the “{folder}” folder', { folder }), sub: tr('Your current notes are not touched'), value: 'folder' },
+    { label: tr('Import them as they are, with their folders'), sub: tr('To move everything from one version to the other. If a name already exists, “(imported)” is added'), value: 'root' },
+    !isZip && { label: tr('Download it as an unencrypted .zip'), sub: tr('To open it with any editor'), value: 'zip' },
   ].filter(Boolean));
   if (action === 'zip') return download(opened.zip, `${folder}.zip`, 'application/zip');
   if (action !== 'folder' && action !== 'root') return;
@@ -510,8 +521,8 @@ async function restoreBackup(file) {
   const others = opened.files.filter((f) => !/\.md$/i.test(f.path) && isAttachmentName(f.path) && !hiddenPath(f.path));
   const st = $('st-sync');
   try {
-    st.textContent = `Importing 0/${notes.length}…`;
-    const result = await S.vault.importNotes(notes, { message: 'restore backup', onProgress: (d, t) => { S.lastActivity = Date.now(); st.textContent = `Importing ${d}/${t}…`; } });
+    st.textContent = trf('Importing {d}/{t}…', { d: 0, t: notes.length });
+    const result = await S.vault.importNotes(notes, { message: 'restore backup', onProgress: (d, t) => { S.lastActivity = Date.now(); st.textContent = trf('Importing {d}/{t}…', { d, t }); } });
     let skipped = 0;
     for (const f of others) {
       try {
@@ -521,10 +532,10 @@ async function restoreBackup(file) {
     if (target) S.expanded.add(target);
     renderTree();
     syncIndex();
-    notice(`Backup imported${target ? ` into “${target}”` : ''}: ${result.length} notes${others.length ? ` and ${others.length - skipped} attachments` : ''}.`);
+    notice(trf(target ? (others.length ? 'Backup imported into “{target}”: {n} notes and {a} attachments.' : 'Backup imported into “{target}”: {n} notes.') : (others.length ? 'Backup imported: {n} notes and {a} attachments.' : 'Backup imported: {n} notes.'), { target, n: result.length, a: others.length - skipped }));
   } catch (e) {
     renderTree();
-    notice(`The import stopped: ${errText(e)}. What was already imported is kept.`, 'error');
+    notice(trf('The import stopped: {error}. What was already imported is kept.', { error: errText(e) }), 'error');
   } finally {
     st.textContent = '';
   }
@@ -533,18 +544,18 @@ async function restoreBackup(file) {
 async function exportZip() {
   if (!S.vault) return;
   if (!S.local) {
-    const ok = await confirmModal('Export unencrypted copy',
-      'The .zip will hold all your notes in plaintext. Keep it somewhere safe.', 'Export', false);
+    const ok = await confirmModal(tr('Export unencrypted copy'),
+      tr('The .zip will hold all your notes in plaintext. Keep it somewhere safe.'), tr('Export'), false);
     if (!ok) return;
   }
   await saveNow();
   setStatus('');
-  $('st-sync').textContent = 'Preparing the copy…';
+  $('st-sync').textContent = tr('Preparing the copy…');
   try {
     const files = await collectFiles();
     download(makeZip(files), `snowlog-${isoDate(new Date())}.zip`, 'application/zip');
     if (S.local) saveBackupState({ ...backupState(), last: Date.now() });
-    notice(`Copy exported: ${files.length} files.`);
+    notice(trf('Copy exported: {n} files.', { n: files.length }));
   } catch (e) {
     notice(errText(e), 'error');
   } finally {
@@ -554,7 +565,7 @@ async function exportZip() {
 
 // Once there are credentials: check the repository and open or create the vault.
 async function afterAuth(errEl, button) {
-  const done = button ? busy(button, 'Connecting…') : () => {};
+  const done = button ? busy(button, tr('Connecting…')) : () => {};
   try {
     S.repo = makeRepo();
     await S.repo.check();
@@ -601,17 +612,17 @@ function passField(id, label, autocomplete = 'current-password') {
 
 function showCreate() {
   const err = errorLine();
-  const [f1, p1] = passField('p1', 'Passphrase (at least 12 characters)', 'new-password');
-  const [f2, p2] = passField('p2', 'Repeat the passphrase', 'new-password');
-  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Create encrypted vault');
+  const [f1, p1] = passField('p1', tr('Passphrase (at least 12 characters)'), 'new-password');
+  const [f2, p2] = passField('p2', tr('Repeat the passphrase'), 'new-password');
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, tr('Create encrypted vault'));
   const form = h('form', {}, f1, f2, btn, err);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    if (p1.value.length < 12) return showError(err, 'Use at least 12 characters. A phrase of several words is best.');
-    if (p1.value !== p2.value) return showError(err, 'The two passphrases do not match.');
-    const done = busy(btn, 'Encrypting and creating…');
+    if (p1.value.length < 12) return showError(err, tr('Use at least 12 characters. A phrase of several words is best.'));
+    if (p1.value !== p2.value) return showError(err, tr('The two passphrases do not match.'));
+    const done = busy(btn, tr('Encrypting and creating…'));
     try {
-      const { vault, vaultFile, recoveryCode } = await Vault.create(S.repo, p1.value, CONFIG.kdfIterations);
+      const { vault, vaultFile, recoveryCode } = await Vault.create(S.repo, p1.value, CONFIG.kdfIterations, { welcome: WELCOMES[LANG] });
       p1.value = '';
       p2.value = '';
       S.vault = vault;
@@ -627,21 +638,21 @@ function showCreate() {
     }
   });
   lockScreen(
-    h('h1', {}, 'Create your vault'),
-    h('p', {}, 'Your notes are encrypted on this device with this passphrase before they go up to GitHub. It never leaves this device: if you lose it, only the recovery code can open your notes.'),
+    h('h1', {}, tr('Create your vault')),
+    h('p', {}, tr('Your notes are encrypted on this device with this passphrase before they go up to GitHub. It never leaves this device: if you lose it, only the recovery code can open your notes.')),
     form,
   );
 }
 
 function showRecoveryCode(code) {
   const check = h('input', { type: 'checkbox', id: 'saved' });
-  const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => enterApp() }, 'Enter Snowlog');
+  const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => enterApp() }, tr('Enter Snowlog'));
   check.addEventListener('change', () => { btn.disabled = !check.checked; });
   lockScreen(
-    h('h1', {}, 'Save your recovery code'),
-    h('p', {}, 'It is the only way to recover your notes if you forget the passphrase. Write it on paper and keep it somewhere safe. It will not be shown again.'),
+    h('h1', {}, tr('Save your recovery code')),
+    h('p', {}, tr('It is the only way to recover your notes if you forget the passphrase. Write it on paper and keep it somewhere safe. It will not be shown again.')),
     h('div', { class: 'recovery-code' }, code),
-    h('label', { class: 'check', for: 'saved' }, check, 'I have kept it somewhere safe'),
+    h('label', { class: 'check', for: 'saved' }, check, tr('I have kept it somewhere safe')),
     btn,
   );
 }
@@ -649,12 +660,12 @@ function showRecoveryCode(code) {
 function showUnlock(vaultFile, { fresh = false, message = '' } = {}) {
   const err = errorLine();
   if (message) showError(err, message);
-  const [f1, p1] = passField('pp', 'Passphrase');
-  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Unlock');
+  const [f1, p1] = passField('pp', tr('Passphrase'));
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, tr('Unlock'));
   const form = h('form', {}, f1, btn, err);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const done = busy(btn, 'Decrypting…');
+    const done = busy(btn, tr('Decrypting…'));
     try {
       const pass = p1.value;
       const opened = await C.openVault(vaultFile, pass);
@@ -671,12 +682,12 @@ function showUnlock(vaultFile, { fresh = false, message = '' } = {}) {
     }
   });
   lockScreen(
-    h('h1', {}, 'Unlock your notes'),
-    h('p', {}, `Vault in ${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}.`),
+    h('h1', {}, tr('Unlock your notes')),
+    h('p', {}, trf('Vault in {repo}.', { repo: `${CONFIG.notesRepo.owner}/${CONFIG.notesRepo.repo}` })),
     form,
     h('div', { class: 'lock-links' },
-      h('button', { class: 'link-btn', type: 'button', onclick: () => showRecover(vaultFile, fresh) }, 'I forgot the passphrase'),
-      h('button', { class: 'link-btn', type: 'button', onclick: () => forgetAndLogin() }, 'Use another account or forget this device')),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => showRecover(vaultFile, fresh) }, tr('I forgot the passphrase')),
+      h('button', { class: 'link-btn', type: 'button', onclick: () => forgetAndLogin() }, tr('Use another account or forget this device'))),
   );
 }
 
@@ -686,7 +697,7 @@ async function afterUnlock(fresh, pass = null) {
     S.cred = await Auth.loadCred(S.dek);
     if (!S.cred) {
       S.dek = null;
-      return showLogin('This device\'s session has expired. Sign in again.');
+      return showLogin(tr('This device\'s session has expired. Sign in again.'));
     }
     S.repo = makeRepo();
     if (Auth.needsRefresh(S.cred)) {
@@ -720,7 +731,7 @@ async function afterUnlock(fresh, pass = null) {
             } else {
               S.dek = null;
               Auth.cacheVault(remote);
-              return showUnlock(remote, { message: 'The passphrase was changed on another device: use the new one.' });
+              return showUnlock(remote, { message: tr('The passphrase was changed on another device: use the new one.') });
             }
           }
           if (opened) {
@@ -752,16 +763,16 @@ async function afterUnlock(fresh, pass = null) {
 
 function showRecover(vaultFile, fresh) {
   const err = errorLine();
-  const code = h('input', { class: 'input', id: 'rc', autocomplete: 'off', spellcheck: 'false', placeholder: 'XXXXX-XXXXX-XXXXX-XXXXX-XXXXX' });
-  const [f1, p1] = passField('n1', 'New passphrase (at least 12 characters)', 'new-password');
-  const [f2, p2] = passField('n2', 'Repeat the new passphrase', 'new-password');
-  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Change the passphrase and enter');
-  const form = h('form', {}, h('div', { class: 'field' }, h('label', { for: 'rc' }, 'Recovery code'), code), f1, f2, btn, err);
+  const code = h('input', { class: 'input', id: 'rc', autocomplete: 'off', spellcheck: 'false', placeholder: tr('XXXXX-XXXXX-XXXXX-XXXXX-XXXXX') });
+  const [f1, p1] = passField('n1', tr('New passphrase (at least 12 characters)'), 'new-password');
+  const [f2, p2] = passField('n2', tr('Repeat the new passphrase'), 'new-password');
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, tr('Change the passphrase and enter'));
+  const form = h('form', {}, h('div', { class: 'field' }, h('label', { for: 'rc' }, tr('Recovery code')), code), f1, f2, btn, err);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    if (p1.value.length < 12) return showError(err, 'Use at least 12 characters.');
-    if (p1.value !== p2.value) return showError(err, 'The two passphrases do not match.');
-    const done = busy(btn, 'Recovering…');
+    if (p1.value.length < 12) return showError(err, tr('Use at least 12 characters.'));
+    if (p1.value !== p2.value) return showError(err, tr('The two passphrases do not match.'));
+    const done = busy(btn, tr('Recovering…'));
     try {
       const { vault: updated, dek, epoch } = await C.recoverVault(vaultFile, code.value, p1.value, { iterations: CONFIG.kdfIterations, knownEpoch: Auth.knownEpoch() });
       Auth.rememberEpoch(epoch);
@@ -773,11 +784,10 @@ function showRecover(vaultFile, fresh) {
       }
       S.vault = new Vault(S.repo, dek, { store: noteCache() });
       await S.vault.writeVaultFile(updated);
-      S.vaultFile = updated;
-      Auth.cacheVault(updated);
+      await keepVaultFile(updated);
       await Auth.saveCred(dek, S.cred);
       await S.vault.loadIndex();
-      notice('Passphrase changed.');
+      notice(tr('Passphrase changed.'));
       enterApp();
     } catch (e) {
       S.dek = null;
@@ -786,15 +796,15 @@ function showRecover(vaultFile, fresh) {
     }
   });
   lockScreen(
-    h('h1', {}, 'Recover access'),
-    h('p', {}, 'Enter your recovery code and choose a new passphrase.'),
+    h('h1', {}, tr('Recover access')),
+    h('p', {}, tr('Enter your recovery code and choose a new passphrase.')),
     form,
-    h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showUnlock(vaultFile, { fresh }) }, 'Back')),
+    h('div', { class: 'lock-links' }, h('button', { class: 'link-btn', type: 'button', onclick: () => showUnlock(vaultFile, { fresh }) }, tr('Back'))),
   );
 }
 
 async function forgetAndLogin() {
-  const ok = await confirmModal('Forget this device?', 'The session and the local encrypted copy are deleted. Your notes on GitHub are not touched.', 'Forget');
+  const ok = await confirmModal(tr('Forget this device?'), tr('The session and the local encrypted copy are deleted. Your notes on GitHub are not touched.'), tr('Forget'));
   if (!ok) return;
   Auth.forgetDevice();
   noteCache().clear();
@@ -826,7 +836,7 @@ function wipe() {
   closeSuggest();
   $('title').value = '';
   $('breadcrumb').replaceChildren();
-  document.title = 'Snowlog';
+  document.title = tr('Snowlog');
   if (D.editor) D.editor.destroy();
   Object.assign(D, { id: null, editor: null, dirty: false });
   clearTimeout(D.timer);
@@ -892,7 +902,7 @@ function keyChanged() {
 
 async function logout() {
   if (S.local) {
-    const ok = await confirmModal('Forget this folder?', 'Snowlog will stop remembering it in this browser. Your files are not touched.', 'Forget', false);
+    const ok = await confirmModal(tr('Forget this folder?'), tr('Snowlog will stop remembering it in this browser. Your files are not touched.'), tr('Forget'), false);
     if (!ok) return;
     await saveNow();
     await forgetHandle();
@@ -901,13 +911,13 @@ async function logout() {
     showLocalStart();
     return;
   }
-  const ok = await confirmModal('Sign out?', 'Snowlog is locked and this device is forgotten. Your notes on GitHub are not touched.', 'Sign out');
+  const ok = await confirmModal(tr('Sign out?'), tr('Snowlog is locked and this device is forgotten. Your notes on GitHub are not touched.'), tr('Sign out'));
   if (!ok) return;
   await saveNow();
   Auth.forgetDevice();
   await noteCache().clear();
   wipe();
-  showLogin('Signed out.');
+  showLogin(tr('Signed out.'));
 }
 
 function trackActivity() {
@@ -1006,7 +1016,7 @@ function showEmpty() {
   $('note').hidden = true;
   $('empty').hidden = false;
   $('breadcrumb').replaceChildren();
-  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'No note open'));
+  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, tr('No note open')));
   $('backlinks').replaceChildren();
   setStatus('');
   $('st-words').textContent = '';
@@ -1083,14 +1093,14 @@ function renderTree() {
     }
   };
   walk(buildTree(), 0, frag);
-  if (!frag.childNodes.length) frag.append(h('p', { class: 'tree-empty' }, 'No notes yet.'));
+  if (!frag.childNodes.length) frag.append(h('p', { class: 'tree-empty' }, tr('No notes yet.')));
   tree.replaceChildren(frag);
   syncIndex();
   renderCalendar();
 }
 
 function moreButton() {
-  return h('button', { class: 'icon-btn row-more', type: 'button', 'aria-label': 'Options', tabindex: '-1', html: icon('more') });
+  return h('button', { class: 'icon-btn row-more', type: 'button', 'aria-label': tr('Options'), tabindex: '-1', html: icon('more') });
 }
 
 // Folders open in the file tree. Online, their names are stored encrypted with the DEK
@@ -1164,8 +1174,8 @@ function setupTree() {
     const row = ev.target.closest('.tree-row');
     if (row) rowMenu(row, ev.clientX, ev.clientY);
     else openMenu(ev.clientX, ev.clientY, [
-      ['filePlus', 'New note', () => newNote('')],
-      ['folderPlus', 'New folder', () => newFolder('')],
+      ['filePlus', tr('New note'), () => newNote('')],
+      ['folderPlus', tr('New folder'), () => newFolder('')],
     ]);
   });
 
@@ -1215,8 +1225,8 @@ function rowMenu(row, x, y) {
   if (row.dataset.file) {
     const id = row.dataset.file;
     openMenu(x, y, [
-      ['read', 'Open', () => (isSketch(id) ? openDrawing(id) : openAttachment(id))],
-      ['import', 'Insert into the note', () => insertEmbed(S.vault.index.files[id].path)],
+      ['read', tr('Open'), () => (isSketch(id) ? openDrawing(id) : openAttachment(id))],
+      ['import', tr('Insert into the note'), () => insertEmbed(S.vault.index.files[id].path)],
       null,
       ['trash', 'Delete', () => deleteAttachment(id), 'danger'],
     ]);
@@ -1225,18 +1235,18 @@ function rowMenu(row, x, y) {
   if (row.dataset.note) {
     const id = row.dataset.note;
     openMenu(x, y, [
-      ['rename', 'Rename', () => renameNotePrompt(id)],
-      ['move', 'Move to…', () => moveNotePrompt(id)],
-      ['bookmark', isBookmarked(id) ? 'Remove from bookmarks' : 'Add to bookmarks', () => toggleBookmark(id)],
+      ['rename', tr('Rename'), () => renameNotePrompt(id)],
+      ['move', tr('Move to…'), () => moveNotePrompt(id)],
+      ['bookmark', isBookmarked(id) ? tr('Remove from bookmarks') : tr('Add to bookmarks'), () => toggleBookmark(id)],
       null,
       ['trash', 'Delete', () => deleteNote(id), 'danger'],
     ]);
   } else {
     const path = row.dataset.folder;
     openMenu(x, y, [
-      ['filePlus', 'New note', () => newNote(path)],
-      ['folderPlus', 'New folder', () => newFolder(path)],
-      ['rename', 'Rename', () => renameFolderPrompt(path)],
+      ['filePlus', tr('New note'), () => newNote(path)],
+      ['folderPlus', tr('New folder'), () => newFolder(path)],
+      ['rename', tr('Rename'), () => renameFolderPrompt(path)],
       null,
       ['trash', 'Delete', () => deleteFolder(path), 'danger'],
     ]);
@@ -1282,6 +1292,7 @@ function modal(build) {
     const prevFocus = document.activeElement;
     const close = (value) => {
       root.replaceChildren();
+      for (const a of ['role', 'aria-modal', 'aria-label']) root.removeAttribute(a);
       document.removeEventListener('keydown', onKey, true);
       if (prevFocus && prevFocus.focus) prevFocus.focus();
       resolve(value);
@@ -1294,6 +1305,13 @@ function modal(build) {
     };
     document.addEventListener('keydown', onKey, true);
     const box = build(close);
+    // A form can't be a dialog itself (its role is form): the dialog is the layer around it.
+    if (box.tagName === 'FORM' && box.getAttribute('role') === 'dialog') {
+      root.setAttribute('role', 'dialog');
+      root.setAttribute('aria-modal', 'true');
+      if (box.hasAttribute('aria-label')) root.setAttribute('aria-label', box.getAttribute('aria-label'));
+      for (const a of ['role', 'aria-modal']) box.removeAttribute(a);
+    }
     root.replaceChildren(box);
     root.onclick = (ev) => { if (ev.target === root) close(null); };
     (box.querySelector('input') || box.querySelector('button.primary, button.danger'))?.focus();
@@ -1308,7 +1326,7 @@ function promptModal(title, label, value = '', okText = 'OK', hint = '') {
       hint ? h('p', {}, hint) : null,
       h('div', { class: 'field' }, h('label', { for: 'mp' }, label), input),
       h('div', { class: 'modal-actions' },
-        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cancel'),
+        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, tr('Cancel')),
         h('button', { class: 'btn primary', type: 'submit' }, okText)));
     form.addEventListener('submit', (ev) => {
       ev.preventDefault();
@@ -1324,7 +1342,7 @@ function confirmModal(title, text, okText = 'OK', danger = true) {
     h('h2', {}, title),
     h('p', {}, text),
     h('div', { class: 'modal-actions' },
-      h('button', { class: 'btn', type: 'button', onclick: () => close(false) }, 'Cancel'),
+      h('button', { class: 'btn', type: 'button', onclick: () => close(false) }, tr('Cancel')),
       h('button', { class: `btn ${danger ? 'danger' : 'primary'}`, type: 'button', onclick: () => close(true) }, okText))))
     .then((v) => v === true);
 }
@@ -1332,8 +1350,8 @@ function confirmModal(title, text, okText = 'OK', danger = true) {
 function quickSwitcher() {
   if (!S.vault) return;
   modal((close) => {
-    const input = h('input', { class: 'input', placeholder: 'Find a note or type a new title…', 'aria-label': 'Find note', autocomplete: 'off', spellcheck: 'false' });
-    const list = h('div', { class: 'switcher-list', role: 'listbox' });
+    const input = h('input', { class: 'input', placeholder: tr('Find a note or type a new title…'), 'aria-label': tr('Find note'), autocomplete: 'off', spellcheck: 'false' });
+    const list = h('div', { class: 'switcher-list', role: 'listbox', 'aria-label': tr('Results') });
     let items = [];
     let sel = 0;
     const draw = () => {
@@ -1343,7 +1361,7 @@ function quickSwitcher() {
         .sort((a, b) => (q ? baseName(a.path).toLowerCase().indexOf(q) - baseName(b.path).toLowerCase().indexOf(q) : 0) || b.updated.localeCompare(a.updated))
         .slice(0, 50);
       items = notes.map((n) => ({ id: n.id, title: baseName(n.path), sub: parentPath(n.path) }));
-      if (q && !S.vault.findByPath(input.value)) items.push({ create: input.value.trim(), title: `Create “${input.value.trim()}”`, sub: 'New note' });
+      if (q && !S.vault.findByPath(input.value)) items.push({ create: input.value.trim(), title: trf('Create “{name}”', { name: input.value.trim() }), sub: tr('New note') });
       sel = Math.min(sel, Math.max(0, items.length - 1));
       list.replaceChildren(...items.map((it, i) => h('button', {
         class: `switcher-item${i === sel ? ' sel' : ''}`,
@@ -1368,8 +1386,8 @@ function quickSwitcher() {
       if (ev.key === 'Enter') { ev.preventDefault(); pick(sel); }
     });
     draw();
-    return h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Open note' },
-      input, list, h('div', { class: 'switcher-hint' }, '↑↓ to move · Enter to open · Esc to close'));
+    return h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('Open note') },
+      input, list, h('div', { class: 'switcher-hint' }, tr('↑↓ to move · Enter to open · Esc to close')));
   });
 }
 
@@ -1408,7 +1426,7 @@ function currentFolder() {
 }
 
 async function newFolder(parent = '') {
-  const name = await promptModal('New folder', 'Name', '', 'Create');
+  const name = await promptModal(tr('New folder'), tr('Name'), '', tr('Create'));
   if (!name) return;
   const path = normalizePath(`${parent}/${name}`);
   const ok = await run(() => S.vault.createFolder(path).then(() => true));
@@ -1421,7 +1439,7 @@ async function newFolder(parent = '') {
 async function renameNotePrompt(id) {
   const note = S.vault.index.notes[id];
   if (!note) return;
-  const name = await promptModal('Rename note', 'Name', baseName(note.path), 'Rename');
+  const name = await promptModal(tr('Rename note'), tr('Name'), baseName(note.path), tr('Rename'));
   if (name == null || name.trim() === baseName(note.path)) return;
   await renameNoteTo(id, normalizePath(`${parentPath(note.path)}/${name}`));
 }
@@ -1461,15 +1479,15 @@ async function updateLinks(moves, allPaths) {
     }
     syncIndex();
     refreshBacklinks();
-    notice(`Links updated in ${updates.length} note${updates.length === 1 ? '' : 's'}.`);
+    notice(trn(updates.length, 'Links updated in 1 note.', 'Links updated in {n} notes.'));
   } catch (e) {
-    notice(`The note was renamed, but the links could not be updated: ${errText(e)}`, 'error');
+    notice(trf('The note was renamed, but the links could not be updated: {error}', { error: errText(e) }), 'error');
   }
 }
 
 async function moveNotePrompt(id) {
   const note = S.vault.index.notes[id];
-  const folder = await promptModal('Move note', 'Destination folder', parentPath(note.path), 'Move', 'Type the folder path, for example “Work/Ideas”. Leave it empty for the root.');
+  const folder = await promptModal(tr('Move note'), tr('Destination folder'), parentPath(note.path), tr('Move'), tr('Type the folder path, for example “Work/Ideas”. Leave it empty for the root.'));
   if (folder == null) return;
   await moveNote(id, normalizePath(folder));
 }
@@ -1486,7 +1504,7 @@ async function moveNote(id, folder) {
 async function deleteNote(id) {
   const note = S.vault.index.notes[id];
   if (!note) return;
-  const ok = await confirmModal('Delete note', `Delete “${baseName(note.path)}”? You can recover it from the repository history.`, 'Delete');
+  const ok = await confirmModal(tr('Delete note'), trf('Delete “{name}”? You can recover it from the repository history.', { name: baseName(note.path) }), tr('Delete'));
   if (!ok) return;
   if (id === S.current) {
     clearTimeout(S.saveTimer);
@@ -1499,7 +1517,7 @@ async function deleteNote(id) {
 }
 
 async function renameFolderPrompt(path) {
-  const name = await promptModal('Rename folder', 'Name', baseName(path), 'Rename');
+  const name = await promptModal(tr('Rename folder'), tr('Name'), baseName(path), tr('Rename'));
   if (name == null || name.trim() === baseName(path)) return;
   const to = normalizePath(`${parentPath(path)}/${name}`);
   await saveNow();
@@ -1516,9 +1534,9 @@ async function renameFolderPrompt(path) {
 
 async function deleteFolder(path) {
   const count = S.vault.notesUnder(path).length;
-  const ok = await confirmModal('Delete folder', count
-    ? `Delete “${baseName(path)}” and its ${count} note${count === 1 ? '' : 's'}? You can recover them from the repository history.`
-    : `Delete the empty folder “${baseName(path)}”?`, 'Delete');
+  const ok = await confirmModal(tr('Delete folder'), count
+    ? trn(count, 'Delete “{name}” and its note? You can recover them from the repository history.', 'Delete “{name}” and its {n} notes? You can recover them from the repository history.', { name: baseName(path) })
+    : trf('Delete the empty folder “{name}”?', { name: baseName(path) }), tr('Delete'));
   if (!ok) return;
   const inside = S.current && S.vault.index.notes[S.current]?.path.startsWith(`${path}/`);
   if (inside) {
@@ -1610,7 +1628,7 @@ function finishMode(reading) {
   const btn = $('mode-btn');
   btn.innerHTML = trusted(icon(reading ? 'edit' : 'read'));
   btn.setAttribute('aria-label', reading ? 'Switch to editing (Ctrl+E)' : 'Switch to reading (Ctrl+E)');
-  btn.title = reading ? 'Edit (Ctrl+E)' : 'Reading (Ctrl+E)';
+  btn.title = reading ? tr('Edit (Ctrl+E)') : tr('Reading (Ctrl+E)');
   if (!reading) autosize();
 }
 
@@ -1621,13 +1639,35 @@ function autosize() {
   paintHighlight();
 }
 
+// highlight() returns escaped text inside <span class="…"> tags and nothing else: it is turned into nodes here (text
+// as text nodes), so the note's text never goes through an HTML parser.
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
+function spansToNodes(markup) {
+  const root = document.createDocumentFragment();
+  const stack = [root];
+  for (const m of markup.matchAll(/<span class="([\w -]*)">|<\/span>|[^<]+/g)) {
+    const top = stack[stack.length - 1];
+    if (m[0] === '</span>') {
+      if (stack.length > 1) stack.pop();
+    } else if (m[0].startsWith('<span')) {
+      const el = document.createElement('span');
+      if (m[1]) el.className = m[1];
+      top.append(el);
+      stack.push(el);
+    } else {
+      top.append(document.createTextNode(m[0].replace(/&(amp|lt|gt|quot|#39);/g, (e) => ENTITIES[e])));
+    }
+  }
+  return [...root.childNodes];
+}
+
 // Highlighting: a <pre> behind the text box with the same text, colored.
 // highlight() escapes all the text before adding its <span>s.
 let hlFrame = 0;
 function paintHighlight() {
   cancelAnimationFrame(hlFrame);
   hlFrame = requestAnimationFrame(() => {
-    $('editor-hl').innerHTML = trusted(`${Ed.highlight($('editor').value)}\n`);
+    $('editor-hl').replaceChildren(...spansToNodes(`${Ed.highlight($('editor').value)}\n`));
   });
 }
 
@@ -1657,8 +1697,9 @@ function closeSuggest() {
 function caretBox(pos) {
   const ed = $('editor');
   const mirror = $('editor-mirror');
-  mirror.innerHTML = trusted(`${escapeHtml(ed.value.slice(0, pos))}<span id="caret-mark">\u200b</span>`);
-  const mark = mirror.querySelector('#caret-mark');
+  // Built from nodes (the text as text): the note is never read as HTML.
+  const mark = h('span', { id: 'caret-mark' }, '\u200b');
+  mirror.replaceChildren(document.createTextNode(ed.value.slice(0, pos)), mark);
   return { left: mark.offsetLeft, top: mark.offsetTop + mark.offsetHeight };
 }
 
@@ -1681,7 +1722,7 @@ function updateSuggest() {
     'aria-selected': String(i === SG.sel),
     onpointerdown: (ev) => { ev.preventDefault(); pickSuggest(i); },
   }, it.create
-    ? [h('span', { class: 'suggest-name' }, `Create “${it.name}”`)]
+    ? [h('span', { class: 'suggest-name' }, trf('Create “{name}”', { name: it.name }))]
     : [h('span', { class: 'suggest-name' }, it.name), it.path !== it.name ? h('span', { class: 'suggest-path' }, parentPath(it.path)) : null].filter(Boolean))));
   const c = caretBox(q.start);
   box.style.left = `${Math.min(c.left, Math.max(0, ed.clientWidth - 280))}px`;
@@ -1706,9 +1747,9 @@ async function pickSuggest(i) {
     await S.vault.createNote(normalizePath(it.name), '');
     renderTree();
     syncIndex();
-    notice(`Note “${baseName(it.name)}” created.`);
+    notice(trf('Note “{name}” created.', { name: baseName(it.name) }));
   } catch (e) {
-    notice(`The note could not be created: ${errText(e)}`, 'error');
+    notice(trf('The note could not be created: {error}', { error: errText(e) }), 'error');
   }
 }
 
@@ -1758,8 +1799,8 @@ function editorKeydown(ev) {
 let sideTimer = null;
 function refreshSide() {
   const text = $('editor').value;
-  $('st-words').textContent = `${wordCount(text).toLocaleString('en')} words`;
-  $('st-chars').textContent = `${text.length.toLocaleString('en')} characters`;
+  $('st-words').textContent = trf('{n} words', { n: wordCount(text).toLocaleString(LANG) });
+  $('st-chars').textContent = trf('{n} characters', { n: text.length.toLocaleString(LANG) });
   const heads = outline(text);
   $('outline').replaceChildren(...(heads.length
     ? heads.map((hd, i) => {
@@ -1767,7 +1808,7 @@ function refreshSide() {
       b.style.setProperty('--level', hd.level - 1);
       return b;
     })
-    : [h('p', { class: 'outline-empty' }, 'No headings')]));
+    : [h('p', { class: 'outline-empty' }, tr('No headings'))]));
   refreshBacklinks();
 }
 
@@ -1791,14 +1832,14 @@ function updatePlace() {
   const el = $('st-place');
   if (!S.vault) return;
   if (S.local) {
-    el.textContent = S.vault.kind === 'folder' ? `Folder “${S.vault.label}”` : 'In this browser';
+    el.textContent = S.vault.kind === 'folder' ? trf('Folder “{name}”', { name: S.vault.label }) : tr('In this browser');
     el.className = '';
     return;
   }
   const n = S.vault.outbox.size;
   el.textContent = S.vault.offline
-    ? `Offline${n ? ` · ${n} change${n === 1 ? '' : 's'} to upload` : ''}`
-    : (n ? `Uploading ${n} change${n === 1 ? '' : 's'}…` : 'GitHub · encrypted');
+    ? (n ? trn(n, 'Offline · 1 change to upload', 'Offline · {n} changes to upload') : tr('Offline'))
+    : (n ? trn(n, 'Uploading 1 change…', 'Uploading {n} changes…') : tr('GitHub · encrypted'));
   el.className = S.vault.offline ? 'offline' : '';
 }
 
@@ -1820,10 +1861,10 @@ async function rescanLocal() {
         const path = vault.freePath('', 'Recovered');
         const id = await vault.createNote(path, text);
         S.dirty = false;
-        notice(`The note was deleted or moved outside Snowlog. What you were writing is in “${path}”.`, 'error');
+        notice(trf('The note was deleted or moved outside Snowlog. What you were writing is in “{path}”.', { path }), 'error');
         await openNote(id);
       } else {
-        notice('The note you had open was deleted or moved outside Snowlog.');
+        notice(tr('The note you had open was deleted or moved outside Snowlog.'));
         showEmpty();
       }
     } else if (cur && res.changed.includes(cur) && !S.dirty) {
@@ -1833,7 +1874,7 @@ async function rescanLocal() {
         autosize();
         if (S.mode === 'read') setMode('read');
         refreshSide();
-        notice('The note changed outside Snowlog and was updated.');
+        notice(tr('The note changed outside Snowlog and was updated.'));
       }
     }
     renderTree();
@@ -1856,7 +1897,7 @@ function trySync() {
       const res = await vault.sync();
       if (S.vault !== vault) return;
       for (const c of res.conflicts) reportConflict(c);
-      if (res.synced) notice(`Back online: ${res.synced} change${res.synced === 1 ? '' : 's'} uploaded.`);
+      if (res.synced) notice(trn(res.synced, 'Back online: 1 change uploaded.', 'Back online: {n} changes uploaded.'));
       if (S.current && !S.dirty && vault.index.notes[S.current]) {
         const text = await vault.read(S.current);
         if (!S.dirty && S.vault === vault && $('editor').value !== text) {
@@ -1871,7 +1912,7 @@ function trySync() {
       ensureIndex().catch(() => {});
     } catch (e) {
       if (e.message === 'key_changed') keyChanged();
-      else if (e.message !== 'offline') notice(`Could not sync: ${errText(e)}`, 'error');
+      else if (e.message !== 'offline') notice(trf('Could not sync: {error}', { error: errText(e) }), 'error');
     } finally {
       syncing = null;
       updatePlace();
@@ -1901,14 +1942,14 @@ function applyMerged(id, sent, merged) {
   if (S.mode === 'read') setMode('read');
   clearTimeout(sideTimer);
   sideTimer = setTimeout(refreshSide, 300);
-  notice('Your changes were combined with the ones made elsewhere.');
+  notice(tr('Your changes were combined with the ones made elsewhere.'));
 }
 
 function reportConflict(conflict) {
   if (S.vault?.index.notes[conflict.id]) expandTo(conflict.path);
   renderTree();
   const n = h('div', { class: 'notice' },
-    'This note was also changed on another device. Your version was saved and the other one is in ',
+    tr('This note was also changed on another device. Your version was saved and the other one is in '),
     h('button', { class: 'link-btn', type: 'button', onclick: () => { n.remove(); openNote(conflict.id); } }, `“${baseName(conflict.path)}”`),
     '.');
   $('notices').append(n);
@@ -1920,7 +1961,7 @@ function setStatus(kind) {
   const text = {
     loading: 'Decrypting…', queued: 'Saved here (offline)', pending: 'Not saved', saving: 'Encrypting and saving…', saved: 'Saved', error: 'Save failed', '': '',
   }[kind];
-  el.textContent = text;
+  el.textContent = text ? tr(text) : '';
   el.className = kind === 'error' ? 'error' : '';
 }
 
@@ -1964,7 +2005,7 @@ function saveNow() {
         keyChanged();
         return;
       }
-      notice(`Could not save: ${errText(e)}`, 'error');
+      notice(trf('Could not save: {error}', { error: errText(e) }), 'error');
     });
   return S.saving;
 }
@@ -2018,7 +2059,7 @@ async function runQueries() {
   if (!blocks.length) return;
   const id = S.current;
   const placeholders = blocks.map((code) => {
-    const box = h('div', { class: 'query', 'data-source': code.textContent }, h('p', { class: 'query-empty' }, 'Loading…'));
+    const box = h('div', { class: 'query', 'data-source': code.textContent }, h('p', { class: 'query-empty' }, tr('Loading…')));
     code.parentElement.replaceWith(box);
     return box;
   });
@@ -2039,7 +2080,7 @@ function renderQueryBoxes(view) {
       const res = runQuery(parseQuery(box.dataset.source), indexedNotes(), { exclude });
       box.innerHTML = trusted(renderResult(res));
     } catch (e) {
-      box.replaceChildren(h('p', { class: 'query-error' }, `Query: ${e.message}`));
+      box.replaceChildren(h('p', { class: 'query-error' }, trf('Query: {error}', { error: e.message })));
     }
   }
 }
@@ -2087,7 +2128,7 @@ function refreshBacklinks() {
     return;
   }
   if (!S.indexReady || !me) {
-    el.replaceChildren(h('p', { class: 'outline-empty' }, 'Searching…'));
+    el.replaceChildren(h('p', { class: 'outline-empty' }, tr('Searching…')));
     return;
   }
   const from = indexedNotes().filter((n) => n.id !== me.id && linksTo(n, me));
@@ -2095,7 +2136,7 @@ function refreshBacklinks() {
     ? from.sort((a, b) => a.name.localeCompare(b.name, 'en')).map((n) => h('button', {
       class: 'outline-item', type: 'button', title: n.path, onclick: () => openNote(n.id),
     }, n.name))
-    : [h('p', { class: 'outline-empty' }, 'No notes link here')]));
+    : [h('p', { class: 'outline-empty' }, tr('No notes link here'))]));
 }
 
 // --- Calendar ---
@@ -2137,11 +2178,11 @@ function renderCalendar() {
   };
   el.replaceChildren(
     h('div', { class: 'cal-head' },
-      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Previous month', html: icon('chevronLeft'), onclick: () => move(-1) }),
-      h('button', { class: 'cal-title', type: 'button', title: 'Go to today', onclick: () => { S.calMonth = null; renderCalendar(); } },
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': tr('Previous month'), html: icon('chevronLeft'), onclick: () => move(-1) }),
+      h('button', { class: 'cal-title', type: 'button', title: tr('Go to today'), onclick: () => { S.calMonth = null; renderCalendar(); } },
         formatDate(first, 'MMMM YYYY')),
-      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Next month', html: icon('chevron'), onclick: () => move(1) })),
-    h('div', { class: 'cal-grid', role: 'grid' },
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': tr('Next month'), html: icon('chevron'), onclick: () => move(1) })),
+    h('div', { class: 'cal-grid', role: 'group', 'aria-label': formatDate(first, 'MMMM YYYY') },
       ...['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => h('span', { class: 'cal-dow', 'aria-hidden': 'true' }, d)),
       ...cells),
   );
@@ -2178,7 +2219,7 @@ function openHome() {
     S.mode = 'read';
     return openNote(home.id);
   }
-  notice('You have no dashboard yet. Use “Set up my space” in the ⋯ menu.');
+  notice(tr('You have no dashboard yet. Use “Set up my space” in the ⋯ menu.'));
   return undefined;
 }
 
@@ -2190,7 +2231,7 @@ function templateNotes() {
 function pickModal(title, items) {
   return modal((close) => h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
     h('h2', { class: 'pick-title' }, title),
-    h('div', { class: 'switcher-list', role: 'listbox' }, ...items.map((it) => h('button', {
+    h('div', { class: 'switcher-list', role: 'listbox', 'aria-label': tr('Results') }, ...items.map((it) => h('button', {
       class: 'switcher-item', type: 'button', role: 'option', onclick: () => close(it.value),
     }, h('span', {}, it.label), it.sub ? h('span', { class: 'sub' }, it.sub) : null)))));
 }
@@ -2198,7 +2239,7 @@ function pickModal(title, items) {
 async function chooseTemplate(title) {
   const list = templateNotes();
   if (!list.length) {
-    notice(`There are no templates in “${WS.templatesFolder}”. Use “Set up my space” in the ⋯ menu.`);
+    notice(trf('There are no templates in “{folder}”. Use “Set up my space” in the ⋯ menu.', { folder: WS.templatesFolder }));
     return null;
   }
   const prefix = `${WS.templatesFolder}/`;
@@ -2207,7 +2248,7 @@ async function chooseTemplate(title) {
 
 async function insertTemplate() {
   if (!S.current) return;
-  const t = await chooseTemplate('Insert template');
+  const t = await chooseTemplate(tr('Insert template'));
   if (!t) return;
   const note = S.vault.index.notes[S.current];
   const text = applyTemplate(await S.vault.read(t.id), { title: baseName(note.path), date: new Date() });
@@ -2222,9 +2263,9 @@ async function insertTemplate() {
 }
 
 async function newFromTemplate() {
-  const t = await chooseTemplate('New note from template');
+  const t = await chooseTemplate(tr('New note from template'));
   if (!t) return;
-  const name = await promptModal('New note', 'Title (you can write Folder/Title)', '', 'Create');
+  const name = await promptModal(tr('New note'), tr('Title (you can write Folder/Title)'), '', tr('Create'));
   if (!name || !name.trim()) return;
   const path = name.includes('/') ? name : `${currentFolder()}/${name}`;
   const text = applyTemplate(await S.vault.read(t.id), { title: baseName(normalizePath(path)), date: new Date() });
@@ -2240,19 +2281,19 @@ async function setupSpace() {
   const missing = space.notes.filter((n) => !S.vault.findByPath(n.path));
   const folders = space.folders.filter((f) => !S.vault.index.folders.includes(f));
   if (!missing.length && !folders.length) {
-    notice('Your space is already set up.');
+    notice(tr('Your space is already set up.'));
     return;
   }
-  const ok = await confirmModal('Set up my space',
-    `This creates the “${WS.home}” dashboard, the folders ${space.folders.map((f) => `“${f}”`).join(', ')} and ${missing.length} templates and notes. Nothing you already have is touched.`,
-    'Set up', false);
+  const ok = await confirmModal(tr('Set up my space'),
+    trf('This creates the “{home}” dashboard, the folders {folders} and {n} templates and notes. Nothing you already have is touched.', { home: WS.home, folders: space.folders.map((f) => `“${f}”`).join(', '), n: missing.length }),
+    tr('Set up'), false);
   if (!ok) return;
   await saveNow();
   const done = await run(() => S.vault.importNotes(missing, { message: 'set up my space', folders }));
   if (!done) return;
   for (const f of [WS.templatesFolder, WS.dailyFolder]) if (f) S.expanded.add(f);
   renderTree();
-  notice('Space ready: dashboard, daily notes, projects, templates and archive.');
+  notice(tr('Space ready: dashboard, daily notes, projects, templates and archive.'));
   await openDaily();
 }
 
@@ -2260,13 +2301,15 @@ async function loadExamples() {
   const space = exampleSpace({ dailyFolder: WS.dailyFolder || '' });
   const missing = space.notes.filter((n) => !S.vault.findByPath(n.path));
   if (!missing.length) {
-    notice('The example project is already loaded.');
+    notice(tr('The example project is already loaded.'));
     return;
   }
   const skipped = space.notes.length - missing.length;
-  const ok = await confirmModal('Load examples',
-    `This creates “${space.root}” with a project, 4 stories, a board, a meeting, a knowledge pill and daily notes for today and the two days before, all linked together.${skipped ? ` ${skipped} notes you already have are kept (for example, today's).` : ''} You can delete it whenever you want.`,
-    'Load', false);
+  const ok = await confirmModal(tr('Load examples'),
+    trf(skipped
+      ? 'This creates “{root}” with a project, 4 stories, a board, a meeting, a knowledge pill and daily notes for today and the two days before, all linked together. {n} notes you already have are kept (for example, today\'s). You can delete it whenever you want.'
+      : 'This creates “{root}” with a project, 4 stories, a board, a meeting, a knowledge pill and daily notes for today and the two days before, all linked together. You can delete it whenever you want.', { root: space.root, n: skipped }),
+    tr('Load'), false);
   if (!ok) return;
   await saveNow();
   const done = await run(() => S.vault.importNotes(missing, { message: 'load examples', folders: space.folders }));
@@ -2274,7 +2317,7 @@ async function loadExamples() {
   for (const f of space.folders) S.expanded.add(f);
   expandTo(`${space.root}/x`);
   renderTree();
-  notice('Examples loaded. Start with “How to use this example”.');
+  notice(tr('Examples loaded. Start with “How to use this example”.'));
   const guide = S.vault.findByPath(`${space.root}/How to use this example`);
   if (guide) {
     S.mode = 'read';
@@ -2287,7 +2330,7 @@ async function importFolder(files) {
   const plan = planImport(files);
   const skippedTotal = plan.skipped.config + plan.skipped.other + plan.skipped.tooBig;
   if (!plan.notes.length) {
-    notice('There are no Markdown notes (.md) in that folder.', 'error');
+    notice(tr('There are no Markdown notes (.md) in that folder.'), 'error');
     return;
   }
   const bytes = plan.notes.reduce((acc, n) => acc + n.file.size, 0);
@@ -2296,11 +2339,11 @@ async function importFolder(files) {
   if (plan.skipped.config) parts.push(`${plan.skipped.config} settings files (.obsidian, .git…)`);
   if (plan.skipped.tooBig) parts.push(`${plan.skipped.tooBig} notes over 2 MB`);
   const folder = await promptModal(
-    `Import ${plan.notes.length} note${plan.notes.length === 1 ? '' : 's'} (${formatBytes(bytes)})`,
-    'Destination folder in Snowlog (empty = root)',
+    trn(plan.notes.length, 'Import 1 note ({size})', 'Import {n} notes ({size})', { size: formatBytes(bytes) }),
+    tr('Destination folder in Snowlog (empty = root)'),
     plan.root,
-    'Import',
-    `They are encrypted on this device before upload.${skippedTotal ? ` Skipped: ${parts.join(', ')}.` : ''} If a name already exists, “(imported)” is added.`,
+    tr('Import'),
+    skippedTotal ? trf('They are encrypted on this device before upload. Skipped: {list}. If a name already exists, “(imported)” is added.', { list: parts.join(', ') }) : tr('They are encrypted on this device before upload. If a name already exists, “(imported)” is added.'),
   );
   if (folder == null) return;
   await saveNow();
@@ -2308,27 +2351,27 @@ async function importFolder(files) {
   setStatus('');
   const st = $('st-sync');
   try {
-    st.textContent = 'Reading files…';
+    st.textContent = tr('Reading files…');
     const items = await Promise.all(plan.notes.map(async (n) => ({
       path: target ? `${target}/${n.path}` : n.path,
       text: await n.file.text(),
     })));
-    st.textContent = `Encrypting and importing 0/${items.length}…`;
+    st.textContent = trf('Encrypting and importing {d}/{t}…', { d: 0, t: items.length });
     const result = await S.vault.importNotes(items, {
       onProgress: (done, total) => {
         S.lastActivity = Date.now();
-        st.textContent = `Encrypting and importing ${done}/${total}…`;
+        st.textContent = trf('Encrypting and importing {d}/{t}…', { d: done, t: total });
       },
     });
     if (target) S.expanded.add(target);
     renderTree();
     st.textContent = '';
-    notice(`Imported ${result.length} notes${target ? ` into “${target}”` : ''}.`);
+    notice(trf(target ? 'Imported {n} notes into “{target}”.' : 'Imported {n} notes.', { n: result.length, target }));
     if (!S.current && result[0]) openNote(result[0].id);
   } catch (e) {
     renderTree();
     st.textContent = '';
-    notice(`The import stopped: ${errText(e)}. What was already imported is kept.`, 'error');
+    notice(trf('The import stopped: {error}. What was already imported is kept.', { error: errText(e) }), 'error');
   }
 }
 
@@ -2356,19 +2399,19 @@ function renderBoard(view, text) {
   };
   const lanes = board.lanes.map((lane, li) => {
     const cardsEl = h('div', { class: 'kanban-cards', role: 'list' }, ...lane.cards.map((c, ci) => {
-      const box = h('input', { type: 'checkbox', class: 'kanban-check', 'aria-label': 'Done', checked: c.done });
+      const box = h('input', { type: 'checkbox', class: 'kanban-check', 'aria-label': tr('Done'), checked: c.done });
       box.addEventListener('change', () => setBoard(K.toggleCard(board, li, ci)));
       const textEl = h('div', { class: 'kanban-text', html: inline(c.text) });
       const card = h('div', { class: `kanban-card${c.done ? ' done' : ''}`, role: 'listitem', draggable: 'true' },
         box, textEl,
         h('div', { class: 'kanban-card-actions' },
-          li > 0 ? h('button', { class: 'icon-btn', type: 'button', title: 'To the previous column', 'aria-label': 'To the previous column', onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li - 1, index: 1e9 })) }, '‹') : null,
-          li < board.lanes.length - 1 ? h('button', { class: 'icon-btn', type: 'button', title: 'To the next column', 'aria-label': 'To the next column', onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li + 1, index: 1e9 })) }, '›') : null,
-          h('button', { class: 'icon-btn', type: 'button', title: 'Edit', 'aria-label': 'Edit card', onclick: async () => {
-            const t = await promptModal('Edit card', 'Text', c.text, 'Save');
+          li > 0 ? h('button', { class: 'icon-btn', type: 'button', title: tr('To the previous column'), 'aria-label': tr('To the previous column'), onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li - 1, index: 1e9 })) }, '‹') : null,
+          li < board.lanes.length - 1 ? h('button', { class: 'icon-btn', type: 'button', title: tr('To the next column'), 'aria-label': tr('To the next column'), onclick: () => setBoard(K.moveCard(board, { lane: li, index: ci }, { lane: li + 1, index: 1e9 })) }, '›') : null,
+          h('button', { class: 'icon-btn', type: 'button', title: tr('Edit'), 'aria-label': tr('Edit card'), onclick: async () => {
+            const t = await promptModal(tr('Edit card'), tr('Text'), c.text, tr('Save'));
             if (t != null && t.trim()) setBoard(K.editCard(board, li, ci, t));
           } }, '✎'),
-          h('button', { class: 'icon-btn', type: 'button', title: 'Delete', 'aria-label': 'Delete card', onclick: () => setBoard(K.deleteCard(board, li, ci)) }, '×')));
+          h('button', { class: 'icon-btn', type: 'button', title: tr('Delete'), 'aria-label': tr('Delete card'), onclick: () => setBoard(K.deleteCard(board, li, ci)) }, '×')));
       card.addEventListener('dragstart', (ev) => {
         drag = { lane: li, index: ci };
         ev.dataTransfer.effectAllowed = 'move';
@@ -2388,7 +2431,7 @@ function renderBoard(view, text) {
       drag = null;
       setBoard(K.moveCard(board, from, to));
     });
-    const add = h('input', { class: 'input kanban-add', placeholder: '+ Add card', 'aria-label': `Add a card to ${lane.title}` });
+    const add = h('input', { class: 'input kanban-add', placeholder: tr('+ Add card'), 'aria-label': trf('Add a card to {lane}', { lane: lane.title }) });
     add.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter' && add.value.trim()) {
         ev.preventDefault();
@@ -2401,18 +2444,18 @@ function renderBoard(view, text) {
       h('header', { class: 'kanban-lane-head' },
         h('span', { class: 'kanban-lane-title', html: inline(lane.title) }),
         h('span', { class: 'kanban-count' }, done ? `${done}/${lane.cards.length}` : String(lane.cards.length)),
-        h('button', { class: 'icon-btn', type: 'button', 'aria-label': `${lane.title} options`, html: icon('more'), onclick: (ev) => {
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': trf('{lane} options', { lane: lane.title }), html: icon('more'), onclick: (ev) => {
           const r = ev.currentTarget.getBoundingClientRect();
           openMenu(r.left, r.bottom, [
-            ['rename', 'Rename column', async () => {
-              const t = await promptModal('Rename column', 'Name', lane.title, 'Rename');
+            ['rename', tr('Rename column'), async () => {
+              const t = await promptModal(tr('Rename column'), tr('Name'), lane.title, tr('Rename'));
               if (t != null && t.trim()) setBoard(K.renameLane(board, li, t));
             }],
-            li > 0 && ['chevronLeft', 'Move left', () => setBoard(K.moveLane(board, li, li - 1))],
-            li < board.lanes.length - 1 && ['chevron', 'Move right', () => setBoard(K.moveLane(board, li, li + 1))],
+            li > 0 && ['chevronLeft', tr('Move left'), () => setBoard(K.moveLane(board, li, li - 1))],
+            li < board.lanes.length - 1 && ['chevron', tr('Move right'), () => setBoard(K.moveLane(board, li, li + 1))],
             null,
             ['trash', 'Delete column', async () => {
-              if (lane.cards.length && !(await confirmModal('Delete column', `Its ${lane.cards.length} cards will be deleted too.`, 'Delete'))) return;
+              if (lane.cards.length && !(await confirmModal(tr('Delete column'), trn(lane.cards.length, 'Its card will be deleted too.', 'Its {n} cards will be deleted too.'), tr('Delete')))) return;
               setBoard(K.deleteLane(board, li));
             }, 'danger'],
           ].filter((x) => x !== false));
@@ -2420,9 +2463,9 @@ function renderBoard(view, text) {
       cardsEl, add);
   });
   const newLane = h('button', { class: 'kanban-new-lane', type: 'button', onclick: async () => {
-    const t = await promptModal('New column', 'Name', '', 'Create');
+    const t = await promptModal(tr('New column'), tr('Name'), '', tr('Create'));
     if (t != null && t.trim()) setBoard(K.addLane(board, t));
-  } }, '+ Column');
+  } }, tr('+ Column'));
   const parts = [];
   if (intro) {
     const introEl = h('div', { class: 'kanban-intro' });
@@ -2452,19 +2495,19 @@ async function graphView(focusId = null) {
   if (!S.vault) return;
   await saveNow();
   modal((close) => {
-    const canvas = h('canvas', { class: 'graph-canvas', 'aria-label': 'Note graph' });
-    const info = h('span', { class: 'graph-info' }, 'Preparing…');
+    const canvas = h('canvas', { class: 'graph-canvas', 'aria-label': tr('Note graph') });
+    const info = h('span', { class: 'graph-info' }, tr('Preparing…'));
     const localBox = h('input', { type: 'checkbox', id: 'graph-local', checked: !!focusId });
-    const depthSel = h('select', { class: 'input graph-depth', 'aria-label': 'Hops' }, ...[1, 2, 3].map((d) => h('option', { value: String(d) }, `${d} hop${d > 1 ? 's' : ''}`)));
+    const depthSel = h('select', { class: 'input graph-depth', 'aria-label': tr('Hops') }, ...[1, 2, 3].map((d) => h('option', { value: String(d) }, trn(d, '1 hop', '{n} hops'))));
     const orphans = h('input', { type: 'checkbox', id: 'graph-orphans', checked: true });
-    const box = h('div', { class: 'modal graph', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Graph view' },
+    const box = h('div', { class: 'modal graph', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('Graph view') },
       h('div', { class: 'graph-bar' },
-        h('h2', {}, 'Graph'),
-        S.current ? h('label', { class: 'check', for: 'graph-local' }, localBox, 'Only this note') : null,
+        h('h2', {}, tr('Graph')),
+        S.current ? h('label', { class: 'check', for: 'graph-local' }, localBox, tr('Only this note')) : null,
         S.current ? depthSel : null,
-        h('label', { class: 'check', for: 'graph-orphans' }, orphans, 'Notes without links'),
+        h('label', { class: 'check', for: 'graph-orphans' }, orphans, tr('Notes without links')),
         info,
-        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Close')),
+        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, tr('Close'))),
       canvas);
     let g = { nodes: [], links: [] };
     let full = null;
@@ -2584,7 +2627,7 @@ async function graphView(focusId = null) {
       fitted = false;
       touched = false;
       view = { x: 0, y: 0, k: g.nodes.length > 200 ? 0.5 : 1 };
-      info.textContent = `${g.nodes.length} note${g.nodes.length === 1 ? '' : 's'} · ${g.links.length} link${g.links.length === 1 ? '' : 's'}`;
+      info.textContent = `${trn(g.nodes.length, '1 note', '{n} notes')} · ${trn(g.links.length, '1 link', '{n} links')}`;
     };
     for (const el of [localBox, depthSel, orphans]) el.addEventListener('change', rebuild);
     canvas.addEventListener('pointerdown', (ev) => {
@@ -2664,7 +2707,7 @@ async function setBookmarks(list) {
   try {
     await S.vault.saveSettings({ ...S.vault.getSettings(), bookmarks: list });
   } catch (e) {
-    notice(`The bookmarks could not be saved: ${errText(e)}`, 'error');
+    notice(trf('The bookmarks could not be saved: {error}', { error: errText(e) }), 'error');
     return false;
   }
   applySettings();
@@ -2678,7 +2721,7 @@ async function toggleBookmark(id) {
   const list = bookmarks();
   const on = !list.includes(path);
   if (await setBookmarks(on ? [...list, path] : list.filter((p) => p !== path))) {
-    notice(on ? `“${baseName(path)}” added to bookmarks.` : `“${baseName(path)}” removed from bookmarks.`);
+    notice(trf(on ? '“{name}” added to bookmarks.' : '“{name}” removed from bookmarks.', { name: baseName(path) }));
   }
 }
 
@@ -2697,53 +2740,54 @@ function renderBookmarks() {
     ? items.map(({ path, note }) => h('div', { class: 'bookmark-row', role: 'listitem' },
       h('button', { class: `bookmark-open${note ? '' : ' missing'}`, type: 'button', title: path, disabled: !note, onclick: () => { closeMobilePanels(); openNote(note.id); } },
         h('span', { class: 'search-name' }, baseName(path)), parentPath(path) ? h('span', { class: 'search-folder' }, parentPath(path)) : null),
-      h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Remove “${baseName(path)}” from bookmarks`, title: 'Remove', onclick: () => setBookmarks(bookmarks().filter((x) => x !== path)) }, '×')))
-    : [h('p', { class: 'search-empty' }, 'No bookmarks. Use “Add to bookmarks” in a note\'s ⋯ menu.')]));
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': trf('Remove “{name}” from bookmarks', { name: baseName(path) }), title: tr('Remove'), onclick: () => setBookmarks(bookmarks().filter((x) => x !== path)) }, '×')))
+    : [h('p', { class: 'search-empty' }, tr('No bookmarks. Use “Add to bookmarks” in a note\'s ⋯ menu.'))]));
 }
 
 // --- Command palette (Ctrl+P) ---
 function commands() {
   const cur = S.current && S.vault?.index.notes[S.current] ? S.current : null;
   const list = [
-    ['open', 'Open note', 'Ctrl+O', () => quickSwitcher()],
-    ['search', 'Search all notes', 'Ctrl+Shift+F', () => openSearch()],
-    ['new', 'New note', 'Ctrl+N', () => newNote()],
-    ['new-tpl', 'New note from template', '', () => newFromTemplate()],
-    ['today', 'Today\'s note', 'Ctrl+D', () => openDaily()],
-    ['home', 'Dashboard', '', () => openHome()],
-    ['mode', 'Switch between editing and reading', 'Ctrl+E', () => ACTIONS['toggle-mode']()],
-    ['save', 'Save now', 'Ctrl+S', () => saveNow()],
-    cur && ['tpl', 'Insert template', '', () => insertTemplate()],
-    cur && ['attach', 'Attach an image or PDF', '', () => $('attach-input').click()],
-    cur && ['bookmark', isBookmarked(cur) ? 'Remove from bookmarks' : 'Add to bookmarks', '', () => toggleBookmark(cur)],
-    cur && ['rename', 'Rename note', '', () => renameNotePrompt(cur)],
-    cur && ['move', 'Move note', '', () => moveNotePrompt(cur)],
-    cur && ['history', 'Version history', '', () => historyModal(cur)],
-    cur && ['delete', 'Delete note', '', () => deleteNote(cur)],
-    ['graph', 'Graph view', 'Ctrl+G', () => graphView()],
-    cur && ['graph-local', 'Graph of this note', '', () => graphView(cur)],
-    ['board', 'New Kanban board', '', () => newBoard()],
-    ['drawing', 'New drawing', '', () => newDrawing()],
-    ...Object.keys(SKETCH_TEMPLATES).map((t) => ['drawing', `New drawing from a template: ${sketchTemplate(t, 'en').name}`, '', () => newDrawing({ template: t })]),
-    cur && ['drawing-in', 'Insert a new drawing into the note', '', () => newDrawing({ insert: true })],
-    ['files', 'Show files', '', () => showLeftPane('files')],
-    ['tags', 'Show tags', '', () => showLeftPane('tags')],
-    ['bookmarks', 'Show bookmarks', '', () => showLeftPane('bookmarks')],
-    ['left', 'Show or hide the left panel', '', () => togglePanel('left')],
-    ['right', 'Show or hide the right panel', '', () => togglePanel('right')],
-    ['collapse', 'Collapse all folders', '', () => ACTIONS['collapse-all']()],
-    ['settings', 'Settings', '', () => settingsModal()],
-    ['theme-light', 'Light theme', '', () => { try { localStorage.setItem('snowlog.theme', 'light'); } catch { /* */ } applyTheme('light'); }],
-    ['theme-dark', 'Dark theme', '', () => { try { localStorage.setItem('snowlog.theme', 'dark'); } catch { /* */ } applyTheme('dark'); }],
-    ['theme-auto', 'Automatic theme', '', () => { try { localStorage.setItem('snowlog.theme', 'auto'); } catch { /* */ } applyTheme('auto'); }],
-    ['setup', 'Set up my space', '', () => setupSpace()],
-    ['examples', 'Load examples', '', () => loadExamples()],
-    ['import', 'Import a Markdown folder', '', () => ACTIONS.import()],
-    ['backup', S.local ? 'Backup (.zip)' : 'Encrypted backup', '', () => backupNow()],
-    ['restore', 'Import a backup (.snowlog or .zip)', '', () => $('backup-input').click()],
-    !S.local && ['export', 'Export unencrypted (.zip)', '', () => exportZip()],
-    !S.local && ['security', 'Passphrase and recovery', '', () => securityModal()],
-    ['lock', S.local ? 'Close folder' : 'Lock', '', () => lock()],
+    ['open', tr('Open note'), 'Ctrl+O', () => quickSwitcher()],
+    ['search', tr('Search all notes'), 'Ctrl+Shift+F', () => openSearch()],
+    ['new', tr('New note'), 'Ctrl+N', () => newNote()],
+    ['new-tpl', tr('New note from template'), '', () => newFromTemplate()],
+    ['today', tr('Today\'s note'), 'Ctrl+D', () => openDaily()],
+    ['home', tr('Dashboard'), '', () => openHome()],
+    ['mode', tr('Switch between editing and reading'), 'Ctrl+E', () => ACTIONS['toggle-mode']()],
+    ['save', tr('Save now'), 'Ctrl+S', () => saveNow()],
+    cur && ['tpl', tr('Insert template'), '', () => insertTemplate()],
+    cur && ['attach', tr('Attach an image or PDF'), '', () => $('attach-input').click()],
+    cur && ['bookmark', isBookmarked(cur) ? tr('Remove from bookmarks') : tr('Add to bookmarks'), '', () => toggleBookmark(cur)],
+    cur && ['rename', tr('Rename note'), '', () => renameNotePrompt(cur)],
+    cur && ['move', tr('Move note'), '', () => moveNotePrompt(cur)],
+    cur && ['history', tr('Version history'), '', () => historyModal(cur)],
+    cur && ['delete', tr('Delete note'), '', () => deleteNote(cur)],
+    ['graph', tr('Graph view'), 'Ctrl+G', () => graphView()],
+    ['help', tr('Help and keyboard shortcuts'), '?', () => helpModal()],
+    cur && ['graph-local', tr('Graph of this note'), '', () => graphView(cur)],
+    ['board', tr('New Kanban board'), '', () => newBoard()],
+    ['drawing', tr('New drawing'), '', () => newDrawing()],
+    ...Object.keys(SKETCH_TEMPLATES).map((t) => ['drawing', trf('New drawing from a template: {name}', { name: sketchTemplate(t, LANG).name }), '', () => newDrawing({ template: t })]),
+    cur && ['drawing-in', tr('Insert a new drawing into the note'), '', () => newDrawing({ insert: true })],
+    ['files', tr('Show files'), '', () => showLeftPane('files')],
+    ['tags', tr('Show tags'), '', () => showLeftPane('tags')],
+    ['bookmarks', tr('Show bookmarks'), '', () => showLeftPane('bookmarks')],
+    ['left', tr('Show or hide the left panel'), '', () => togglePanel('left')],
+    ['right', tr('Show or hide the right panel'), '', () => togglePanel('right')],
+    ['collapse', tr('Collapse all folders'), '', () => ACTIONS['collapse-all']()],
+    ['settings', tr('Settings'), '', () => settingsModal()],
+    ['theme-light', tr('Light theme'), '', () => { try { localStorage.setItem('snowlog.theme', 'light'); } catch { /* */ } applyTheme('light'); }],
+    ['theme-dark', tr('Dark theme'), '', () => { try { localStorage.setItem('snowlog.theme', 'dark'); } catch { /* */ } applyTheme('dark'); }],
+    ['theme-auto', tr('Automatic theme'), '', () => { try { localStorage.setItem('snowlog.theme', 'auto'); } catch { /* */ } applyTheme('auto'); }],
+    ['setup', tr('Set up my space'), '', () => setupSpace()],
+    ['examples', tr('Load examples'), '', () => loadExamples()],
+    ['import', tr('Import a Markdown folder'), '', () => ACTIONS.import()],
+    ['backup', S.local ? tr('Backup (.zip)') : tr('Encrypted backup'), '', () => backupNow()],
+    ['restore', tr('Import a backup (.snowlog or .zip)'), '', () => $('backup-input').click()],
+    !S.local && ['export', tr('Export unencrypted (.zip)'), '', () => exportZip()],
+    !S.local && ['security', tr('Passphrase and recovery'), '', () => securityModal()],
+    ['lock', S.local ? tr('Close folder') : tr('Lock'), '', () => lock()],
   ];
   return list.filter(Boolean).map(([id, label, keys, run]) => ({ id, label, keys, run }));
 }
@@ -2752,13 +2796,53 @@ function recentCommands() {
   try { return JSON.parse(localStorage.getItem('snowlog.recentCommands') || '[]'); } catch { return []; }
 }
 
+// --- Help: a short guide and every keyboard shortcut (from the palette, or with "?") ---
+const HELP_GUIDE = [
+  'Your notes are encrypted on this device before they go to GitHub: the repository only holds files nobody can read without your passphrase or your recovery code.',
+  'Keep the recovery code somewhere safe: it is the only way back in if you forget the passphrase. Nobody, not even Snowlog, can recover your notes without one of them.',
+  'Notes save themselves while you write. Offline, they are kept on this device and go up when the network is back.',
+  'Link notes with [[Another note]]; tags are #words; a line starting with - [ ] is a task. Queries, Kanban boards and drawings live in notes too.',
+  'Make an encrypted backup from time to time (palette → Encrypted backup): it opens with your passphrase or your recovery code.',
+  'On a Mac, use Cmd where it says Ctrl.',
+];
+const HELP_KEYS = [
+  ['Notes', [
+    ['Open a note', ['Ctrl', 'O']], ['Search all notes', ['Ctrl', 'Shift', 'F']], ['New note', ['Ctrl', 'N']],
+    ['Today\'s note', ['Ctrl', 'D']], ['Switch between editing and reading', ['Ctrl', 'E']], ['Save now', ['Ctrl', 'S']],
+    ['Command palette', ['Ctrl', 'P']], ['Graph view', ['Ctrl', 'G']], ['This help', ['?']],
+  ]],
+  ['Writing', [
+    ['Bold', ['Ctrl', 'B']], ['Italic', ['Ctrl', 'I']], ['Link', ['Ctrl', 'K']], ['Tick or untick a task', ['Ctrl', 'Enter']],
+    ['Continue a list', ['Enter']], ['Indent or outdent', ['Tab'], ['Shift', 'Tab']], ['Pick a suggestion ([[ or #)', ['Enter'], ['Tab']],
+  ]],
+  ['Lists and dialogs', [['Move through results', ['↑'], ['↓']], ['Open the selected one', ['Enter']], ['Close', ['Esc']]]],
+];
+
+function helpModal() {
+  return modal((close) => {
+    const keys = (combos) => combos.flatMap((combo, i) => [
+      ...(i ? [' / '] : []),
+      ...combo.flatMap((k, j) => [...(j ? ['+'] : []), h('kbd', {}, tr(k))]),
+    ]);
+    const box = h('div', { class: 'modal help-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('Help') },
+      h('h2', {}, tr('Help')),
+      h('ul', { class: 'help-guide' }, ...HELP_GUIDE.map((t) => h('li', {}, tr(t)))),
+      h('h3', {}, tr('Keyboard shortcuts')),
+      ...HELP_KEYS.map(([title, rows]) => h('table', { class: 'help-keys' },
+        h('caption', {}, tr(title)),
+        h('tbody', {}, ...rows.map(([what, ...combos]) => h('tr', {}, h('td', {}, tr(what)), h('td', {}, ...keys(combos))))))),
+      h('div', { class: 'modal-actions' }, h('button', { class: 'btn primary', type: 'button', onclick: () => close(null) }, tr('Close'))));
+    return box;
+  });
+}
+
 function commandPalette() {
   if (!S.vault) return;
   const all = commands();
   const recent = recentCommands();
   modal((close) => {
-    const input = h('input', { class: 'input', placeholder: 'Type a command…', 'aria-label': 'Find command', autocomplete: 'off', spellcheck: 'false' });
-    const list = h('div', { class: 'switcher-list', role: 'listbox' });
+    const input = h('input', { class: 'input', placeholder: tr('Type a command…'), 'aria-label': tr('Find command'), autocomplete: 'off', spellcheck: 'false' });
+    const list = h('div', { class: 'switcher-list', role: 'listbox', 'aria-label': tr('Results') });
     let items = [];
     let sel = 0;
     const draw = () => {
@@ -2768,7 +2852,7 @@ function commandPalette() {
       sel = Math.min(sel, Math.max(0, items.length - 1));
       list.replaceChildren(...(items.length ? items.map((c, i) => h('button', {
         class: `switcher-item command-item${i === sel ? ' sel' : ''}`, type: 'button', role: 'option', 'aria-selected': String(i === sel), onclick: () => pick(i),
-      }, h('span', {}, c.label), c.keys ? h('kbd', {}, c.keys) : null)) : [h('p', { class: 'search-empty' }, 'No command matches.')]));
+      }, h('span', {}, c.label), c.keys ? h('kbd', {}, c.keys) : null)) : [h('p', { class: 'search-empty' }, tr('No command matches.'))]));
       list.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
     };
     const pick = (i) => {
@@ -2785,8 +2869,8 @@ function commandPalette() {
       if (ev.key === 'Enter') { ev.preventDefault(); pick(sel); }
     });
     draw();
-    return h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Command palette' },
-      input, list, h('div', { class: 'switcher-hint' }, '↑↓ to move · Enter to run · Esc to close'));
+    return h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('Command palette') },
+      input, list, h('div', { class: 'switcher-hint' }, tr('↑↓ to move · Enter to run · Esc to close')));
   });
 }
 
@@ -2842,13 +2926,15 @@ async function settingsModal() {
   const dl = (id, items) => h('datalist', { id }, ...items.map((v) => h('option', { value: v })));
   const text = (id, label, value, list, hint) => {
     const input = h('input', { class: 'input', id, value: value ?? '', list, autocomplete: 'off', spellcheck: 'false' });
-    return [h('div', { class: 'field' }, h('label', { for: id }, label), input, hint ? h('small', { class: 'field-hint' }, hint) : null), input];
+    return [h('div', { class: 'field' }, h('label', { for: id }, tr(label)), input, hint ? h('small', { class: 'field-hint' }, tr(hint)) : null), input];
   };
   const num = (id, label, value, min, max, hint) => {
     const input = h('input', { class: 'input', id, type: 'number', min: String(min), max: String(max), value: String(value ?? '') });
-    return [h('div', { class: 'field' }, h('label', { for: id }, label), input, hint ? h('small', { class: 'field-hint' }, hint) : null), input];
+    return [h('div', { class: 'field' }, h('label', { for: id }, tr(label)), input, hint ? h('small', { class: 'field-hint' }, tr(hint)) : null), input];
   };
   let theme = 'auto';
+  let lang = 'auto';
+  try { lang = localStorage.getItem('snowlog.lang') || 'auto'; } catch { /* no storage */ }
   try { theme = localStorage.getItem('snowlog.theme') || 'auto'; } catch { /* no storage */ }
   const result = await modal((close) => {
     const [fHome, iHome] = text('st-home', 'Dashboard (note)', cur.home, 'dl-notes');
@@ -2861,32 +2947,37 @@ async function settingsModal() {
     const [fBk, iBk] = num('st-bk', 'Backup reminder every (days)', cur.backupReminderDays, 0, 365, '0 = no reminder.');
     const themeSel = h('select', { class: 'input', id: 'st-theme' },
       ...[['auto', 'Automatic (the system\'s)'], ['light', 'Light'], ['dark', 'Dark']]
-        .map(([v, l]) => h('option', { value: v, selected: v === theme }, l)));
+        .map(([v, l]) => h('option', { value: v, selected: v === theme }, tr(l))));
     themeSel.addEventListener('change', () => applyTheme(themeSel.value));
+    const langSel = h('select', { class: 'input', id: 'st-lang' },
+      h('option', { value: 'auto', selected: lang === 'auto' }, tr('Automatic (the browser\'s)')),
+      ...LANGS.map((l) => h('option', { value: l, selected: l === lang, lang: l }, LANG_NAMES[l])));
     const err = errorLine();
-    const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
-    const form = h('form', { class: 'modal settings', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
-      h('h2', {}, 'Settings'),
+    const btn = h('button', { class: 'btn primary', type: 'submit' }, tr('Save'));
+    const form = h('form', { class: 'modal settings', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('Settings') },
+      h('h2', {}, tr('Settings')),
       dl('dl-folders', folders), dl('dl-notes', notes),
-      h('h3', {}, 'Day to day'), fHome, fDaily, fTpl,
-      h('label', { class: 'check', for: 'st-open' }, openDaily, 'Open today\'s note on start'),
-      h('h3', {}, 'Folders'), fTpls, fAtt,
-      h('h3', {}, 'Security and backups'), S.local ? null : fLock, fBk,
-      h('h3', {}, 'This device'), h('div', { class: 'field' }, h('label', { for: 'st-theme' }, 'Theme'), themeSel),
-      h('p', { class: 'field-hint' }, S.local ? 'Settings are stored in the folder (.snowlog/settings.json).' : 'Settings are stored encrypted in your vault and apply on all your devices. The theme is for this device only.'),
+      h('h3', {}, tr('Day to day')), fHome, fDaily, fTpl,
+      h('label', { class: 'check', for: 'st-open' }, openDaily, tr('Open today\'s note on start')),
+      h('h3', {}, tr('Folders')), fTpls, fAtt,
+      h('h3', {}, tr('Security and backups')), S.local ? null : fLock, fBk,
+      h('h3', {}, tr('This device')), h('div', { class: 'field' }, h('label', { for: 'st-theme' }, tr('Theme')), themeSel),
+      h('div', { class: 'field' }, h('label', { for: 'st-lang' }, tr('Language')), langSel),
+      h('p', { class: 'field-hint' }, S.local ? tr('Settings are stored in the folder (.snowlog/settings.json).') : tr('Settings are stored encrypted in your vault and apply on all your devices. The theme and the language are for this device only.')),
       err,
       h('div', { class: 'modal-actions' },
-        h('button', { class: 'btn', type: 'button', onclick: () => { applyTheme(theme); close(null); } }, 'Cancel'),
+        h('button', { class: 'btn', type: 'button', onclick: () => { applyTheme(theme); close(null); } }, tr('Cancel')),
         btn));
     form.addEventListener('submit', (ev) => {
       ev.preventDefault();
       const clean = (v) => normalizePath(v || '');
       const lockMin = Math.round(Number(iLock.value));
       const bkDays = Math.round(Number(iBk.value));
-      if (!S.local && !(lockMin >= 1 && lockMin <= 240)) return showError(err, 'The lock must be between 1 and 240 minutes.');
-      if (!(bkDays >= 0 && bkDays <= 365)) return showError(err, 'The reminder must be between 0 and 365 days.');
+      if (!S.local && !(lockMin >= 1 && lockMin <= 240)) return showError(err, tr('The lock must be between 1 and 240 minutes.'));
+      if (!(bkDays >= 0 && bkDays <= 365)) return showError(err, tr('The reminder must be between 0 and 365 days.'));
       close({
         theme: themeSel.value,
+        lang: langSel.value,
         settings: {
           home: clean(iHome.value),
           dailyFolder: clean(iDaily.value),
@@ -2904,6 +2995,11 @@ async function settingsModal() {
   if (!result) return;
   try { localStorage.setItem('snowlog.theme', result.theme); } catch { /* no storage */ }
   applyTheme(result.theme);
+  // The language is chosen when the page starts: after saving, it opens again in the new one.
+  let langChanged = false;
+  if (result.lang !== lang) {
+    try { localStorage.setItem('snowlog.lang', result.lang); langChanged = true; } catch { /* no storage */ }
+  }
   // Only what differs from the defaults is stored.
   const changed = Object.fromEntries(Object.entries(result.settings).filter(([k, v]) => v !== DEFAULTS[k]));
   const before = JSON.stringify(S.vault.getSettings());
@@ -2911,26 +3007,28 @@ async function settingsModal() {
     try {
       await S.vault.saveSettings(changed);
     } catch (e) {
-      notice(`The settings could not be saved: ${errText(e)}`, 'error');
+      notice(trf('The settings could not be saved: {error}', { error: errText(e) }), 'error');
       return;
     }
   }
   applySettings();
   renderCalendar();
-  notice('Settings saved.');
+  notice(tr('Settings saved.'));
+  // Changing it now would mean reloading, which locks the vault: it is used from the next start.
+  if (langChanged) notice(tr('The new language is used the next time Snowlog opens.'));
 }
 
 // --- Passphrase and recovery code ---
 async function securityModal() {
   if (S.local || !S.vaultFile) return;
-  const choice = await modal((close) => h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Passphrase and recovery' },
-    h('h2', {}, 'Passphrase and recovery'),
-    h('p', {}, 'The key that encrypts your notes does not change: only how it is opened. Nothing needs re-encrypting.'),
+  const choice = await modal((close) => h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('Passphrase and recovery') },
+    h('h2', {}, tr('Passphrase and recovery')),
+    h('p', {}, tr('The key that encrypts your notes does not change: only how it is opened. Nothing needs re-encrypting.')),
     h('div', { class: 'security-options' },
-      h('button', { class: 'btn', type: 'button', onclick: () => close('pass') }, 'Change the passphrase'),
-      h('button', { class: 'btn', type: 'button', onclick: () => close('recovery') }, 'Generate a new recovery code'),
-      h('button', { class: 'btn', type: 'button', onclick: () => close('rotate') }, 'Change the encryption key (re-encrypt everything)')),
-    h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Close'))));
+      h('button', { class: 'btn', type: 'button', onclick: () => close('pass') }, tr('Change the passphrase')),
+      h('button', { class: 'btn', type: 'button', onclick: () => close('recovery') }, tr('Generate a new recovery code')),
+      h('button', { class: 'btn', type: 'button', onclick: () => close('rotate') }, tr('Change the encryption key (re-encrypt everything)'))),
+    h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, tr('Close')))));
   if (choice === 'pass') changePassphraseModal();
   else if (choice === 'recovery') renewRecoveryModal();
   else if (choice === 'rotate') rotateKeyModal();
@@ -2939,15 +3037,29 @@ async function securityModal() {
 function showNewRecoveryCode(code, title = 'Your new recovery code') {
   return modal((close) => {
     const check = h('input', { type: 'checkbox', id: 'saved2' });
-    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => close(true) }, 'Done');
+    const btn = h('button', { class: 'btn primary', type: 'button', disabled: true, onclick: () => close(true) }, tr('Done'));
     check.addEventListener('change', () => { btn.disabled = !check.checked; });
     return h('div', { class: 'modal', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': title },
       h('h2', {}, title),
-      h('p', {}, 'Write it on paper and keep it somewhere safe. The previous one no longer works. It will not be shown again.'),
+      h('p', {}, tr('Write it on paper and keep it somewhere safe. The previous one no longer works. It will not be shown again.')),
       h('div', { class: 'recovery-code' }, code),
-      h('label', { class: 'check', for: 'saved2' }, check, 'I have kept it somewhere safe'),
+      h('label', { class: 'check', for: 'saved2' }, check, tr('I have kept it somewhere safe')),
       h('div', { class: 'modal-actions' }, btn));
   });
+}
+
+// After this device changed vault.json (passphrase, recovery code, key): this device keeps GitHub's copy of it, the
+// one it just wrote, and its epoch (made here, so it is the right one). Only when GitHub's copy holds the same key
+// slots as what was written: otherwise someone changed it meanwhile, and the next unlock checks it.
+async function keepVaultFile(written) {
+  let stored = null;
+  try { stored = await Vault.fetchVaultFile(S.repo); } catch { /* offline: kept on the next unlock */ }
+  // Not readable back, or not what was written: this device's copy stays as it was, so the next key change (or
+  // unlock) compares with GitHub's and asks before going on.
+  if (!stored || JSON.stringify(stored.keys) !== JSON.stringify(written.keys)) return;
+  S.vaultFile = stored;
+  Auth.cacheVault(stored);
+  Auth.rememberEpoch(C.epochHint(stored));
 }
 
 // The vault.json to change: GitHub's, if it still holds the key this device opened; if another device (or someone
@@ -2961,10 +3073,10 @@ async function currentVaultFile() {
 // Rotate the key: everything is encrypted again with a new key. For when someone may have learned the
 // old passphrase: from now on, neither that passphrase nor the old key open what is written.
 async function rotateKeyModal() {
-  const result = await secretForm('Change the encryption key',
-    'All your notes and attachments are encrypted again with a new key, in a single step, and a new recovery code is generated. Your passphrase stays the same (change it afterwards if you want). Your other devices will ask for the passphrase next time. Do not use Snowlog on another device meanwhile.',
-    [passField('rk0', 'Current passphrase')],
-    'Re-encrypt everything',
+  const result = await keyChangeForm(tr('Change the encryption key'),
+    tr('All your notes and attachments are encrypted again with a new key, in a single step, and a new recovery code is generated. Your passphrase stays the same (change it afterwards if you want). Your other devices will ask for the passphrase next time. Do not use Snowlog on another device meanwhile.'),
+    [passField('rk0', tr('Current passphrase'))],
+    tr('Re-encrypt everything'),
     async ([pass]) => {
       await saveNow();
       const st = $('st-sync');
@@ -2972,9 +3084,9 @@ async function rotateKeyModal() {
         const current = await currentVaultFile();
         const res = await S.vault.rotate(current, pass, CONFIG.kdfIterations, (d, t) => {
           S.lastActivity = Date.now();
-          st.textContent = `Re-encrypting ${d}/${t}…`;
+          st.textContent = trf('Re-encrypting {d}/{t}…', { d, t });
         });
-        st.textContent = 'Uploading…';
+        st.textContent = tr('Uploading…');
         return res;
       } finally {
         st.textContent = '';
@@ -2982,25 +3094,23 @@ async function rotateKeyModal() {
     });
   if (!result) return;
   S.dek = S.vault.dek;
-  S.vaultFile = result.vaultFile;
-  Auth.cacheVault(result.vaultFile);
-  Auth.rememberEpoch(C.epochHint(result.vaultFile)); // made here, so its epoch is the authenticated one
+  await keepVaultFile(result.vaultFile);
   await Auth.saveCred(S.dek, S.cred);
   await saveExpanded();
   await showNewRecoveryCode(result.recoveryCode);
-  notice('Key changed: everything is encrypted with the new key.');
+  notice(tr('Key changed: everything is encrypted with the new key.'));
 }
 
-function secretForm(title, text, fields, okText, onSubmit) {
+function keyChangeForm(title, text, fields, okText, onSubmit) {
   return modal((close) => {
     const err = errorLine();
     const btn = h('button', { class: 'btn primary', type: 'submit' }, okText);
     const form = h('form', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('h2', {}, title), h('p', {}, text), ...fields.map((f) => f[0]), err,
-      h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cancel'), btn));
+      h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, tr('Cancel')), btn));
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const done = busy(btn, 'Encrypting…');
+      const done = busy(btn, tr('Encrypting…'));
       try {
         const result = await onSubmit(fields.map((f) => f[1].value));
         for (const f of fields) f[1].value = '';
@@ -3015,10 +3125,10 @@ function secretForm(title, text, fields, okText, onSubmit) {
 }
 
 async function changePassphraseModal() {
-  const ok = await secretForm('Change the passphrase',
-    'Your other devices will ask for the new passphrase the next time they are unlocked.',
-    [passField('sp0', 'Current passphrase'), passField('sp1', 'New passphrase (at least 12 characters)', 'new-password'), passField('sp2', 'Repeat the new passphrase', 'new-password')],
-    'Change the passphrase',
+  const ok = await keyChangeForm(tr('Change the passphrase'),
+    tr('Your other devices will ask for the new passphrase the next time they are unlocked.'),
+    [passField('sp0', tr('Current passphrase')), passField('sp1', tr('New passphrase (at least 12 characters)'), 'new-password'), passField('sp2', tr('Repeat the new passphrase'), 'new-password')],
+    tr('Change the passphrase'),
     async ([old, p1, p2]) => {
       if (p1.length < 12) throw new Error('Use at least 12 characters.');
       if (p1 !== p2) throw new Error('The two passphrases do not match.');
@@ -3026,25 +3136,22 @@ async function changePassphraseModal() {
       const current = await currentVaultFile();
       const updated = await C.changePassphrase(current, old, p1, CONFIG.kdfIterations);
       await S.vault.writeVaultFile(updated, 'change passphrase');
-      S.vaultFile = updated;
-      Auth.cacheVault(updated);
-      Auth.rememberEpoch(C.epochHint(updated));
+      await keepVaultFile(updated);
       return true;
     });
-  if (ok) notice('Passphrase changed.');
+  if (ok) notice(tr('Passphrase changed.'));
 }
 
 async function renewRecoveryModal() {
-  const code = await secretForm('New recovery code',
-    'The previous code will stop working. Afterwards you will need to write down the new one.',
-    [passField('sr0', 'Current passphrase')],
-    'Generate code',
+  const code = await keyChangeForm(tr('New recovery code'),
+    tr('The previous code will stop working. Afterwards you will need to write down the new one.'),
+    [passField('sr0', tr('Current passphrase'))],
+    tr('Generate code'),
     async ([pass]) => {
       const current = await currentVaultFile();
       const { vault: updated, recoveryCode } = await C.renewRecoveryCode(current, pass, CONFIG.kdfIterations);
       await S.vault.writeVaultFile(updated, 'new recovery code');
-      S.vaultFile = updated;
-      Auth.cacheVault(updated);
+      await keepVaultFile(updated);
       return recoveryCode;
     });
   if (!code) return;
@@ -3085,16 +3192,16 @@ async function historyModal(id) {
   const texts = new Map();
   const current = await vault.read(id);
   const restored = await modal((close) => {
-    const list = h('div', { class: 'history-list', role: 'listbox', 'aria-label': 'Versions' }, h('p', { class: 'search-empty' }, 'Loading versions…'));
+    const list = h('div', { class: 'history-list', role: 'listbox', 'aria-label': tr('Versions') }, h('p', { class: 'search-empty' }, tr('Loading versions…')));
     const preview = h('article', { class: 'history-preview markdown' });
     const info = h('p', { class: 'history-info' });
-    const restore = h('button', { class: 'btn primary', type: 'button', disabled: true }, 'Restore this version');
+    const restore = h('button', { class: 'btn primary', type: 'button', disabled: true }, tr('Restore this version'));
     const show = async (i) => {
       sel = i;
       [...list.children].forEach((b, j) => { b.classList.toggle('sel', j === i); b.setAttribute('aria-selected', String(j === i)); });
       const v = versions[i];
       restore.disabled = true;
-      preview.replaceChildren(h('p', { class: 'search-empty' }, 'Decrypting…'));
+      preview.replaceChildren(h('p', { class: 'search-empty' }, tr('Decrypting…')));
       try {
         if (!texts.has(v.ref)) texts.set(v.ref, await vault.readVersion(id, v.ref));
         if (sel !== i) return;
@@ -3102,28 +3209,28 @@ async function historyModal(id) {
         preview.innerHTML = trusted(render(text, { frontmatter: true }));
         const d = lineDiff(current, text);
         info.textContent = i === 0 || text === current
-          ? 'This is the current version.'
-          : `This version has ${d.added} line${d.added === 1 ? '' : 's'} the current one does not, and lacks ${d.removed}.`;
+          ? tr('This is the current version.')
+          : trn(d.added, 'This version has 1 line the current one does not, and lacks {removed}.', 'This version has {n} lines the current one does not, and lacks {removed}.', { removed: d.removed });
         restore.disabled = i === 0 || text === current;
       } catch (e) {
-        preview.replaceChildren(h('p', { class: 'embed-missing' }, `This version could not be opened: ${errText(e)}`));
+        preview.replaceChildren(h('p', { class: 'embed-missing' }, trf('This version could not be opened: {error}', { error: errText(e) })));
       }
     };
     restore.addEventListener('click', () => close(texts.get(versions[sel].ref)));
-    const box = h('div', { class: 'modal history', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Version history' },
-      h('h2', {}, `History of “${baseName(note.path)}”`),
+    const box = h('div', { class: 'modal history', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('Version history') },
+      h('h2', {}, trf('History of “{name}”', { name: baseName(note.path) })),
       h('div', { class: 'history-body' }, list, h('div', { class: 'history-right' }, info, preview)),
       h('div', { class: 'modal-actions' },
-        h('span', { class: 'history-hint' }, S.local ? 'A copy is kept at most every 10 minutes.' : 'Each version stays encrypted in the repository.'),
-        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Close'),
+        h('span', { class: 'history-hint' }, S.local ? tr('A copy is kept at most every 10 minutes.') : tr('Each version stays encrypted in the repository.')),
+        h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, tr('Close')),
         restore));
     vault.history(id).then((vs) => {
       versions = vs;
       list.replaceChildren(...vs.map((v, i) => h('button', {
         class: 'switcher-item', type: 'button', role: 'option', onclick: () => show(i),
-      }, h('span', {}, i === 0 ? 'Current' : whenText(v.date)), h('span', { class: 'sub' }, dateFmt.format(new Date(v.date))))));
+      }, h('span', {}, i === 0 ? tr('Current') : whenText(v.date)), h('span', { class: 'sub' }, dateFmt.format(new Date(v.date))))));
       if (vs.length) show(0);
-      else list.replaceChildren(h('p', { class: 'search-empty' }, 'No earlier versions.'));
+      else list.replaceChildren(h('p', { class: 'search-empty' }, tr('No earlier versions.')));
     }).catch((e) => list.replaceChildren(h('p', { class: 'embed-missing' }, errText(e))));
     return box;
   });
@@ -3139,7 +3246,7 @@ async function historyModal(id) {
   }
   syncIndex();
   refreshSide();
-  notice('Version restored. The one before is still in the history.');
+  notice(tr('Version restored. The one before is still in the history.'));
 }
 
 // --- Drawings (serbenda/bsketch) ---
@@ -3160,10 +3267,10 @@ function sketchFigure(f, bytes, width) {
   try {
     scene = parseSketch(new TextDecoder().decode(bytes));
   } catch {
-    return h('span', { class: 'embed embed-missing' }, `“${baseName(f.path)}” is not a valid drawing`);
+    return h('span', { class: 'embed embed-missing' }, trf('“{name}” is not a valid drawing', { name: baseName(f.path) }));
   }
-  const fig = h('button', { class: 'embed-sketch', type: 'button', title: 'Open the drawing', 'aria-label': `Drawing ${baseName(f.path)}. Click to edit it.`, onclick: () => openDrawing(f.id) });
-  if (!scene.elements.length) fig.append(h('span', { class: 'embed-sketch-empty' }, `Empty drawing: click to draw in “${baseName(f.path)}”`));
+  const fig = h('button', { class: 'embed-sketch', type: 'button', title: tr('Open the drawing'), 'aria-label': trf('Drawing {name}. Click to edit it.', { name: baseName(f.path) }), onclick: () => openDrawing(f.id) });
+  if (!scene.elements.length) fig.append(h('span', { class: 'embed-sketch-empty' }, trf('Empty drawing: click to draw in “{name}”', { name: baseName(f.path) })));
   else fig.append(sketchSvg(document, scene, { maxWidth: Number(width) || 720 }));
   return fig;
 }
@@ -3185,7 +3292,7 @@ async function openDrawing(id) {
   const parts = f.path.split('/');
   $('breadcrumb').replaceChildren(...parts.flatMap((p, i) => [i ? h('span', { class: 'crumb-sep' }, '/') : null, h('span', { class: i === parts.length - 1 ? 'crumb-last' : '' }, p)]).filter(Boolean));
   document.title = `${baseName(f.path)} · Snowlog`;
-  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, 'Drawing'));
+  $('outline').replaceChildren(h('p', { class: 'outline-empty' }, tr('Drawing')));
   refreshBacklinks();
   ensureIndex().then(() => { if (D.id === id) refreshBacklinks(); }).catch(() => {});
   $('st-words').textContent = '';
@@ -3197,7 +3304,7 @@ async function openDrawing(id) {
     setStatus('saved');
   } catch (e) {
     setStatus('error');
-    notice(`The drawing could not be opened: ${errText(e)}`, 'error');
+    notice(trf('The drawing could not be opened: {error}', { error: errText(e) }), 'error');
   }
   if (D.id !== id) return;
   D.editor = createSketch(box, {
@@ -3238,9 +3345,9 @@ function saveDrawing() {
       }
       if (res?.conflict) {
         renderTree();
-        notice(`This drawing was also changed elsewhere in the same parts: they were combined and the other version is in “${baseName(res.conflict.path)}”.`);
+        notice(trf('This drawing was also changed elsewhere in the same parts: they were combined and the other version is in “{name}”.', { name: baseName(res.conflict.path) }));
       } else if (res?.merged) {
-        notice('The changes made to this drawing elsewhere were combined.');
+        notice(tr('The changes made to this drawing elsewhere were combined.'));
       }
     })
     .catch((e) => {
@@ -3249,7 +3356,7 @@ function saveDrawing() {
         setStatus('error');
       }
       if (e?.message === 'key_changed') keyChanged();
-      else notice(`The drawing could not be saved: ${errText(e)}`, 'error');
+      else notice(trf('The drawing could not be saved: {error}', { error: errText(e) }), 'error');
     });
   return D.saving;
 }
@@ -3311,7 +3418,7 @@ async function newDrawing({ insert = false, template: tplId = null } = {}) {
       D.editor.zoomToFit();
     }
   } catch (e) {
-    notice(`The drawing could not be created: ${errText(e)}`, 'error');
+    notice(trf('The drawing could not be created: {error}', { error: errText(e) }), 'error');
   }
 }
 
@@ -3338,7 +3445,7 @@ async function fillEmbeds(view) {
     const f = vault.findFile(name);
     if (!f) {
       slot.className = 'embed embed-missing';
-      slot.textContent = `Attachment “${name}” not found`;
+      slot.textContent = trf('Attachment “{name}” not found', { name });
       continue;
     }
     slot.className = 'embed embed-loading';
@@ -3351,9 +3458,9 @@ async function fillEmbeds(view) {
       }
       if (f.type === 'application/pdf') {
         slot.replaceWith(h('span', { class: 'embed-file' },
-          h('span', { class: 'embed-file-ext' }, 'PDF'),
+          h('span', { class: 'embed-file-ext' }, tr('PDF')),
           h('span', { class: 'embed-file-name' }, baseName(f.path), h('small', {}, fmtSize(f.size))),
-          h('a', { class: 'embed-open', href: blobUrl(bytes, f.type), target: '_blank', rel: 'noopener' }, 'Open')));
+          h('a', { class: 'embed-open', href: blobUrl(bytes, f.type), target: '_blank', rel: 'noopener' }, tr('Open'))));
       } else {
         const img = h('img', { class: 'embed-img', alt: baseName(f.path), src: `data:${f.type};base64,${C.toB64(bytes)}` });
         if (slot.dataset.width) img.style.width = `${slot.dataset.width}px`;
@@ -3362,7 +3469,7 @@ async function fillEmbeds(view) {
       }
     } catch (e) {
       slot.className = 'embed embed-missing';
-      slot.textContent = `“${name}” could not be opened: ${errText(e)}`;
+      slot.textContent = trf('“{name}” could not be opened: {error}', { name, error: errText(e) });
     }
   }
 }
@@ -3415,7 +3522,7 @@ async function attachFiles(files) {
   const vault = S.vault;
   const folder = WS.attachmentsFolder || '';
   for (const file of files) {
-    $('st-sync').textContent = S.local ? 'Saving attachment…' : 'Encrypting and uploading attachment…';
+    $('st-sync').textContent = S.local ? tr('Saving attachment…') : tr('Encrypting and uploading attachment…');
     try {
       let name = pastedName(file);
       let data = new Uint8Array(await file.arrayBuffer());
@@ -3429,7 +3536,7 @@ async function attachFiles(files) {
       expandTo(path);
       insertEmbed(path);
     } catch (e) {
-      notice(`“${file.name || 'image'}” could not be attached: ${errText(e)}`, 'error');
+      notice(trf('“{name}” could not be attached: {error}', { name: file.name || tr('image'), error: errText(e) }), 'error');
     }
   }
   setStatus(S.dirty ? 'pending' : 'saved');
@@ -3439,7 +3546,7 @@ async function attachFiles(files) {
 async function deleteAttachment(id) {
   const f = S.vault.index.files[id];
   if (!f) return;
-  const ok = await confirmModal('Delete attachment', `Delete “${baseName(f.path)}”? Notes that show it will no longer see it.`, 'Delete', true);
+  const ok = await confirmModal(tr('Delete attachment'), trf('Delete “{name}”? Notes that show it will no longer see it.', { name: baseName(f.path) }), tr('Delete'), true);
   if (!ok) return;
   await run(() => S.vault.deleteFile(id));
   renderTree();
@@ -3491,7 +3598,7 @@ async function runSearch() {
   info.hidden = true;
   if (!S.indexReady || S.notesIdx.size < S.vault.notes().length) {
     const p = S.indexProgress;
-    box.replaceChildren(h('p', { class: 'search-empty' }, p && p.total ? `Decrypting notes (${p.done} of ${p.total})…` : 'Decrypting notes…'));
+    box.replaceChildren(h('p', { class: 'search-empty' }, p && p.total ? trf('Decrypting notes ({done} of {total})…', { done: p.done, total: p.total }) : tr('Decrypting notes…')));
   }
   await saveNow();
   await ensureIndex();
@@ -3504,12 +3611,12 @@ async function runSearch() {
   const ms = Math.round(performance.now() - t0);
   const total = results.reduce((a, r) => a + r.count, 0);
   const head = h('p', { class: 'search-count' }, results.length
-    ? `${results.total} note${results.total === 1 ? '' : 's'}${results.total > results.length ? ` (showing ${results.length})` : ''}${total ? ` · ${total} match${total === 1 ? '' : 'es'}` : ''} · ${ms} ms`
-    : 'No results');
+    ? [trn(results.total, '1 note', '{n} notes'), results.total > results.length ? trf('(showing {n})', { n: results.length }) : '', total ? `· ${trn(total, '1 match', '{n} matches')}` : '', `· ${ms} ms`].filter(Boolean).join(' ')
+    : tr('No results'));
   box.replaceChildren(head, ...results.map((r) => h('div', { class: 'search-result', role: 'listitem' },
     h('button', { class: 'search-note', type: 'button', title: r.note.path, onclick: () => openResult(r.note.id) },
       h('span', { class: 'search-name' }, r.note.name),
-      r.note.drawing ? h('span', { class: 'search-folder' }, `Drawing${r.note.folder ? ` · ${r.note.folder}` : ''}`)
+      r.note.drawing ? h('span', { class: 'search-folder' }, r.note.folder ? `${tr('Drawing')} · ${r.note.folder}` : tr('Drawing'))
         : r.note.folder ? h('span', { class: 'search-folder' }, r.note.folder) : null),
     ...r.matches.map((m) => h('button', { class: 'search-line', type: 'button', onclick: () => openResult(r.note.id, m) }, ...marked(m))),
   )));
@@ -3549,7 +3656,7 @@ async function openResult(id, match) {
 async function renderTags() {
   const list = $('tag-list');
   if (!S.vault) return;
-  if (!S.indexReady) list.replaceChildren(h('p', { class: 'search-empty' }, 'Decrypting notes…'));
+  if (!S.indexReady) list.replaceChildren(h('p', { class: 'search-empty' }, tr('Decrypting notes…')));
   await ensureIndex();
   if (!S.vault || leftTab !== 'tags') return;
   syncIndex();
@@ -3557,7 +3664,7 @@ async function renderTags() {
   list.replaceChildren(...(tags.length
     ? tags.map(({ tag, count }) => h('button', { class: 'tag-row', type: 'button', role: 'listitem', onclick: () => openSearch(`tag:#${tag}`) },
       h('span', { class: 'tag-name' }, `#${tag}`), h('span', { class: 'tag-count' }, String(count))))
-    : [h('p', { class: 'search-empty' }, 'No tags yet. Write #something in a note.')]));
+    : [h('p', { class: 'search-empty' }, tr('No tags yet. Write #something in a note.'))]));
 }
 
 function closeMobilePanels() {
@@ -3585,34 +3692,34 @@ function noteMenu(x, y) {
   const items = [];
   if (S.current) {
     const id = S.current;
-    items.push(['rename', 'Rename', () => renameNotePrompt(id)], ['move', 'Move to…', () => moveNotePrompt(id)], ['history', 'Version history…', () => historyModal(id)],
-      ['bookmark', isBookmarked(id) ? 'Remove from bookmarks' : 'Add to bookmarks', () => toggleBookmark(id)]);
+    items.push(['rename', tr('Rename'), () => renameNotePrompt(id)], ['move', tr('Move to…'), () => moveNotePrompt(id)], ['history', tr('Version history…'), () => historyModal(id)],
+      ['bookmark', isBookmarked(id) ? tr('Remove from bookmarks') : tr('Add to bookmarks'), () => toggleBookmark(id)]);
   }
-  if (S.current) items.push(['template', 'Insert template…', () => insertTemplate()], ['import', 'Attach an image, PDF or drawing…', () => $('attach-input').click()], ['sketch', 'Insert a new drawing', () => newDrawing({ insert: true })]);
+  if (S.current) items.push(['template', tr('Insert template…'), () => insertTemplate()], ['import', tr('Attach an image, PDF or drawing…'), () => $('attach-input').click()], ['sketch', tr('Insert a new drawing'), () => newDrawing({ insert: true })]);
   items.push(
-    ['command', 'Command palette (Ctrl+P)', () => commandPalette()],
-    ['filePlus', 'New note', () => newNote()],
-    ['template', 'New note from template…', () => newFromTemplate()],
-    ['kanban', 'New Kanban board', () => newBoard()],
-    ['sketch', 'New drawing', () => newDrawing()],
-    ['graph', 'Graph view (Ctrl+G)', () => graphView()],
+    ['command', tr('Command palette (Ctrl+P)'), () => commandPalette()],
+    ['filePlus', tr('New note'), () => newNote()],
+    ['template', tr('New note from template…'), () => newFromTemplate()],
+    ['kanban', tr('New Kanban board'), () => newBoard()],
+    ['sketch', tr('New drawing'), () => newDrawing()],
+    ['graph', tr('Graph view (Ctrl+G)'), () => graphView()],
     null,
-    ['today', 'Today\'s note (Ctrl+D)', () => openDaily()],
-    ['home', 'Dashboard', () => openHome()],
-    ['setup', 'Set up my space…', () => setupSpace()],
-    ['example', 'Load examples…', () => loadExamples()],
-    ['import', 'Import folder…', () => ACTIONS.import()],
-    ['download', S.local ? 'Backup (.zip)' : 'Encrypted backup', () => backupNow()],
+    ['today', tr('Today\'s note (Ctrl+D)'), () => openDaily()],
+    ['home', tr('Dashboard'), () => openHome()],
+    ['setup', tr('Set up my space…'), () => setupSpace()],
+    ['example', tr('Load examples…'), () => loadExamples()],
+    ['import', tr('Import folder…'), () => ACTIONS.import()],
+    ['download', S.local ? tr('Backup (.zip)') : tr('Encrypted backup'), () => backupNow()],
   );
-  if (!S.local) items.push(['download', 'Export unencrypted (.zip)', () => exportZip()]);
-  items.push(['import', 'Import a backup (.snowlog or .zip)…', () => $('backup-input').click()]);
-  items.push(['settings', 'Settings…', () => settingsModal()]);
-  if (S.local) items.push(['collapse', 'Reload the folder', () => reloadLocal()]);
-  else items.push(['key', 'Passphrase and recovery…', () => securityModal()]);
+  if (!S.local) items.push(['download', tr('Export unencrypted (.zip)'), () => exportZip()]);
+  items.push(['import', tr('Import a backup (.snowlog or .zip)…'), () => $('backup-input').click()]);
+  items.push(['settings', tr('Settings…'), () => settingsModal()]);
+  if (S.local) items.push(['collapse', tr('Reload the folder'), () => reloadLocal()]);
+  else items.push(['key', tr('Passphrase and recovery…'), () => securityModal()]);
   if (S.current) items.push(null, ['trash', 'Delete note', () => deleteNote(S.current), 'danger']);
   items.push(null,
-    ['lock', S.local ? 'Close folder' : 'Lock', () => lock()],
-    ['logout', S.local ? 'Forget this folder' : 'Sign out', () => logout()]);
+    ['lock', S.local ? tr('Close folder') : tr('Lock'), () => lock()],
+    ['logout', S.local ? tr('Forget this folder') : tr('Sign out'), () => logout()]);
   openMenu(x, y, items);
 }
 
@@ -3743,6 +3850,11 @@ function setupUi() {
   document.addEventListener('keydown', (ev) => {
     if (!$('menu').hidden && (ev.key === 'Escape' || ((ev.ctrlKey || ev.metaKey) && !ev.target.closest?.('#menu')))) closeMenu();
     if (!S.vault || $('app').hidden || $('modal-root').childElementCount) return;
+    if (ev.key === '?' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !(ev.target.closest?.('input, textarea, select, [contenteditable="true"]'))) {
+      ev.preventDefault();
+      helpModal();
+      return;
+    }
     const mod = ev.ctrlKey || ev.metaKey;
     if (!mod || ev.altKey) return;
     const k = ev.key.toLowerCase();
@@ -3786,12 +3898,27 @@ function registerServiceWorker() {
   navigator.serviceWorker.register(TT ? TT.createScriptURL('sw.js') : 'sw.js').catch(() => {});
 }
 
+// The page's own text (index.html: labels, buttons, placeholders, titles) in the interface's language. What the app
+// builds later goes through tr() when it is made.
+function translatePage() {
+  if (LANG === 'en') return;
+  for (const n of document.querySelectorAll('body *:not(script):not(style):not(textarea)')) {
+    for (const a of ['title', 'aria-label', 'placeholder']) if (n.hasAttribute(a)) n.setAttribute(a, tr(n.getAttribute(a)));
+    for (const c of n.childNodes) {
+      if (c.nodeType !== 3 || !c.textContent.trim()) continue;
+      const t = c.textContent.trim();
+      if (tr(t) !== t) c.textContent = c.textContent.replace(t, tr(t));
+    }
+  }
+}
+
 async function boot() {
+  translatePage();
   applyTheme();
   // GitHub Pages does not allow the frame-ancestors header: if someone puts Snowlog in an iframe
   // (to trick clicks on top of it), it does not start.
   if (window.top !== window.self) {
-    document.body.textContent = 'Snowlog cannot be opened inside another page.';
+    document.body.textContent = tr('Snowlog cannot be opened inside another page.');
     return undefined;
   }
   registerServiceWorker();

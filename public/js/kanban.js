@@ -61,11 +61,16 @@ export function parseBoard(text) {
   let card = null;
   for (; i < postStart; i++) {
     const line = lines[i];
-    const head = line.match(/^##\s+(.*)$/);
+    // The same test as the one that ends the text before the first column (`s`: a title may hold any character).
+    const head = /^##\s/.test(line) && line.match(/^##\s+(.*)$/s);
     if (head) {
       lane = { title: head[1].trim(), cards: [], extra: [] };
       lanes.push(lane);
       card = null;
+      continue;
+    }
+    if (!lane) {
+      pre.push(line); // never happens with the test above; kept so no line can be lost
       continue;
     }
     const m = line.match(CARD_RE);

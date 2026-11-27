@@ -1,0 +1,57 @@
+{
+ "made_by": {
+  "name": "2026-11-21-pr9",
+  "commit": "2c0ba02"
+ },
+ "steps": [
+  "notes",
+  "attachments",
+  "library",
+  "rotation"
+ ],
+ "passphrase": "compatibility test passphrase",
+ "recoveryCode": "YXRDB-AV7M7-ACMHE-2PWQ8-Z3MGB",
+ "files": {
+  ".snowlog/index.enc": "0MSdEKdAsv8YI8D/0JJAhUTltI+Ds3fZLpzudazlUsXuFefnqhosW61HWCB5l67z0tFyyXA08ej7q4nkvHPlFbfrOOt9773iISwRnT9qu/8cC4rBtrpbu8bjEF/3H0ZOdGJGcLuLec6kDlfdshkBYW/Vu3ax9zhcc5e8I0lMPNwA9PbenpSsvuCg4qL/hnhRGo/SABUe+8y4HX9QgivYcwyd8rpY4mzJFJ6DMPjIeJbWw3lj/zu2Ztmp/Chos5MbtdLCLfsMFgxaPqq+yT6a8zjaONc7h4EXAiXzeLCF8YQAFUJYEAjKK6cpht56yw+oeNW7YktjhgYr1gdgQ6z1087YMDbiS/TCCF2FI9qW+DWm1VV2IfjEsXHcEn3DPuKIjdbM+9pFswopuxdv/40rAN8ySVSDQSPCYrxMhrXlQrOsNg11YMjQLdtyY4jWDYo7P001arjFLDPNwpZR3O8Bx4y/QdTvfVBZslqRFPIhy3W3L6p7MxmElc1U6yVnWKRsmYs+/pZVTc7Qna2JfVSx518Vzgy1cx80QpDl7KL1dL/yQUoiw50dmOzAUvkJmnpbvwoi0ha9EfT/ZlsV2UmCqAqJj97Q+XyDJmSwbJjhaE4sH8MLodUCi7yBBrBOCQkIcaVy6Q1bOaOgA4Z7uDCPT5PUo+BgxzVcLcPdyJftZL1j9eLI0rLraL3GXU7BmXk5P/dy1sxf0DFHxOgMrwglolEWtSWc0b8s7ViYs5MV9IGBSO/1hOs3yCCGRbhSi8+pv6pqReiBrL8hD1zrZLFKF8E9prXEf+jeCyucjcgNmUGXwLLJrKIzpq3ckRfhRtuw6LFrsuRs0BYVuxDtnWc6lairOc5yk+uFKQuL8Yv3uoWwo6DBX7Bw5jFH0okTk7bJCstoWUmlUz4diUcQ5ecRC7pJ1iyTMINFchN72TGxwhFyoAkHyTlZ4dv6ccDWn+udPIQMStO+jf/0dD8rcUE15VBSNZshRz13QTWu7UCsBt7D9z8pnJSloxjZ/UrY1TvOYzVRQLq+dvf8fBmfXBeXs0VrJ1+ZzrLaPPOHex/FZHPdaGNNP7HOI0huDZpDNQ3Pzb+ZBJnBUjD3yrOh0ICTDfW7IdmE+fHc+oZRMtIt9G848Fk7gNmW/8e+CuaRBxz68SBY07EQm4PwdLVC2YFI7A6YAXa49fBDfUhxRzvuPTMTZc8kG15NAwap0vqToz+GsVg0eeGRieJLIEgabwHIotaVCstIYs41I/h8VG2vpY/mwPCxQEiNIP+MIvoWZgrtP811CCY6RUbop3el2kvj3NTz1vQ/N4q60x7zPPr9Er3uaF8A8MDgH9kxMo67v+gSdOKNbCy9OCfezzUfPEvRNCgwCV6r5bF+x0Tg6g4DbCG0uQ4oj0gclWPqA8xK90tbi7XPXkR0UN4wio1eaTVRZcke1lkSoJmFL1yURn2GJF0=",
+  ".snowlog/keyring.enc": "BK3W/0e/JEsLgKNYkT2S0rt5ihQcp0SkeVl+UjmUSq6+vTntdYExrvXcM7qRjKSZtArjSNz52qyAQofyhp6fguwZe/kYPzTtODPLm4AL3dNRd+WRowRTifZjc3mWZDXoKqnkTFLn9SRHr6FJTZR39mQoqp9Cqa8=",
+  ".snowlog/library.enc": "oc0VAs7jxFJruB/iR7XCBR/GrMkNriloA7TrhujfXttM844K4vAgOjft8qOqoag7JL7Rkq1MzOdnmlD0cpzZV22FA43mIXhu",
+  ".snowlog/vault.json": "{\n  \"app\": \"snowlog\",\n  \"v\": 1,\n  \"created\": \"2026-11-26T11:31:35.560Z\",\n  \"keys\": {\n    \"passphrase\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"P5qvvMqqx8er09NzPl1Hug==\"\n      },\n      \"wrapped\": \"XmXlEYHlLff+U1nh7/XVfiLMsUa2r1TrwKlUrdQEtIHaw3+2dJIn9aUw1hB1JysghZ6cD/T7X5JjiZxB\"\n    },\n    \"recovery\": {\n      \"kdf\": {\n        \"name\": \"PBKDF2\",\n        \"hash\": \"SHA-256\",\n        \"iterations\": 600000,\n        \"salt\": \"HjDhkEJid9wdPCrEBGPuIQ==\"\n      },\n      \"wrapped\": \"rvLA+8PGz68DMQ7GKPlgMbh/pW87UNkKDxn6hd5jPh/6rv2znFndoM0qMDgX6Tl7llyKeLhAQp2QIcyD\"\n    }\n  },\n  \"rotated\": \"2026-11-26T11:31:35.607Z\"\n}\n",
+  "a/b270126e346463c6376a2fa9.enc": "Mb0eaf1t0kYt+PnNk2NZBMuK9OP2AYcFZstz7vGhFbOua1wYfaxR7082nfUi4QtltunvQLi0eAWcjO8xKysnaBZcr3iC2rBO/pGZ67t8pBrH3KesWK2defPyVTw3aubFzLk=",
+  "a/c364b819531ffcea70c831d8.enc": "tRCGrDAvJzf6XcyZT6pG7UHPCw0s/HDj47qzjxC5LI2kfiCWe1unMmc6y9S+wJAXXJwMzTcV0T954YiMg6z7I3OYVcRg4ZUhzGdVH80B4oJ1TehMMWop/2FWUTBHBHZ/pAerMj+7DmM6XFDui/qLoLLbeCOMmktviSy9cmFsryDYvlHHG2vnqf6ukaUgT8LCs0OpSNCoT6XXRz7UlNsy",
+  "n/10930f3fee4c2d119e87f1bf.enc": "73KgnQfrHQvGZ+YH5m8/SBHdLAS2zHZKHDO+rNcOdCRiTM5NVUJfuurQgd61mo7QkViYbEMoMf2YH0zQdAjXCZqYu6Pxc0zOz7updbRd+M7938n7Xa/16a6eGMukqZIByG0e9iNR1c7S3gwJdI8=",
+  "n/795a849bed29795c0dabea52.enc": "7ShWZbvJpK+I8IwRN3JcqNm8kYw0w8sc24mrGjbd+Aywt3X1CA==",
+  "n/9758830f146440917b3fcce4.enc": "qcTvqrVB4GJA2Wci7jPAt80YKvhtoe1LOQ7foE5BqTOQE7g9RphjD21OeIcsPRL1nh07mA==",
+  "n/d3f82fb9011c3a52d73c7e2d.enc": "aGHnRnGABYTB+Z9pncu/wxMn7Ql67HwRCSOFIVE9Ua+brCukv3Oxxl0Z7WpmlRw/R73sIrr0+o/12hun/2OgzKTDJTApIfsvQg3qXIQUO/tUTUfbKTkOWcSNLbGiLn7x/gczbeprSM/MmRoit+rqz4lO8WRlEylG99cmde0xSHsLnIkm5RSF8dDy4WGlaVFDUea7Ta0Olz1meNNKKxtZk+yfG2vux5SNtwQYn2/wk22uhOaUmWsSfW2svlXGuqk0qu55EGYm+xTlNo9PTA8DKe9EDhFmlQH1esqYBk1HpkiPN/+h2oYxbXhdlAtlfhWDrH1rybvL7JZ+WI+xwfVkwox3D2w2rgLuvgJ2icO7Ku6ehPlXyECDHjL/BhLcpw8+XZSg0ZtnkwFHlVSbnU1kkKIaVrwKhq2GseMUCMrWMF7tbs9jIXV5pmqAvnlHheAc3Iz8tGyYpwPnIEG4/T18LF6IYFKvwe4oDh+5+1mVGLtKbPZFnc3EnAMg3uKlqqc4uOera5nVuBVd/qdUhID5FQRdcagKoyyk1bEUKuDViDbRjAj+H6FlDiZPnMgP/NHE4Z3dZjqp3sPlgaMgjF407NmUvsGiTCUB4ix5JRzlPnGAhUnEblhRVUWYkIB21URe22cgKT7h64urgdNunvcmfjR+cJ5Muc/pv+qRC0EtQrREfBdsga3HrSnwYRuEOKgMYV82yHgTrnzqChNW2EtkB+7xjS6ylSGax5NsdpRatKIPKJD8tFSwNG38JEhAGv3j9Jt3vTE4obhFFGvvUtt7Om1EvAYx4Zg3iEV5zZ+ckgV2KUrfJgcveivWnDRF4Wlt2Grt9tQzQzhHPBj1g73zgwzbn8y+tARh7fQjal2uwpO/En53QTudiSaDX1QGuGg0U/0aoK/BOsQxdhacJPSxuhuAQ29Idxw/cv1zDhzEcxjbLwdHoHXBQwCNRxBGviLWF7XEgC1joVWr30OGWxvr+k7RhcuZP0266kDw5uMc4dzLcidV2CSfFb7GsV5PtiOziqjUOElJwjei0k/+9p6Yvwr6eZ6mvj2NXbknhkgQ4sudV2uTEoZIV//clX5C4j2EU/ndzfAscdASn6sa3tUKHb8szxUEdA=="
+ },
+ "expect": {
+  "notes": [
+   {
+    "path": "After rotation",
+    "text": "written with the new key"
+   },
+   {
+    "path": "Diary/Monday",
+    "text": "it rained"
+   },
+   {
+    "path": "Projects/Plan",
+    "text": "# Plan\n\nÑandú, café, 😀 — and a [[Diary/Monday]] link.\n\n- [ ] a task #idea\n"
+   },
+   {
+    "path": "Welcome",
+    "text": "Your personal notebook, end-to-end encrypted.\n\n## The basics\n- Notes save themselves when you stop typing.\n- **Ctrl+E** switches between editing and reading.\n- **Ctrl+O** opens the quick note switcher.\n- **Ctrl+N** creates a new note.\n- Link notes with [[Another note]]: if it does not exist, it is created when you click it.\n\n## Formatting\n- [x] Task lists\n- **Bold**, *italic*, ~~strikethrough~~ and ==highlight==\n- `inline code` and code blocks\n\n| Format | How to write it |\n| --- | --- |\n| Table | `| a | b |` and below it `|---|---|` |\n| Callout | `> [!tip] Title` |\n| Tag | #idea |\n\n> [!tip] Callouts\n> Use [!note], [!info], [!warning], [!danger], [!example]… and add - to fold them.\n\n> [!info] Truly private\n> The repository only holds unreadable files. Without your passphrase, nobody can read this.\n"
+   }
+  ],
+  "attachments": [
+   [
+    "Projects/picture.png",
+    "c414cd0e204de974f73753c7e28d7638e7b3691bb8b1a2bab6b25bb7fed7ce77"
+   ],
+   [
+    "Projects/board.sketch",
+    "16b690335cce49c4788195a1903498dcb088da54d5958d51f2623071eb139215"
+   ]
+  ],
+  "library": "{\"type\":\"bsketchlib\",\"version\":1,\"items\":[]}"
+ }
+}

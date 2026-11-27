@@ -9,6 +9,7 @@
 //   a/<id>.enc            an encrypted attachment (image, PDF…); its name and type are in the index
 
 import * as C from './crypto.js';
+import { WELCOMES } from './welcome.js';
 import { merge3 } from './merge.js';
 
 export const VAULT_FILE = '.snowlog/vault.json';
@@ -30,32 +31,8 @@ export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const extOf = (name) => (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';
 export const isAttachmentName = (name) => Object.hasOwn(ATTACHMENT_TYPES, extOf(name));
 
-const WELCOME = `Your personal notebook, end-to-end encrypted.
-
-## The basics
-- Notes save themselves when you stop typing.
-- **Ctrl+E** switches between editing and reading.
-- **Ctrl+O** opens the quick note switcher.
-- **Ctrl+N** creates a new note.
-- Link notes with [[Another note]]: if it does not exist, it is created when you click it.
-
-## Formatting
-- [x] Task lists
-- **Bold**, *italic*, ~~strikethrough~~ and ==highlight==
-- \`inline code\` and code blocks
-
-| Format | How to write it |
-| --- | --- |
-| Table | \`| a | b |\` and below it \`|---|---|\` |
-| Callout | \`> [!tip] Title\` |
-| Tag | #idea |
-
-> [!tip] Callouts
-> Use [!note], [!info], [!warning], [!danger], [!example]… and add - to fold them.
-
-> [!info] Truly private
-> The repository only holds unreadable files. Without your passphrase, nobody can read this.
-`;
+// The first note of a new vault (English unless the app passes the interface's language: welcome.js).
+const WELCOME = WELCOMES.en;
 
 // Name of the copy that keeps another device's version.
 // A note's or attachment's version in the index: its date and a random `rev` set on every save. Dates alone can tie
@@ -133,7 +110,7 @@ export class Vault {
   }
 
   // Creates the vault in a repository without one. Returns { vault, recoveryCode }.
-  static async create(repo, passphrase, iterations) {
+  static async create(repo, passphrase, iterations, { welcome = WELCOME } = {}) {
     await repo.fetchHead();
     if (await repo.readText(VAULT_FILE)) throw new Error('vault_exists');
     const { vault: vaultFile, dek, recoveryCode } = await C.createVault(passphrase, iterations);
@@ -141,7 +118,7 @@ export class Vault {
     if (repo.head) await repo.commit([{ path: VAULT_FILE, content: json }], 'Snowlog: create vault');
     else await repo.createFirstFile(VAULT_FILE, json, 'Snowlog: create vault');
     const vault = new Vault(repo, dek);
-    await vault.createNote('Welcome', WELCOME);
+    await vault.createNote(welcome.title, welcome.text);
     return { vault, vaultFile, recoveryCode };
   }
 

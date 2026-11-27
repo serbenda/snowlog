@@ -25,3 +25,5 @@ the PRs (#1–#6) and the worklog's first entry, not in phase files.
 | P02 | [Independent security review and fixes; tests on real Firefox, Safari, phones, macOS and Windows](phases/P02-security-review.md) | ⏳ |
 | P03 | Agent access, phase 2: edit by section, move, delete, tasks, queries, orphans and a CLI | ⬜ |
 | P04 | First release (`v1.0.0`) | ⬜ |
+| P05 | [The vault format written down and tested with a vault from each version](phases/P05-vault-format.md) | ✅ |
+| P06 | [Fuzzing and a big vault (5,000 notes)](phases/P06-fuzz-and-performance.md) | ✅ |
