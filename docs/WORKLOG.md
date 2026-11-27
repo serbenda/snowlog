@@ -16,6 +16,18 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — The in-memory vault.json is GitHub's copy too
+- **Phase / issue:** — (PR #17)
+- **What:** `keepVaultFile()` sets `S.vaultFile` to the copy read back from GitHub (not the object written), and
+  leaves it unchanged when that copy can't be read or differs.
+- **Why:** the written object, kept in `S.vaultFile`, still reached the cache through the unlock path, so CodeQL kept
+  one "clear-text storage" alert open (`auth.js:93`).
+- **Rejected:** —
+- **Files:** public/js/app.js, docs/WORKLOG.md
+- **Commits:** `e4e7627` and this one.
+- **Tested:** `npm test` 193 pass; `npm run test:e2e` 14 pass.
+- **Pending:** —
+
 ## 2026-11-27 — After a key change, this device keeps GitHub's copy of vault.json; the 2,000-note e2e fills the switcher
 - **Phase / issue:** — (PR #17)
 - **What:** `keepVaultFile()`: after changing the passphrase, the recovery code or the key (or recovering), the app
