@@ -16,6 +16,17 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — mcp-builder skill: `mcp>=1.30.0` (as in project-template)
+- **Phase / issue:** —
+- **What:** `.claude/skills/mcp-builder/scripts/requirements.txt` asks for `mcp>=1.30.0` instead of `mcp>=1.1.0`.
+- **Why:** Scorecard's Vulnerabilities alert lists PYSEC-2026-1616, -1617, -1618, -3482 and -3483 for `mcp`; fixed in
+  project-template (PR #25) and bsketch already; Snowlog hadn't synced it.
+- **Rejected:** —
+- **Files:** .claude/skills/mcp-builder/scripts/requirements.txt, docs/WORKLOG.md
+- **Commits:** this one (a guardrail file: committed by the owner with `GUARDRAILS_OWNER_CHANGE=1`).
+- **Tested:** OSV has no advisory for `mcp` 1.30.0.
+- **Pending:** —
+
 ## 2026-11-27 — The in-memory vault.json is GitHub's copy too
 - **Phase / issue:** — (PR #17)
 - **What:** `keepVaultFile()` sets `S.vaultFile` to the copy read back from GitHub (not the object written), and
