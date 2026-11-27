@@ -399,3 +399,23 @@ for (const [lang, unlockWord] of [['es', 'Desbloquear'], ['ca', 'Desbloqueja'], 
     await page.close();
   });
 }
+
+test('the editor highlights Markdown from nodes: HTML typed in a note stays text', { skip, timeout: 120000 }, async () => {
+  const fake = createFakeGitHub({ owner: 'serbenda', repo: 'snowlog-notes' });
+  const page = await browser.newPage({ intercept: fake.fetch });
+  await newVault(page);
+  await page.press('N', { ctrl: true });
+  await page.waitFor('document.activeElement?.id === "title"');
+  await page.eval('document.getElementById("title").value = ""');
+  await page.type('Highlight\n');
+  await page.waitFor('document.activeElement?.id === "editor"');
+  await page.type('# Title\n<b onclick="x">not bold</b> **bold** & ==mark==');
+  await page.waitFor('!!document.querySelector("#editor-hl .hl-strong")');
+  assert.equal(await page.eval('document.querySelectorAll("#editor-hl b").length'), 0, 'no <b> element');
+  const shown = await page.eval('document.getElementById("editor-hl").textContent');
+  assert.ok(shown.includes('<b onclick="x">not bold</b>'), `the tag is shown as text: ${JSON.stringify(shown)}`);
+  assert.ok(await page.eval('!!document.querySelector("#editor-hl .hl-heading .hl-mark")'));
+  assert.ok(await page.eval('document.getElementById("editor-hl").textContent.includes("& ")'));
+  assert.deepEqual(realErrors(page), []);
+  await page.close();
+});

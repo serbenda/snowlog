@@ -16,6 +16,21 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — CodeQL's first findings: the editor's highlight and caret built from nodes
+- **Phase / issue:** — (PR #17)
+- **What:** the editor's highlight layer is built from `highlight()`'s output with `spansToNodes()` (its `<span
+  class>` tags become elements, the escaped text becomes text nodes) and the caret mirror from a text node and a
+  span: no `innerHTML` with text from the editor. `secretForm()` renamed `keyChangeForm()` (it returns the new
+  `vault.json`, which is public). e2e: HTML typed in a note stays text in the highlight. Cache `snowlog-v12`.
+- **Why:** CodeQL's first run on Snowlog flagged 4 alerts: XSS through DOM (`app.js:85`, `:1649`) and clear-text
+  storage (`auth.js:93`, `:108`). The text was already escaped and the stored data isn't secret, but building nodes
+  removes the HTML parser from the path, and the name was what made CodeQL take the vault file for a secret.
+- **Rejected:** dismissing the alerts (not allowed to the agent; fixing the code is better where it is cheap).
+- **Files:** public/js/app.js, public/sw.js, tests/e2e/flows.e2e.mjs, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 193 pass; `npm run test:e2e` 14 pass.
+- **Pending:** confirm on the PR that CodeQL closes the 4 alerts.
+
 ## 2026-11-27 — e2e: the 2,000-note test types once the switcher has the focus
 - **Phase / issue:** —
 - **What:** the test waits for the switcher's field to have the focus before typing, and gives the result 30 s.

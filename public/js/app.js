@@ -493,7 +493,7 @@ async function restoreBackup(file) {
     }
     created = meta.created;
     const when = dateFmt.format(new Date(meta.created));
-    opened = await secretForm(tr('Open backup'),
+    opened = await keyChangeForm(tr('Open backup'),
       trn(meta.notes, 'Backup from {when} with 1 note. It opens with the passphrase you had then or with the recovery code.', 'Backup from {when} with {n} notes. It opens with the passphrase you had then or with the recovery code.', { when }),
       [passField('bk0', tr('Passphrase or recovery code'))],
       tr('Open'),
@@ -1640,13 +1640,35 @@ function autosize() {
   paintHighlight();
 }
 
+// highlight() returns escaped text inside <span class="…"> tags and nothing else: it is turned into nodes here (text
+// as text nodes), so the note's text never goes through an HTML parser.
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
+function spansToNodes(markup) {
+  const root = document.createDocumentFragment();
+  const stack = [root];
+  for (const m of markup.matchAll(/<span class="([\w -]*)">|<\/span>|[^<]+/g)) {
+    const top = stack[stack.length - 1];
+    if (m[0] === '</span>') {
+      if (stack.length > 1) stack.pop();
+    } else if (m[0].startsWith('<span')) {
+      const el = document.createElement('span');
+      if (m[1]) el.className = m[1];
+      top.append(el);
+      stack.push(el);
+    } else {
+      top.append(document.createTextNode(m[0].replace(/&(amp|lt|gt|quot|#39);/g, (e) => ENTITIES[e])));
+    }
+  }
+  return [...root.childNodes];
+}
+
 // Highlighting: a <pre> behind the text box with the same text, colored.
 // highlight() escapes all the text before adding its <span>s.
 let hlFrame = 0;
 function paintHighlight() {
   cancelAnimationFrame(hlFrame);
   hlFrame = requestAnimationFrame(() => {
-    $('editor-hl').innerHTML = trusted(`${Ed.highlight($('editor').value)}\n`);
+    $('editor-hl').replaceChildren(...spansToNodes(`${Ed.highlight($('editor').value)}\n`));
   });
 }
 
@@ -1676,8 +1698,9 @@ function closeSuggest() {
 function caretBox(pos) {
   const ed = $('editor');
   const mirror = $('editor-mirror');
-  mirror.innerHTML = trusted(`${escapeHtml(ed.value.slice(0, pos))}<span id="caret-mark">\u200b</span>`);
-  const mark = mirror.querySelector('#caret-mark');
+  // Built from nodes (the text as text): the note is never read as HTML.
+  const mark = h('span', { id: 'caret-mark' }, '\u200b');
+  mirror.replaceChildren(document.createTextNode(ed.value.slice(0, pos)), mark);
   return { left: mark.offsetLeft, top: mark.offsetTop + mark.offsetHeight };
 }
 
@@ -3037,7 +3060,7 @@ async function currentVaultFile() {
 // Rotate the key: everything is encrypted again with a new key. For when someone may have learned the
 // old passphrase: from now on, neither that passphrase nor the old key open what is written.
 async function rotateKeyModal() {
-  const result = await secretForm(tr('Change the encryption key'),
+  const result = await keyChangeForm(tr('Change the encryption key'),
     tr('All your notes and attachments are encrypted again with a new key, in a single step, and a new recovery code is generated. Your passphrase stays the same (change it afterwards if you want). Your other devices will ask for the passphrase next time. Do not use Snowlog on another device meanwhile.'),
     [passField('rk0', tr('Current passphrase'))],
     tr('Re-encrypt everything'),
@@ -3067,7 +3090,7 @@ async function rotateKeyModal() {
   notice(tr('Key changed: everything is encrypted with the new key.'));
 }
 
-function secretForm(title, text, fields, okText, onSubmit) {
+function keyChangeForm(title, text, fields, okText, onSubmit) {
   return modal((close) => {
     const err = errorLine();
     const btn = h('button', { class: 'btn primary', type: 'submit' }, okText);
@@ -3091,7 +3114,7 @@ function secretForm(title, text, fields, okText, onSubmit) {
 }
 
 async function changePassphraseModal() {
-  const ok = await secretForm(tr('Change the passphrase'),
+  const ok = await keyChangeForm(tr('Change the passphrase'),
     tr('Your other devices will ask for the new passphrase the next time they are unlocked.'),
     [passField('sp0', tr('Current passphrase')), passField('sp1', tr('New passphrase (at least 12 characters)'), 'new-password'), passField('sp2', tr('Repeat the new passphrase'), 'new-password')],
     tr('Change the passphrase'),
@@ -3111,7 +3134,7 @@ async function changePassphraseModal() {
 }
 
 async function renewRecoveryModal() {
-  const code = await secretForm(tr('New recovery code'),
+  const code = await keyChangeForm(tr('New recovery code'),
     tr('The previous code will stop working. Afterwards you will need to write down the new one.'),
     [passField('sr0', tr('Current passphrase'))],
     tr('Generate code'),
