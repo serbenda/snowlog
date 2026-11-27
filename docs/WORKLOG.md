@@ -16,6 +16,22 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — Desktop build pinned and attested; CodeQL and Scorecard
+- **Phase / issue:** — (the review of Snowlog after bsketch's)
+- **What:** `desktop/package.json` and `package-lock.json` pin the Tauri CLI (2.12.6), installed with `npm ci` instead
+  of `npx --yes`; `desktop/src-tauri/Cargo.lock` no longer ignored: the Desktop workflow builds `--locked` when it is
+  committed and, the first time, leaves the one it resolved as the `cargo-lock` artifact to commit; signed provenance
+  for each executable (`attest-build-provenance`); Dependabot for `/desktop`; `codeql.yml` and `scorecard.yml` as
+  bsketch's.
+- **Why:** the desktop app was built with whatever crate versions were newest that day, and the CLI was fetched
+  unpinned; Snowlog had no code scanning or Scorecard.
+- **Rejected:** generating `Cargo.lock` on this Mac (no Rust toolchain here).
+- **Files:** desktop/package.json, desktop/package-lock.json, .gitignore, .github/workflows/desktop.yml,
+  .github/workflows/codeql.yml, .github/workflows/scorecard.yml, .github/dependabot.yml, docs/WORKLOG.md
+- **Commits:** this one (guardrail files: committed by the owner with `GUARDRAILS_OWNER_CHANGE=1`).
+- **Tested:** the workflows run on the push; the Desktop run makes the first `Cargo.lock`.
+- **Pending:** commit the `cargo-lock` artifact as `desktop/src-tauri/Cargo.lock`.
+
 ## 2026-11-27 — P06: fuzzing and a big vault
 - **Phase / issue:** P06
 - **What:** `tests/fuzz.test.mjs` (7 properties over the renderer, queries, search, Kanban, zips, merging, links,

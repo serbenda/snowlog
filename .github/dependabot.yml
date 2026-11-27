@@ -51,6 +51,21 @@ updates:
       tauri:
         patterns: ["*"]
 
+  # The Tauri CLI that builds the desktop app (desktop/package-lock.json), same cooldown.
+  - package-ecosystem: "npm"
+    directory: "/desktop"
+    target-branch: "development"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "build"
+    groups:
+      tauri-cli:
+        patterns: ["*"]
+
   # The dev container's base image (pinned by digest in .devcontainer/Dockerfile), same cooldown.
   - package-ecosystem: "docker"
     directory: "/.devcontainer"
