@@ -1282,6 +1282,7 @@ function modal(build) {
     const prevFocus = document.activeElement;
     const close = (value) => {
       root.replaceChildren();
+      for (const a of ['role', 'aria-modal', 'aria-label']) root.removeAttribute(a);
       document.removeEventListener('keydown', onKey, true);
       if (prevFocus && prevFocus.focus) prevFocus.focus();
       resolve(value);
@@ -1294,6 +1295,13 @@ function modal(build) {
     };
     document.addEventListener('keydown', onKey, true);
     const box = build(close);
+    // A form can't be a dialog itself (its role is form): the dialog is the layer around it.
+    if (box.tagName === 'FORM' && box.getAttribute('role') === 'dialog') {
+      root.setAttribute('role', 'dialog');
+      root.setAttribute('aria-modal', 'true');
+      if (box.hasAttribute('aria-label')) root.setAttribute('aria-label', box.getAttribute('aria-label'));
+      for (const a of ['role', 'aria-modal']) box.removeAttribute(a);
+    }
     root.replaceChildren(box);
     root.onclick = (ev) => { if (ev.target === root) close(null); };
     (box.querySelector('input') || box.querySelector('button.primary, button.danger'))?.focus();
@@ -1333,7 +1341,7 @@ function quickSwitcher() {
   if (!S.vault) return;
   modal((close) => {
     const input = h('input', { class: 'input', placeholder: 'Find a note or type a new title…', 'aria-label': 'Find note', autocomplete: 'off', spellcheck: 'false' });
-    const list = h('div', { class: 'switcher-list', role: 'listbox' });
+    const list = h('div', { class: 'switcher-list', role: 'listbox', 'aria-label': 'Results' });
     let items = [];
     let sel = 0;
     const draw = () => {
@@ -2141,7 +2149,7 @@ function renderCalendar() {
       h('button', { class: 'cal-title', type: 'button', title: 'Go to today', onclick: () => { S.calMonth = null; renderCalendar(); } },
         formatDate(first, 'MMMM YYYY')),
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Next month', html: icon('chevron'), onclick: () => move(1) })),
-    h('div', { class: 'cal-grid', role: 'grid' },
+    h('div', { class: 'cal-grid', role: 'group', 'aria-label': formatDate(first, 'MMMM YYYY') },
       ...['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => h('span', { class: 'cal-dow', 'aria-hidden': 'true' }, d)),
       ...cells),
   );
@@ -2190,7 +2198,7 @@ function templateNotes() {
 function pickModal(title, items) {
   return modal((close) => h('div', { class: 'modal switcher', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
     h('h2', { class: 'pick-title' }, title),
-    h('div', { class: 'switcher-list', role: 'listbox' }, ...items.map((it) => h('button', {
+    h('div', { class: 'switcher-list', role: 'listbox', 'aria-label': 'Results' }, ...items.map((it) => h('button', {
       class: 'switcher-item', type: 'button', role: 'option', onclick: () => close(it.value),
     }, h('span', {}, it.label), it.sub ? h('span', { class: 'sub' }, it.sub) : null)))));
 }
@@ -2758,7 +2766,7 @@ function commandPalette() {
   const recent = recentCommands();
   modal((close) => {
     const input = h('input', { class: 'input', placeholder: 'Type a command…', 'aria-label': 'Find command', autocomplete: 'off', spellcheck: 'false' });
-    const list = h('div', { class: 'switcher-list', role: 'listbox' });
+    const list = h('div', { class: 'switcher-list', role: 'listbox', 'aria-label': 'Results' });
     let items = [];
     let sel = 0;
     const draw = () => {

@@ -6,6 +6,9 @@ and versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Accessibility (axe-core on the unlocked app): the calendar is a labelled group of day buttons instead of an
+  incomplete ARIA grid; the switcher and palette lists have a name; dialogs keep the form's own role; faint text meets
+  4.5:1 contrast; the app has a level-one heading.
 - A Kanban board whose column title held a carriage return or a line separator could no longer be opened.
 
 ### Added

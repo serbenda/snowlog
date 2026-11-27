@@ -9,7 +9,7 @@
   --border: #2c2e33;
   --text-normal: #e2e4e7;
   --text-muted: #a3a9b1;
-  --text-faint: #7b828b;
+  --text-faint: #8f969f; /* 4.5:1 or more on every panel (WCAG AA) */
   --accent: #8ec5e8;
   --accent-text: #0e1114;
   --hover: rgba(255, 255, 255, 0.06);
@@ -35,7 +35,7 @@
     --border: #e1e4e8;
     --text-normal: #1f2328;
     --text-muted: #57606a;
-    --text-faint: #6e7781;
+    --text-faint: #5f6770;
     --accent: #1f6fa8;
     --accent-text: #ffffff;
     --hover: rgba(0, 0, 0, 0.05);
@@ -55,7 +55,7 @@
   --border: #e1e4e8;
   --text-normal: #1f2328;
   --text-muted: #57606a;
-  --text-faint: #6e7781;
+  --text-faint: #5f6770;
   --accent: #1f6fa8;
   --accent-text: #ffffff;
   --hover: rgba(0, 0, 0, 0.05);
@@ -828,3 +828,14 @@ select.input { appearance: auto; }
 .reading.cs-dashboard > .properties { display: none; }
 .notice .link-btn { display: inline; padding: 0; font-size: inherit; text-align: left; text-decoration: underline; }
 #st-place.offline { color: var(--danger); }
+
+/* Text only screen readers read (the app's level-one heading). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

@@ -16,6 +16,22 @@
 - **Pending:**
 -->
 
+## 2026-11-27 — Three more e2e flows; accessibility of the unlocked app
+- **Phase / issue:** — (the review of Snowlog after bsketch's)
+- **What:** e2e: recovering with the code on another device (and the first device then asking for the new
+  passphrase); a `vault.json` from before a rotation, put back in the repository, refused in the interface; a
+  2,000-note vault (unlocked and shown in about 0.1 s, the switcher finds a note in 3 ms). axe-core on 8 states of the
+  unlocked app found 5 issues, all fixed: the calendar's role (`group` with the month as its name), names for the
+  switcher and palette lists, `role=dialog` moved from the forms to the modal layer, `--text-faint` raised to 4.5:1,
+  a hidden level-one heading in `main`. Cache `snowlog-v9`.
+- **Why:** the e2e covered 5 flows; accessibility had only been checked on the sign-in screens.
+- **Rejected:** —
+- **Files:** tests/e2e/flows.e2e.mjs, public/js/app.js, public/css/app.css, public/index.html, public/sw.js,
+  CHANGELOG.md, docs/WORKLOG.md
+- **Commits:** this one.
+- **Tested:** `npm test` 190 pass; `npm run test:e2e` 8 pass; axe-core: 0 violations in 8 states.
+- **Pending:** —
+
 ## 2026-11-27 — Desktop build pinned and attested; CodeQL and Scorecard
 - **Phase / issue:** — (the review of Snowlog after bsketch's)
 - **What:** `desktop/package.json` and `package-lock.json` pin the Tauri CLI (2.12.6), installed with `npm ci` instead
