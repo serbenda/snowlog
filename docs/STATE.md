@@ -19,6 +19,7 @@ Last updated: 2026-11-26
 - The license, as bsketch's: all rights reserved, no use by AI ([ADR 0007](decisions/0007-proprietary-license.md)).
 
 ## Recently done
+- The review after bsketch's: vault format (P05), fuzzing and a big vault (P06), CodeQL and Scorecard, the desktop build pinned (`Cargo.lock`) and attested, more e2e, accessibility of the unlocked app, help inside the app, and the interface in five languages.
 - [P06](phases/P06-fuzz-and-performance.md): fuzzing (one Kanban crash fixed) and a 5,000-note vault within budget.
 - [P05](phases/P05-vault-format.md): the vault format written down ([FORMAT.md](FORMAT.md)) and tested with a vault made by each version.
 - `main` protected (2026-11-26, `setup-repo.sh`): PR required with the six CI checks, no force-push or deletion; `development` and tags protected too.

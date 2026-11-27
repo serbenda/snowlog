@@ -19,7 +19,7 @@
 ## 2026-11-27 — The interface in five languages
 - **Phase / issue:** — (the review of Snowlog after bsketch's; bsketch's P20)
 - **What:** `public/js/i18n.js` (`pickLang`, `translator`, `fill`) and one dictionary per language
-  (`i18n-es.js`, `i18n-ca.js`, `i18n-fr.js`, `i18n-pt.js`, 466 strings each); every interface string in `app.js`
+  (`i18n-es.js`, `i18n-ca.js`, `i18n-fr.js`, `i18n-pt.js`, 465 strings each); every interface string in `app.js`
   goes through `tr()`, `trf()` (holes) or `trn()` (singular and plural): 344 wrapped with an AST script (acorn, run
   locally, not a dependency) and 69 template literals by hand; error texts, save statuses, the help and the settings
   labels too; `index.html`'s own text translated at start; a Language choice in Settings (this device); the welcome
